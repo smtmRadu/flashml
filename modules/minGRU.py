@@ -25,7 +25,7 @@ class MinGRU(nn.Module):
 
         # if not self.training:
         #     return self._forward_sequentially_log_space(x)
-        # else:
+        
         return self._forward_parallel_log_space(x)
 
     
@@ -65,8 +65,6 @@ def parallel_scan_log(log_coeffs, log_values):
     return torch.exp(log_h)[:, 1:]
 
 def g(x):
-     return torch.where(x >= 0, x+0.5, F.sigmoid(x))
-
-
+     return torch.where(x >= 0, x+0.5, torch.sigmoid(x))
 def log_g(x):
     return torch.where(x >= 0, (F.relu(x)+0.5).log(),-F.softplus(-x))

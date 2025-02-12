@@ -1,6 +1,12 @@
 from .MHA import MHA
-from .minGRU import minGRU
+from .MinGRU import MinGRU
 from .RMSNorm import RMSNorm
 from .SwiGLU import SwiGLU
 
-__all__ = ["MHA", "minGRU", "RMSNorm", "SwiGLU"]
+__all__ = [
+    "MHA", 
+    "MinGRU", 
+    "RMSNorm", 
+    "SwiGLU"]
+
+assert __all__ == sorted(__all__), "Modules were not sorted alphabetically"
