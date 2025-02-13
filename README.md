@@ -5,30 +5,23 @@
 
 ### RAM and VRAM usage
 ```python
-from torchex.info import show_memory_usage
+from torchex.info import display_usage
 
-show_memory_usage()
+display_usage()
 ```
 
 ```
-Output:
-+--------------------------------------------------+
-| CPU:                                             |
-| Process Memory (RSS): 429.29 MB (VMS: 894.75 MB) |
-| RAM: 19.22 GB used / 23.84 GB total (80.6%)      |
-|                                                  |
-| GPU (cuda):                                      |
-| Device 0: NVIDIA GeForce GTX 1650                |
-|   VRAM:  0 B allocated / 4.00 GB total (0.0%)    |
-|   Reserved: 0 B (0.0%)                           |
-+--------------------------------------------------+
+Output (new cmd window):
++--------------------------------------------------+                                                                    | CPU:                                             |                                                                    |   Utilization: 62.5%                             |                                                                    |   RAM: 12.74 GB used / 23.84 GB total (53.4%)    |                                                                    |                                                  |                                                                    | GPU(s):                                          |                                                                    |   Device 0: NVIDIA GeForce GTX 1650              |                                                                    |     Utilization: 31%                             |                                                                    |     VRAM: 492.71 MB used / 4.00 GB total (12.0%) |                                                                    +--------------------------------------------------+
 ```
 
 ### Fast plot
 ```python
 from torchex.info import plot_graph
 
-plot_graph([0,1,2,3,4], [10, 15, 17, 18, 18.3])
+plot_graph(
+    x_steps=[0,1,2,3,4],
+    values=([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
 
 ### ML train graphs

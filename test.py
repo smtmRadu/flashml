@@ -1,10 +1,9 @@
-from info import show_memory_usage, log_metrics, display_metrics
+from info import display_usage, log_metrics, display_metrics
 from info.rl import log_episode, display_episodes
 import time
 import random
 import math
 import os
-import torch
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 def test_rl_info():
@@ -47,8 +46,10 @@ def test_train_info():
 def test_graph_plotting():
     x_steps = [1,2,3,10,50]
     values = [10, 15, 17, 18, 18.3]
+    values2 = [9, 14, 17.5, 19, 20.1]
+    values3 = [10, 14.2, 17.7, 19.2, 20.3]
     from info import plot_graph
-    plot_graph(x_steps, values)
+    plot_graph(x_steps, (values, values2, values3))
 
 
-test_graph_plotting()
+display_usage()
