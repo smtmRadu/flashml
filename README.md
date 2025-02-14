@@ -5,23 +5,22 @@
 
 ### RAM and VRAM usage
 ```python
-from torchex.info import display_usage
+from torchex.info import display_resource_monitor
 
-display_usage()
+display_resource_monitor()
 ```
 
 ```
 Output (new cmd window):
-+--------------------------------------------------+                                                                    | CPU:                                             |                                                                    |   Utilization: 62.5%                             |                                                                    |   RAM: 12.74 GB used / 23.84 GB total (53.4%)    |                                                                    |                                                  |                                                                    | GPU(s):                                          |                                                                    |   Device 0: NVIDIA GeForce GTX 1650              |                                                                    |     Utilization: 31%                             |                                                                    |     VRAM: 492.71 MB used / 4.00 GB total (12.0%) |                                                                    +--------------------------------------------------+
+
++--------------------------------------------------------------+                                                        | CPU:                                                         |                                                        |   Utilization: 40.0%                                         |                                                        |   RAM: 12.79 GB used / 23.84 GB total (53.6%)                |                                                        |       |██████████████████████████                       |    |                                                        |                                                              |                                                        | GPU(s):                                                      |                                                        |   Device 0: NVIDIA GeForce GTX 1650                          |                                                        |     Utilization: 16%                                         |                                                        |     VRAM: 408.26 MB used / 4.00 GB total (10.0%)             |                                                        |          |████                                             | |                                                        +--------------------------------------------------------------+ 
 ```
 
 ### Fast plot
 ```python
 from torchex.info import plot_graph
 
-plot_graph(
-    x_steps=[0,1,2,3,4],
-    values=([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
+plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
 
 ### ML train graphs
@@ -43,7 +42,7 @@ display_metrics() # Displays matplot graphs at the end, allowing data export as 
 ```
 
 ```
-Output (Realtime):
+Output (rt):
 
 [Epoch 2/3]:  75%|████████████████████████████████████████████████████████████████████████                        | 225/300 [00:00<00:00, 2059.44it/s, loss=2.25, acc=5.17]
 
@@ -68,7 +67,7 @@ display_episodes() # Displays matplot graphs at the end (rewards vs step/epoch, 
 ```
 
 ```
-Output (Realtime):
+Output (rt):
 
 [Episode 350]:  37%|███████████████████████████▎                                             | 37409/100000 [00:00<00:00, 112028.23it/s, r_max=188, r_avg=160, r_std=14.6]
 

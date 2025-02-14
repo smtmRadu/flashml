@@ -4,28 +4,39 @@ import psutil
 import subprocess
 import curses
 import signal
+import tempfile
 
-try:
-    import pynvml
-    pynvml.nvmlInit()
-    use_nvml = True
-except Exception as e:
-    use_nvml = False
-
-_monitor_launched = False
+LOCKFILE = os.path.join(tempfile.gettempdir(), "resource_monitor.lock")
 
 def is_monitor_running():
     """
-    Check if any process is running this script with the '--run-monitor' flag.
+    Check for the existence of the lock file and verify that the process ID inside is still running.
     """
-    for proc in psutil.process_iter(['pid', 'cmdline']):
+    if os.path.exists(LOCKFILE):
         try:
-            cmd = proc.info['cmdline']
-            if cmd and "--run-monitor" in cmd and proc.pid != os.getpid():
+            with open(LOCKFILE, "r") as f:
+                pid = int(f.read().strip())
+            if psutil.pid_exists(pid):
                 return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+        except Exception:
+            pass
     return False
+
+def write_lockfile():
+    """
+    Write the current process ID to the lock file.
+    """
+    with open(LOCKFILE, "w") as f:
+        f.write(str(os.getpid()))
+
+def remove_lockfile():
+    """
+    Remove the lock file.
+    """
+    try:
+        os.remove(LOCKFILE)
+    except OSError:
+        pass
 
 def _bytes2human(n):
     symbols = ('B', 'KB', 'MB', 'GB', 'TB', 'PB')
@@ -39,39 +50,40 @@ def _bytes2human(n):
 def get_resource_usage_lines():
     """Gathers resource usage info and returns a list of strings."""
     lines = []
-   
-    # proc = psutil.Process(os.getpid())
     virtual_mem = psutil.virtual_memory()
     total_mem = virtual_mem.total
     used_mem = virtual_mem.used
     mem_usage_percent = virtual_mem.percent
     cpu_usage = psutil.cpu_percent(interval=None)
-    
+
     lines.append("CPU:")
     lines.append(f"  Utilization: {cpu_usage:.1f}%")
     lines.append(f"  RAM: {_bytes2human(used_mem)} used / {_bytes2human(total_mem)} total ({mem_usage_percent:.1f}%)")
-    
-    if use_nvml:
-        try:
-            gpu_count = pynvml.nvmlDeviceGetCount()
-            lines.append("")
-            lines.append("GPU(s):")
-            for i in range(gpu_count):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                raw_name = pynvml.nvmlDeviceGetName(handle)
-                gpu_name = raw_name.decode('utf-8') if isinstance(raw_name, bytes) else raw_name
-                mem_info_gpu = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                used_gpu = mem_info_gpu.used
-                total_gpu = mem_info_gpu.total
-                mem_percent = (used_gpu / total_gpu) * 100 if total_gpu else 0
-                utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                gpu_util = utilization.gpu
-                lines.append(f"  Device {i}: {gpu_name}")
-                lines.append(f"    Utilization: {gpu_util}%")
-                lines.append(f"    VRAM: {_bytes2human(used_gpu)} used / {_bytes2human(total_gpu)} total ({mem_percent:.1f}%)")
-        except Exception as e:
-            lines.append("  Error fetching GPU data via NVML.")
-    else:
+    lines.append(f"      |{"█" * int(mem_usage_percent/2)}{" " * int(50 - mem_usage_percent/2)}|")
+    try:
+        import pynvml
+        if not getattr(get_resource_usage_lines, "nvml_initialized", False):
+            pynvml.nvmlInit()
+            get_resource_usage_lines.nvml_initialized = True
+        
+        gpu_count = pynvml.nvmlDeviceGetCount()
+        lines.append("")
+        lines.append("GPU(s):")
+        for i in range(gpu_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            raw_name = pynvml.nvmlDeviceGetName(handle)
+            gpu_name = raw_name.decode('utf-8') if isinstance(raw_name, bytes) else raw_name
+            mem_info_gpu = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            used_gpu = mem_info_gpu.used
+            total_gpu = mem_info_gpu.total
+            mem_percent = (used_gpu / total_gpu) * 100 if total_gpu else 0
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            gpu_util = utilization.gpu
+            lines.append(f"  Device {i}: {gpu_name}")
+            lines.append(f"    Utilization: {gpu_util}%")
+            lines.append(f"    VRAM: {_bytes2human(used_gpu)} used / {_bytes2human(total_gpu)} total ({mem_percent:.1f}%)")
+            lines.append(f"         |{"█" * int(mem_percent/2)}{" " * int(50 - mem_percent/2)}|")
+    except Exception:
         lines.append("")
         lines.append("GPU: Not Available")
     
@@ -91,8 +103,6 @@ def get_resource_usage_box():
 def monitor_loop_curses(stdscr, nap_ms):
     """
     Uses curses to update the display in place with minimal flicker.
-    The window will exit promptly if the OS sends a termination signal
-    (for example, when the user clicks the window's X).
     """
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -110,30 +120,26 @@ def monitor_loop_curses(stdscr, nap_ms):
     except KeyboardInterrupt:
         pass
     finally:
-        if use_nvml:
-            try:
-                pynvml.nvmlShutdown()
-            except Exception:
-                pass
+        remove_lockfile()
+        try:
+            import pynvml
+            pynvml.nvmlShutdown()
+        except Exception:
+            pass
 
 def monitor_loop(nap_ms):
-    """Wrapper to start the curses monitor loop with the given nap delay."""
+    """Starts the curses monitor loop with the given refresh delay."""
     curses.wrapper(lambda stdscr: monitor_loop_curses(stdscr, nap_ms))
 
-def display_usage(nap_ms: int = 50):
+def display_resource_monitor(nap_ms: int = 50):
     """
     Spawns a new process that opens a separate window displaying live CPU,
-    memory, and GPU usage in a boxed layout. The refresh delay (in milliseconds)
-    is given by `nap_ms`.
-
-    If a monitor is already running, no new window is created so is safe to double call it.
+    memory, and GPU usage. Uses a lock file to prevent multiple monitors.
     """
-    global _monitor_launched
     if is_monitor_running():
         print("\033[93mResource Monitor is already running!\033[0m")
         return
 
-    _monitor_launched = True
     args = [sys.executable, __file__, "--run-monitor", f"--nap={nap_ms}"]
     creationflags = subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0
     subprocess.Popen(args, creationflags=creationflags)
@@ -144,8 +150,9 @@ def setup_signal_handlers():
 
 if __name__ == '__main__':
     if "--run-monitor" in sys.argv:
+        write_lockfile() 
         setup_signal_handlers()
-        nap_ms = 100
+        nap_ms = 50  
         for arg in sys.argv:
             if arg.startswith("--nap="):
                 try:
