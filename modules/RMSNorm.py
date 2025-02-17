@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 
 class RMSNorm(nn.Module):
-    def __init__(self, dim:int, p=-1., eps=1e-8, affine=True):
+    def __init__(self, dim:int, p:int = None, eps=1e-8, affine=True):
         super(RMSNorm, self).__init__()
+        assert p > 0. and p < 1. if p is not None else True, "p must be between 0 and 1"
         self.dim = dim
         self.eps = eps
         self.p = p
@@ -16,7 +17,7 @@ class RMSNorm(nn.Module):
             self.register_parameter("shift", self.bias)
             
     def forward(self, x):
-        if self.p < 0. or self.p > 1.:
+        if self.p is not None:
             norm_x = x.norm(2, dim=-1, keepdim=True)
             d_x = self.dim
         else:

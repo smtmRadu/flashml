@@ -1,12 +1,14 @@
 import time
 
-def benchmark_func(func:callable, verbose:bool=True) -> float:
+def benchmark(func:callable, calls:int=100, verbose:bool=True) -> float:
     '''
     Computed time elapsed to run `func` arg. \\
-    Returns the time elapsed in seconds.
+    Returns the time elapsed in seconds
     '''
+    rng = range(calls)
     start = time.time()
-    func()
+    for i in rng:
+        func()
     end = time.time() - start
 
     if verbose:

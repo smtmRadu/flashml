@@ -5,6 +5,7 @@ import subprocess
 import curses
 import signal
 import tempfile
+import pynvml
 
 LOCKFILE = os.path.join(tempfile.gettempdir(), "resource_monitor.lock")
 
@@ -47,6 +48,23 @@ def _bytes2human(n):
             return f'{value:.2f} {s}'
     return f"{n} B"
 
+def get_cpu_temperature():
+    """Returns CPU temperature in Celsius if available."""
+    try:
+        temps = psutil.sensors_temperatures()
+        if "coretemp" in temps:
+            return temps["coretemp"][0].current
+    except Exception:
+        pass
+    return None 
+
+def get_gpu_temperature(handle):
+    """Returns GPU temperature in Celsius."""
+    try:
+        return pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+    except Exception:
+        return None
+    
 def get_resource_usage_lines():
     """Gathers resource usage info and returns a list of strings."""
     lines = []
@@ -55,11 +73,13 @@ def get_resource_usage_lines():
     used_mem = virtual_mem.used
     mem_usage_percent = virtual_mem.percent
     cpu_usage = psutil.cpu_percent(interval=None)
+    cpu_temp = get_cpu_temperature()
 
     lines.append("CPU:")
-    lines.append(f"  Utilization: {cpu_usage:.1f}%")
+    lines.append(f"  Temperature: {cpu_temp:.0f}°C" if cpu_temp else "  Temperature: N/A")
+    lines.append(f"  Utilization: {cpu_usage:.0f}%")
     lines.append(f"  RAM: {_bytes2human(used_mem)} used / {_bytes2human(total_mem)} total ({mem_usage_percent:.1f}%)")
-    lines.append(f"      |{"█" * int(mem_usage_percent/2)}{" " * int(50 - mem_usage_percent/2)}|")
+    lines.append(f"    |{"█" * int(mem_usage_percent/2)}{" " * int(50 - mem_usage_percent/2)}|")
     try:
         import pynvml
         if not getattr(get_resource_usage_lines, "nvml_initialized", False):
@@ -79,10 +99,13 @@ def get_resource_usage_lines():
             mem_percent = (used_gpu / total_gpu) * 100 if total_gpu else 0
             utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
             gpu_util = utilization.gpu
+            gpu_temp = get_gpu_temperature(handle)
+
             lines.append(f"  Device {i}: {gpu_name}")
+            lines.append(f"    Temperature: {gpu_temp:.0f}°C" if gpu_temp else "    Temperature: N/A")
             lines.append(f"    Utilization: {gpu_util}%")
             lines.append(f"    VRAM: {_bytes2human(used_gpu)} used / {_bytes2human(total_gpu)} total ({mem_percent:.1f}%)")
-            lines.append(f"         |{"█" * int(mem_percent/2)}{" " * int(50 - mem_percent/2)}|")
+            lines.append(f"    |{"█" * int(mem_percent/2)}{" " * int(50 - mem_percent/2)}|")
     except Exception:
         lines.append("")
         lines.append("GPU: Not Available")
@@ -90,14 +113,12 @@ def get_resource_usage_lines():
     return lines
 
 def get_resource_usage_box():
-    """Wraps the resource info in a box made with '+', '-', and '|' characters."""
     lines = get_resource_usage_lines()
     max_width = max(len(line) for line in lines)
-    border = "+" + "-" * (max_width + 2) + "+"
-    box_lines = [border]
+    box_lines = ["█" + "▀" * (max_width + 2) + "█"]
     for line in lines:
-        box_lines.append("| " + line.ljust(max_width) + " |")
-    box_lines.append(border)
+        box_lines.append("█ " + line.ljust(max_width) + " █")
+    box_lines.append("█" + "▄" * (max_width + 2) + "█")
     return box_lines
 
 def monitor_loop_curses(stdscr, nap_ms):
@@ -131,7 +152,7 @@ def monitor_loop(nap_ms):
     """Starts the curses monitor loop with the given refresh delay."""
     curses.wrapper(lambda stdscr: monitor_loop_curses(stdscr, nap_ms))
 
-def display_resource_monitor(nap_ms: int = 50):
+def resource_monitor(nap_ms: int = 50):
     """
     Spawns a new process that opens a separate window displaying live CPU,
     memory, and GPU usage. Uses a lock file to prevent multiple monitors.

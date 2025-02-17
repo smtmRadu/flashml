@@ -20,18 +20,13 @@ def _export_values(x_label: str, y_label: str, x_ticks, values):
         with open(file_path, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
             
-            # Handle multiple lines case
             if isinstance(values[0], Iterable):
-                # Write header with series numbers
                 header = [x_label] + [f"{y_label}_{i+1}" for i in range(len(values))]
                 writer.writerow(header)
-                
-                # Write data
                 for i in range(len(x_ticks)):
                     row = [x_ticks[i]] + [series[i] for series in values]
                     writer.writerow(row)
             else:
-                # Single line case
                 writer.writerow([x_label, y_label])
                 for x, y in zip(x_ticks, values):
                     writer.writerow([x, y])
@@ -65,7 +60,7 @@ def plot_graph(
             f"Length of teps must be equal to length of values"
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    fig.canvas.manager.set_window_title("torchex")
+    fig.canvas.manager.set_window_title("flashml")
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     
     if isinstance(values[0], Iterable):
@@ -109,7 +104,7 @@ def plot_graph(
     plt.tight_layout()
 
     export_ax = plt.axes([0.85, 0.01, 0.12, 0.05])
-    export_button = Button(export_ax, 'Export Data')
+    export_button = Button(export_ax, 'Export CSV')
     export_button.on_clicked(lambda event: _export_values(x_label, y_label, steps, values))
 
     plt.show(block=blocking)

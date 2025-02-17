@@ -1,24 +1,18 @@
-# torchex
+# flashml
 
-**torchex** is a third party tool used in certain ML related tasks.
+**flashml** is a third party tool used in certain ML related tasks.
 
 
-### RAM and VRAM usage
+### Always-on resource monitor
 ```python
-from torchex.info import display_resource_monitor
+from flashml.info import resource_monitor
 
-display_resource_monitor()
-```
-
-```
-Output (new cmd window):
-
-+--------------------------------------------------------------+                                                        | CPU:                                                         |                                                        |   Utilization: 40.0%                                         |                                                        |   RAM: 12.79 GB used / 23.84 GB total (53.6%)                |                                                        |       |██████████████████████████                       |    |                                                        |                                                              |                                                        | GPU(s):                                                      |                                                        |   Device 0: NVIDIA GeForce GTX 1650                          |                                                        |     Utilization: 16%                                         |                                                        |     VRAM: 408.26 MB used / 4.00 GB total (10.0%)             |                                                        |          |████                                             | |                                                        +--------------------------------------------------------------+ 
+resource_monitor()
 ```
 
 ### Fast plot
 ```python
-from torchex.info import plot_graph
+from flashml.info import plot_graph
 
 plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
@@ -26,7 +20,7 @@ plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ### ML train graphs
 
 ```python
-from torchex.info import log_metrics, display_metrics
+from flashml.info import log_metrics, display_metrics
 
 for ep in range(epochs):
     for idx, batch in enumerate(batches):    
@@ -52,7 +46,7 @@ Output (rt):
 ### RL train graphs
 
 ```python
-from torchex.info.rl import log_episodes, display_episodes
+from flashml.info.rl import log_episodes, display_episodes
 
  while step < max_steps:
     for i in range(buffer_size):

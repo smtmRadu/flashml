@@ -26,7 +26,7 @@ def _display_metrics_on_thread(show_epoch_ticks:bool = False) -> None:
     for idx, name in enumerate(names):
         values_for_name = [v if isinstance(v, float) else v[idx] for v in values]
         
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(figsize=(8, 5))
         fig.canvas.manager.set_window_title("torchex")
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
         ax.plot(steps, values_for_name, linestyle='-', linewidth=0.75)
@@ -44,7 +44,7 @@ def _display_metrics_on_thread(show_epoch_ticks:bool = False) -> None:
         plt.tight_layout()
        
         export_ax = plt.axes([0.85, 0.01, 0.12, 0.05])
-        export_button = Button(export_ax, 'Export Data')
+        export_button = Button(export_ax, 'Export CSV')
         export_button.on_clicked(lambda x: _export_values(history))
         plt.show()
 

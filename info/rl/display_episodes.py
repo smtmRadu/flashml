@@ -38,9 +38,8 @@ def _display_episodes_on_thread() -> None:
     steps = [s[0] for s in steps_tuple]
     episodes = list(range(len(steps)))
 
-    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-    fig.canvas.manager.set_window_title("torchex")
-
+    fig, axs = plt.subplots(2, 2, figsize=(8, 7))
+    fig.canvas.manager.set_window_title("flashml")
     plt.subplots_adjust(left=0.07, right=0.95, top=0.92, bottom=0.15, wspace=0.3, hspace=0.3)
 
     ax = axs[0, 0]
@@ -72,7 +71,7 @@ def _display_episodes_on_thread() -> None:
     ax.grid(True)
 
     export_ax = fig.add_axes([0.85, 0.01, 0.12, 0.05])
-    export_button = Button(export_ax, 'Export Data')
+    export_button = Button(export_ax, 'Export CSV')
     export_button.on_clicked(lambda event: _export_values(history))
 
     plt.show()

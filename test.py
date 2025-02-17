@@ -1,4 +1,4 @@
-from info import display_resource_monitor, log_metrics, display_metrics
+from info import resource_monitor, log_metrics, display_metrics, plot_confusion_matrix
 from info.rl import log_episode, display_episodes
 import time
 import random
@@ -18,7 +18,7 @@ def test_rl_info():
             if random.random() < 0.01:
                 log_episode(random.random() + reward_bias, ep_len, step=(step, max_steps))
                 ep_len = 0
-            reward_bias += 0.01 * random.random()
+                reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
     display_episodes()
 
 def test_train_info():
@@ -41,7 +41,7 @@ def test_train_info():
                 time.sleep(0.001)
         print('\n\n\n')
             
-    display_metrics(True)
+    display_metrics()
 
 def test_graph_plotting():
     values = [10, 15, 17, 18, 18.3]
@@ -50,5 +50,27 @@ def test_graph_plotting():
     from info import plot_graph
     plot_graph((values, values2, values3), marker=".")
 
+import torch
+import torch.nn.functional as F
+from info import benchmark
+sil = torch.nn.SiLU()
+x = torch.full((2048, 2048), 2.31, device="cpu")
+def test_swish():
+    x / (1 + torch.exp(-x))
 
-display_resource_monitor()
+def test_swish2():
+    F.silu(x)
+
+
+def test_rish():
+    k = torch.exp(x)
+    (x - 1) * k / (1 + k)
+
+
+def test_conf_matrix():
+    y =     [0, 0, 1, 20, 0, 0, 1, 2, 3, 4, 5, 6, 7, 12, 11, 14]
+    y_hat = [0, 1, 1, 20, 0, 0, 1, 2, 9, 3, 4, 5, 10, 12, 11, 14]
+    plot_confusion_matrix(y_hat, y, normalize=True)
+
+
+test_conf_matrix()
