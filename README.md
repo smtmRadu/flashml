@@ -1,7 +1,11 @@
 # flashml
 
-**flashml** is a third party tool used in certain ML related tasks.
+**flashml** is a third party tool used in certain ML related tasks. Not published yet on PyPI,
+but you can install it by opening it in vscode, and with conda env call:
 
+```
+pip install -e . --use-pep517
+```
 
 ### Always-on resource monitor
 ```python
@@ -17,22 +21,22 @@ from flashml.info import plot_graph
 plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
 
-### ML train graphs
+### ML train plots
 
 ```python
-from flashml.info import log_metrics, display_metrics
+from flashml.info import log_metrics, display_metrics, plot_confusion_matrix
 
 for ep in range(epochs):
     for idx, batch in enumerate(batches):    
         # Compute loss and perform update
         # Compute validation
         log_metrics(
-            name=("loss", "accuracy"),
-            value=(loss_, acc),
+            metrics={ "loss": loss , "acc" : acc},
             epoch_idx=(ep, epochs),
             batch_idx=(idx, batches))
 
 display_metrics() # Displays matplot graphs at the end, allowing data export as csv
+plot_confusion_matrix(yHat, y)
 ```
 
 ```
@@ -43,7 +47,7 @@ Output (rt):
 ```
 
 
-### RL train graphs
+### RL train plots
 
 ```python
 from flashml.info.rl import log_episodes, display_episodes

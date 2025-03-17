@@ -1,8 +1,9 @@
-from info import resource_monitor, log_metrics, display_metrics, plot_confusion_matrix
+from info import resource_monitor, log_metrics, log_metrics2, display_metrics, plot_confusion_matrix
 from info.rl import log_episode, display_episodes
 import time
 import random
 import math
+from datetime import datetime
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -16,9 +17,11 @@ def test_rl_info():
             step+=1
             ep_len += 1
             if random.random() < 0.01:
-                log_episode(random.random() + reward_bias, ep_len, step=(step, max_steps))
+                log_episode(random.random() + reward_bias, ep_len, step=(step, max_steps),
+                             other_metrics={"Rand" : random.random()})
                 ep_len = 0
                 reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
+
     display_episodes()
 
 def test_train_info():
@@ -32,8 +35,7 @@ def test_train_info():
                 loss_ =  math.log2(abs(loss))
                 acc = loss + random.random()
                 log_metrics(
-                    name=("loss", "acc"),
-                    value=(loss_, acc),
+                    {"loss" : loss_, "acc" : acc, "time":datetime.now()},
                     epoch_idx=(epoch, epochs),
                     batch_idx=(batch, batches)
                 )
@@ -41,6 +43,21 @@ def test_train_info():
                 time.sleep(0.001)
         print('\n\n\n')
             
+    display_metrics()
+def test_train_info2():
+    reward_bias = 0
+    max_steps = 100_000
+    step = 0
+    while step < max_steps:
+        ep_len = 0
+        for i in range(4096):
+            step+=1
+            ep_len += 1
+            if random.random() < 0.01:
+                log_metrics2(metrics={"Rand" : random.random()}, step=(step, max_steps))
+                ep_len = 0
+                reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
+            # time.sleep(0.0001)
     display_metrics()
 
 def test_graph_plotting():
@@ -50,27 +67,13 @@ def test_graph_plotting():
     from info import plot_graph
     plot_graph((values, values2, values3), marker=".")
 
-import torch
-import torch.nn.functional as F
-from info import benchmark
-sil = torch.nn.SiLU()
-x = torch.full((2048, 2048), 2.31, device="cpu")
-def test_swish():
-    x / (1 + torch.exp(-x))
-
-def test_swish2():
-    F.silu(x)
-
-
-def test_rish():
-    k = torch.exp(x)
-    (x - 1) * k / (1 + k)
-
-
 def test_conf_matrix():
     y =     [0, 0, 1, 20, 0, 0, 1, 2, 3, 4, 5, 6, 7, 12, 11, 14]
     y_hat = [0, 1, 1, 20, 0, 0, 1, 2, 9, 3, 4, 5, 10, 12, 11, 14]
     plot_confusion_matrix(y_hat, y, normalize=True)
 
+test_train_info2()
 
-test_conf_matrix()
+
+
+

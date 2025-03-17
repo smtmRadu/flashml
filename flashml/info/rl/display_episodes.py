@@ -1,11 +1,9 @@
 from .log_episode import _RLTrainLogger
-from typing import Any, Tuple, Union, List
+from typing import Any, Tuple, List
 import matplotlib.pyplot as plt
-from threading import Thread
 from tkinter import filedialog
 import csv
 from matplotlib.widgets import Button
-import deprecation
 
 @DeprecationWarning
 def plot_table_with(x_label, y_label, title, x_ticks, values, history):
@@ -33,14 +31,19 @@ def _display_episodes_on_thread() -> None:
     )
     
     history: List[Tuple[float, int, tuple]] = _RLTrainLogger._instance.episodes_history
+    other: dict[str, Any] = _RLTrainLogger._instance.other
+    tpl = list(zip(*history))
+    rewards = tpl[0]
+    ep_lens = tpl[1]
+    steps_tuple = tpl[2]
+    # other we are not interested for now
 
-    rewards, ep_lens, steps_tuple = zip(*history)
     steps = [s[0] for s in steps_tuple]
     episodes = list(range(len(steps)))
 
-    fig, axs = plt.subplots(2, 2, figsize=(8, 7))
+    fig, axs = plt.subplots(len(tpl) - 1, 2, figsize=(8, 7))
     fig.canvas.manager.set_window_title("flashml")
-    plt.subplots_adjust(left=0.07, right=0.95, top=0.92, bottom=0.15, wspace=0.3, hspace=0.3)
+    plt.subplots_adjust(left=0.07, right=0.95, top=0.92, bottom=0.15, wspace=0.1 * len(tpl), hspace=0.15 * len(tpl))
 
     ax = axs[0, 0]
     ax.plot(steps, rewards, linestyle='-', linewidth=0.75)
@@ -70,13 +73,32 @@ def _display_episodes_on_thread() -> None:
     ax.set_title("Episode Length vs Episode")
     ax.grid(True)
 
+    if len(tpl) > 3:
+         new_elems_names = list(other.keys())
+         for i in range(3, len(tpl)):
+              elem = tpl[i]
+              elem_name = new_elems_names[i-3]
+              ax = axs[i-1, 0]
+              ax.plot(steps, elem, linestyle='-', linewidth=0.75,  color="purple")
+              ax.set_xlabel("Step")
+              ax.set_ylabel(elem_name)
+              ax.set_title(f"{elem_name} vs Step")
+              ax.grid(True)
+
+              ax = axs[i-1, 1]
+              ax.plot(episodes, elem, linestyle='-', linewidth=0.75, color="purple")
+              ax.set_xlabel("Episode")
+              ax.set_ylabel(elem_name)
+              ax.set_title(f"{elem_name} vs Episode")
+              ax.grid(True)
+
     export_ax = fig.add_axes([0.85, 0.01, 0.12, 0.05])
     export_button = Button(export_ax, 'Export CSV')
-    export_button.on_clicked(lambda event: _export_values(history))
+    export_button.on_clicked(lambda event: _export_values(history, other))
 
     plt.show()
 
-def _export_values(history):
+def _export_values(history, other):
         file_path = filedialog.asksaveasfilename(
             defaultextension='.csv',
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
@@ -85,9 +107,9 @@ def _export_values(history):
         if file_path:
             with open(file_path, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(['Episode', 'Reward', 'Episode Length', 'Step'])
-                for idx, (reward, ep_len, step) in enumerate(history):
-                    writer.writerow([idx, reward, ep_len, step[0]])
+                writer.writerow(['Episode', 'Reward', 'Episode Length', 'Step', *( [k for k in other.keys()] if other is not None else [] )])
+                for idx, tuplex in enumerate(history):
+                    writer.writerow([idx, *tuplex])
 
 def display_episodes() -> None:
     '''

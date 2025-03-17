@@ -8,8 +8,9 @@ class Rish(nn.Module):
     
     '''
     def __init__(self):
-        super().__init__()
+        super(Rish, self).__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         exp_x = x.exp()
         return (x-1) * exp_x / (1 + exp_x)
+    
