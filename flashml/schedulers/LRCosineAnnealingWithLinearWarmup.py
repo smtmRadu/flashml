@@ -14,7 +14,14 @@ class LRConsineAnnealingWithLinearWarmup():
         max_steps = EPOCHS * BATCH_NUM \\
         warmup_steps = 3%-10% of max_steps
         '''      
-        assert max_steps > warmup_steps ;"The warmup steps must be less than total training steps T max"
+        warmup_steps_ratio = kwargs.pop("warmup_steps_ratio", None)
+        if warmup_steps_ratio is not None:
+            assert 0.0 < warmup_steps_ratio < 1.0, "warmup_steps_ratio must be between 0.0 and 1.0"
+            warmup_steps = int(warmup_steps_ratio * max_steps)
+
+        assert warmup_steps is not None, "warmup_steps or warump_steps_ratio must be specified"
+        assert max_steps > warmup_steps, f"The warmup steps ({warmup_steps}) must be less than total training steps T max ({max_steps})"
+
         self.optim = optimizer
         self.t_max = max_steps
         self.warmup_steps = warmup_steps

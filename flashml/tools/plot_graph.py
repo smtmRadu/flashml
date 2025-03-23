@@ -84,17 +84,17 @@ def plot_graph(
             ax.plot(steps, each, 
                    linestyle=styles[i],
                    marker=marker, 
-                   linewidth=0.75, 
+                   linewidth=min(100/len(values), 1), 
                    color=colors[i],
                    label=f'Series {i+1}')
         ax.legend()
     else:
         if steps is None:
-            steps = [i for i in range(values)]
+            steps = [i for i in range(len(values))]
         ax.plot(steps, values, 
                linestyle=linestyle, 
                marker=marker,
-               linewidth=0.75, 
+               linewidth=min(100/len(values), 1), 
                color='blue' if color is None else color)
     
     ax.set_xlabel(xlabel=x_label)

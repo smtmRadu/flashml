@@ -100,10 +100,11 @@ class _TrainingLogger_epoch_batch:
 
     @staticmethod
     def log_metrics(metrics:dict[str, Any],
-                    iter_idx: int | Tuple[int, int],
-                    bar_idx: Tuple[int, int]):
+                    epoch_idx: int | Tuple[int, int],
+                    batch_idx: Tuple[int, int]):
         
         assert metrics != None, "You logged no metric"
         assert len(metrics) > 0, "Metric log is empty"
-        logger = _TrainingLogger_epoch_batch(num_iters=iter_idx[1] if isinstance(iter_idx, Tuple) else None, num_bar_steps=bar_idx[1])
-        logger._update((metrics, iter_idx[0] if isinstance(iter_idx, Tuple) else iter_idx, bar_idx[0]))
+        assert isinstance(batch_idx, Tuple), f"batch_idx should be a tuple(current_batch, total_batches), got {type(batch_idx)}"
+        logger = _TrainingLogger_epoch_batch(num_iters=epoch_idx[1] if isinstance(epoch_idx, Tuple) else None, num_bar_steps=batch_idx[1])
+        logger._update((metrics, epoch_idx[0] if isinstance(epoch_idx, Tuple) else epoch_idx, batch_idx[0]))

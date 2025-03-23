@@ -9,22 +9,31 @@ pip install -e . --use-pep517
 
 ### Always-on resource monitor
 ```python
-from flashml.info import resource_monitor
+from flashml.tools import resource_monitor
 
 resource_monitor()
 ```
 
 ### Fast plot
 ```python
-from flashml.info import plot_graph
+from flashml.tools import plot_graph
 
 plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
 
+### Real-Time plot
+```python
+from flashml.tools import plot_rt_graph
+
+for i in range(T):
+    plot_rt_graph((<priceBTC>, <priceETH>), <timestep>, x_label="Time", y_label="Price", color=["yellow", "purple])
+```
+
+
 ### ML train plots
 
 ```python
-from flashml.info import log_metrics, display_metrics, plot_confusion_matrix
+from flashml.tools import log_metrics, display_metrics, plot_confusion_matrix
 
 for ep in range(epochs):
     for idx, batch in enumerate(batches):    
@@ -50,7 +59,7 @@ Output (rt):
 ### RL train plots
 
 ```python
-from flashml.info.rl import log_episodes, display_episodes
+from flashml.tools.rl import log_episodes, display_episodes
 
  while step < max_steps:
     for i in range(buffer_size):
@@ -76,3 +85,8 @@ Enumerate **GQA**, **SwiGLU**, **FFN**, **MinGRU** ...
 
 ### Schedulers
 Enumerate **LRCosineAnnealingWithLinearWarmup** ...
+
+## Standalone scripts with GUI
+- Color picker
+- Image converter, resizer, processor etc.
+- File converter

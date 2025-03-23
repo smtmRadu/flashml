@@ -24,6 +24,6 @@ class SwiGLU(nn.Module):
             torch.nn.init.zeros_(self.ofc.bias)
         
     def forward(self, x:torch.Tensor):
-        assert x.size(dim=-1) == self.input_size, "Input size should be equal to input_size"
+        assert x.size(dim=-1) == self.input_size, f"Input size should be equal to input_size (x: {x.shape}, input_size: {self.input_size})"
         h = F.silu(self.fc1(x)) * self.fc2(x)
         return self.ofc(h) 

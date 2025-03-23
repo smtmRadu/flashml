@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from tkinter import Tk, filedialog
@@ -31,33 +31,34 @@ def _export_values(x_label: str, y_label: str, x_ticks, values):
                     
         print(f"Data exported to {file_path}")
 
-def _compute_confusion_matrix(pred, targ,labels):
-        n_labels = len(labels)
-        mapped_true = torch.full_like(targ, fill_value=-1)
-        mapped_pred = torch.full_like(pred, fill_value=-1)
+def _compute_confusion_matrix(pred, targ, labels):
+    n_labels = len(labels)
+    mapped_true = np.full_like(targ, fill_value=-1)
+    mapped_pred = np.full_like(pred, fill_value=-1)
 
-        for i, label in enumerate(labels):
-            mapped_true[targ == label] = i
-            mapped_pred[pred == label] = i
-        valid = (mapped_true >= 0) & (mapped_pred >= 0)
-        mapped_true = mapped_true[valid]
-        mapped_pred = mapped_pred[valid]
-        
-        indices = mapped_true * n_labels + mapped_pred
-        cm = torch.bincount(indices, minlength=n_labels * n_labels).reshape(n_labels, n_labels)
-        return cm
+    for i, label in enumerate(labels):
+        mapped_true[targ == label] = i
+        mapped_pred[pred == label] = i
+    
+    valid = (mapped_true >= 0) & (mapped_pred >= 0)
+    mapped_true = mapped_true[valid]
+    mapped_pred = mapped_pred[valid]
+    
+    indices = mapped_true * n_labels + mapped_pred
+    cm = np.bincount(indices, minlength=n_labels * n_labels).reshape(n_labels, n_labels)
+    return cm
 
-def _flat(x) -> torch.Tensor:
+def _flat(x) -> np.ndarray:
     if isinstance(x, (list, tuple)):
-        return torch.tensor(x)
-    elif isinstance(x, torch.Tensor):
-        return x.view(-1)
+        return np.array(x).flatten()
+    elif isinstance(x, np.ndarray):
+        return x.flatten()
     else:
-        raise "Wtf is this."
-      
+        raise ValueError("Unsupported input type.")
+
 def plot_confusion_matrix(
-        predicted: torch.Tensor | list | tuple, 
-        target: torch.Tensor | list | tuple, 
+        predicted: np.ndarray | list | tuple, 
+        target: np.ndarray | list | tuple, 
         classes: list[str] = None, 
         normalize: bool = False,
         title: str = "Confusion Matrix", 
@@ -68,8 +69,8 @@ def plot_confusion_matrix(
     the indices of the prediction and targets.
     
     Args:
-        predicted: Predicted labels (torch.Tensor, numpy array, or list/tuple of them).
-        target: Ground truth labels (torch.Tensor, numpy array, or list/tuple of them).
+        predicted: Predicted labels (numpy array, or list/tuple of them).
+        target: Ground truth labels (numpy array, or list/tuple of them).
         classes (list): List of class names. If None, they will be derived from the data.
         normalize (bool): If True, each row of the confusion matrix is normalized.
         title (str): Title of the plot.
@@ -78,34 +79,34 @@ def plot_confusion_matrix(
     """
 
     GRAY_HEX = "#24292e"
-    pred_tensor = _flat(predicted)
-    target_tensor = _flat(target)
+    pred_array = _flat(predicted)
+    target_array = _flat(target)
 
-    unique_labels = torch.unique(torch.cat([target_tensor, pred_tensor]))
+    unique_labels = np.unique(np.concatenate([target_array, pred_array]))
     
     if classes is None:       
-        classes = [str(x.item()) for x in unique_labels]
+        classes = [str(x) for x in unique_labels]
         labels = unique_labels.tolist()
     else:
         assert len(classes) == len(unique_labels), "Classes list length doesn't equal the total labels found"
         labels = list(range(len(classes)))
 
-    cm = _compute_confusion_matrix(pred_tensor, target_tensor, labels)
-    cm_raw = cm.clone()  
+    cm = _compute_confusion_matrix(pred_array, target_array, labels)
+    cm_raw = cm.copy()
 
     assert len(unique_labels) < 129, f"Too many classes, your pc will blow up {len(unique_labels)}"
 
-    total = cm_raw.sum().item()
-    accuracy = torch.diag(cm_raw).sum().item() / total if total > 0 else 0.0
+    total = cm_raw.sum()
+    accuracy = np.diag(cm_raw).sum() / total if total > 0 else 0.0
 
     precision_list = []
     recall_list = []
     f1_list = []
     num_classes = cm_raw.shape[0]
     for i in range(num_classes):
-        tp = cm_raw[i, i].item()
-        fp = cm_raw[:, i].sum().item() - tp
-        fn = cm_raw[i, :].sum().item() - tp
+        tp = cm_raw[i, i]
+        fp = cm_raw[:, i].sum() - tp
+        fn = cm_raw[i, :].sum() - tp
 
         prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -115,26 +116,25 @@ def plot_confusion_matrix(
         recall_list.append(rec)
         f1_list.append(f1_score)
 
-    precision_avg = sum(precision_list) / num_classes if num_classes > 0 else 0.0
-    recall_avg = sum(recall_list) / num_classes if num_classes > 0 else 0.0
-    f1_avg = sum(f1_list) / num_classes if num_classes > 0 else 0.0
+    precision_avg = np.mean(precision_list) if num_classes > 0 else 0.0
+    recall_avg = np.mean(recall_list) if num_classes > 0 else 0.0
+    f1_avg = np.mean(f1_list) if num_classes > 0 else 0.0
 
     if normalize:
-        row_sum = cm.float().sum(dim=1, keepdim=True)
-        cm = torch.where(row_sum == 0, torch.zeros_like(cm), cm / row_sum)
+        row_sum = cm.sum(axis=1, keepdims=True)
+        # Use np.divide to handle division by zero, setting invalid results to 0
+        cm = np.divide(cm.astype(float), row_sum, out=np.zeros_like(cm, dtype=float), where=row_sum != 0)
 
-     
     fig, ax = plt.subplots(figsize=(8, 6))
-    fig.patch.set_facecolor(GRAY_HEX ) 
-    ax.set_facecolor(GRAY_HEX )         
+    fig.patch.set_facecolor(GRAY_HEX) 
+    ax.set_facecolor(GRAY_HEX)         
     ax.tick_params(axis='both', colors='white', labelcolor='white')
     ax.spines["top"].set_color('white')
     ax.spines["bottom"].set_color('white')
     ax.spines["left"].set_color('white')
     ax.spines["right"].set_color('white')
     fig.canvas.manager.set_window_title("flashml")
-    cm_np = cm.cpu().numpy() if cm.is_cuda else cm.numpy()
-    im = ax.imshow(cm_np, interpolation='nearest', cmap=cmap)
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
     
     cbar = fig.colorbar(im, ax=ax)
     cbar.ax.tick_params(axis='both', colors='white', labelcolor='white')
@@ -143,7 +143,7 @@ def plot_confusion_matrix(
     cbar.ax.spines['left'].set_color('white') 
     cbar.ax.spines['right'].set_color('white') 
 
-    tick_marks = torch.arange(len(classes)).cpu().numpy()
+    tick_marks = np.arange(len(classes))
     ax.set_xticks(tick_marks)
     ax.set_xticklabels(classes, rotation=45, ha="right", color='white')
     ax.set_yticks(tick_marks)
@@ -164,7 +164,12 @@ def plot_confusion_matrix(
 
     export_ax = plt.axes([0.85, 0.01, 0.12, 0.05])
     export_button = Button(export_ax, 'Export CSV')
-    export_button.on_clicked(lambda event: _export_values("Predictions", "Targets", classes, cm.cpu().tolist()))
+    export_button.on_clicked(lambda event: _export_values("Predictions", "Targets", classes, cm.tolist()))
 
     plt.show(block=blocking)
 
+# Example usage:
+if __name__ == "__main__":
+    predicted = [0, 1, 0, 1, 2]
+    target = [0, 1, 1, 1, 2]
+    plot_confusion_matrix(predicted, target, classes=["Class 0", "Class 1", "Class 2"], normalize=True)
