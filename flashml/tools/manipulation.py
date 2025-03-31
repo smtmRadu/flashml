@@ -1,6 +1,16 @@
 from typing import List, Tuple
 import random
+def shuffle_tensor(torch_tensor, axis):
+    size = torch_tensor.size(axis)  # Get size along the axis
+    
+    # Generate a random permutation using Python's random module
+    perm = list(range(size))
+    random.shuffle(perm)  # Shuffle in place
 
+    # Convert the permutation to a tensor on the same device as the input tensor
+    perm_tensor = torch_tensor.new_tensor(perm).long()
+
+    return torch_tensor.index_select(axis, perm_tensor)
 
 def shuffle_df(df, seed: int | None = None):
     '''
@@ -8,8 +18,6 @@ def shuffle_df(df, seed: int | None = None):
     
     Args:
         df: DataFrame (Polars or Pandas) or list of DataFrames
-        seed: int | None, seed for random number generator. If None, the seed is random.
-        
     Returns:
         Shuffled DataFrame(s)
     '''
@@ -18,7 +26,6 @@ def shuffle_df(df, seed: int | None = None):
         if not all(len(d) == len(df[0]) for d in df):
             raise ValueError("All DataFrames in the list must have the same length to maintain row alignment.")
         indices = list(range(len(df[0])))
-        random.seed(seed)
         random.shuffle(indices)
 
         return [d[indices] if hasattr(d, "__getitem__") else d.take(indices) for d in df]

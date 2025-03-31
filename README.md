@@ -75,8 +75,9 @@ display_episodes() # Displays matplot graphs at the end (rewards vs step/epoch, 
 
 ```
 Output (rt):
-
-[Episode 350]:  37%|███████████████████████████▎                                             | 37409/100000 [00:00<00:00, 112028.23it/s, r_max=188, r_avg=160, r_std=14.6]
+Cumulated Reward [max: 3.236] [µ: 2.599] [σ: 0.30z]
+Episode Length   [max: 685] [µ: 87.310] [σ: 73.73z]
+[Episode 350]:  37%|███████████████████████████▎                                             | 37409/100000 [00:00<00:00, 112028.23it/s]
 
 ```
 

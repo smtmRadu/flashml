@@ -2,12 +2,12 @@ from typing import Any
 import tkinter as tk
 from tkinter import scrolledtext, filedialog
 from datetime import datetime
-from flashml.tools.colors import ansi_of
+from flashml.tools.colors import *
 
 _LOGS = []
 
 
-def log(msg: Any, print_:bool=True,color: str = 'white') -> None:
+def log(msg: Any, color: str = 'white', print_:bool=True) -> None:
     """
     Logs a message in a ledger of logs. Also prints it in the console using ANSI color codes.
     The original color value is saved with the log entry for use in the GUI.
@@ -22,9 +22,7 @@ def log(msg: Any, print_:bool=True,color: str = 'white') -> None:
     # Determine terminal color code
     if color.startswith('#'):
         try:
-            hex_color = color.lstrip('#')
-            r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-            color_code = f'\033[38;2;{r};{g};{b}m'
+            color_code = hex_to_ansi(color)
         except ValueError:
             color_code = ansi_of('white')
     else:

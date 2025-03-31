@@ -17,7 +17,7 @@ class RMSNorm(nn.Module):
             self.register_parameter("shift", self.bias)
             
     def forward(self, x):
-        if self.p is not None:
+        if self.p is None:
             norm_x = x.norm(2, dim=-1, keepdim=True)
             d_x = self.dim
         else:

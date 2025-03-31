@@ -97,12 +97,11 @@ def test_logging():
     from tools import ansi_of, hex_of
     from tools import log, display_logs
 
-    for i in range(32):
-        log("This is a test message\n with a new line and some random characters:   ")  # Entire text in white
-        log("This is red", color="red")  # Entire text in red
-        log("This is hex blue", color="#0000FF")  # Entire text in blue (hex)
-        log("This is hex green", color="#00FF00")  # Entire text in green (hex)
-        log("Invalid hex", color="#GGFF00")  # Entire text in white (fallback)
+    log("This is red", color="red")  # Entire text in red
+    log("This is hex blue", color="#0000FF")  # Entire text in blue (hex)   
+    log("This is a test message\n with a new line and some random characters:   ")  # Entire text in white  
+    log("This is hex green", color="#00FF00")  # Entire text in green (hex)
+    log("Khaki hex", color="khaki")
     display_logs()
 
 def test_rt_plotting():
@@ -132,4 +131,41 @@ def test_rt_plotting():
         # )
 
     
-test_rt_plotting()
+def test_log_session():
+    def example_train_function() -> float:
+        import random
+        time.sleep(random.random())
+        return {"score":random.random() * 100}
+    def example_train_function2() -> float:
+        import random
+        time.sleep(random.random())
+        return {"acc":random.random() * 100, "f1":random.random() * 99}
+    from flashml.tools import log_session
+    hyperparams1 = {"learning_rate": 0.001, "dang": 32}
+    log_session(hyperparams1, example_train_function, sort_by=None)
+
+    hyperparams2 = {"learning_rate": 0.002, "batch_size": 16, "dropout": 0.2}
+    log_session(hyperparams2, example_train_function, sort_by="Score")
+
+    hyperparams3 = {"learning_rate": 0.003, "batch_size": 8}
+    log_session(hyperparams3, example_train_function, sort_by="Score")
+
+    hyperparams3 = {"learning_rate": 0.002, "batch_size": 8, "manag":"pick"}
+    log_session(hyperparams3, example_train_function, sort_by="Score")
+
+    log_session(None, None, sort_by="learning_rate")
+
+    hyperparams4 = {"learning_rate": 0.001, "batch_size": 16, "dropout": 0.2}
+    log_session(hyperparams4, example_train_function, sort_by="Score")
+
+    hyperparams5 = {"learning_rate": 0.003, "batch_size": 8, "lavander":"lander"}
+    log_session(hyperparams5, example_train_function, sort_by="Score")
+
+    hyperparams5 = {"learning_rate": 0.003, "batch_size": 8, "lavander":"lander"}
+    log_session(hyperparams5, example_train_function2)
+
+    hyperparams6 = {"learning_rate": 0.003, "batch_size": 8}
+    log_session(hyperparams6, example_train_function2, sort_by="acc")
+
+    log_session(None, None, sort_by="f1")
+test_log_session()

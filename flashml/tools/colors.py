@@ -12,6 +12,19 @@ def ansi_of(color_name) -> str:
     assert color_name in _COLOR_MAP, f"Color {color_name} not found in color map."
     return _COLOR_MAP[color_name][0]  # Index 0 for ANSI
 
+def hex_to_ansi(hex_str) -> str:
+    """
+    Converts a hexadecimal color string (e.g., '#FF0000') to an ANSI escape sequence.
+    """
+    r, g, b = int(hex_str[1:3], 16), int(hex_str[3:5], 16), int(hex_str[5:7], 16)
+    return f"\033[38;2;{r};{g};{b}m"
+
+def ansi_to_hex(ansi_str) -> str:
+    """
+    Converts an ANSI escape sequence to a hexadecimal color string (e.g., '#FF0000').
+    """
+    r, g, b = ansi_str.split(';')[1].split('m')[0].split(';')
+    return f"#{r:02X}{g:02X}{b:02X}"
 def hex_of(color_name) -> str:
     """
     Returns the hexadecimal representation of the given color name (e.g., '#FF0000').

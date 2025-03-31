@@ -2,27 +2,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class MinGRU(nn.Module):
+class MinLSTM(nn.Module):
     def __init__(self, embedding_dim, bias: bool = True):
         '''
-        
         parallel_scan: bool = False, use parallel scan algorithm for faster computation.
         log_space: bool = False, use log space for computation and parallel_scan_log for stability.
         '''
-        super(MinGRU, self).__init__()
+        super(MinLSTM, self).__init__()
         self.d = embedding_dim 
-        self.fc_z = nn.Linear(embedding_dim, embedding_dim, bias=bias)
-        self.fc_n = nn.Linear(embedding_dim, embedding_dim, bias=bias)
+        self.fc_f = nn.Linear(embedding_dim, embedding_dim, bias=bias)
+        self.fc_i = nn.Linear(embedding_dim, embedding_dim, bias=bias)
+        self.fc_h = nn.Linear(embedding_dim, embedding_dim, bias=bias)
        
-        torch.nn.init.kaiming_normal_(self.fc_z.weight)
-        torch.nn.init.kaiming_normal_(self.fc_n.weight)
+        torch.nn.init.kaiming_normal_(self.fc_f .weight)
+        torch.nn.init.kaiming_normal_(self.fc_i.weight)
+        torch.nn.init.kaiming_normal_(self.fc_h.weight)
         if bias:
-            torch.nn.init.zeros_(self.fc_n.bias)
-            torch.nn.init.zeros_(self.fc_z.bias)
-    
+            torch.nn.init.zeros_(self.fc_f.bias)
+            torch.nn.init.zeros_(self.fc_i.bias)
+            torch.nn.init.zeros_(self.fc_h.bias)
+
     def forward(self, x: torch.Tensor):     
-        assert x.dim() == 3, f"MinGRU - Input should be a 3D tensor (B, L, D), received ({x.shape})"
-        assert x.size(-1) == self.d, f"MinGRU - Input should have the same dimension as the embedding_dim (received {x.size(-1)}, expected {self.d})"
+        assert x.dim() == 3,f"MinLSTM - Input should be a 3D tensor (B, L, D), received ({x.shape})"
+        assert x.size(-1) == self.d, f"MinLSTM - Input should have the same dimension as the embedding_dim (received {x.size(-1)}, expected {self.d})"
         # if not self.training:
         #     return self._forward_sequentially_log_space(x)
         
@@ -34,9 +36,12 @@ class MinGRU(nn.Module):
         h:list[torch.Tensor] = [torch.zeros(size=(B, 1, D), device=x.device)]     
 
         for i in range(L):
-            z = F.sigmoid(self.fc_z(x[:, i, :]))
-            n = g(self.fc_n(x[:, i, :]))
-            h_t = (1 - z) * h[-1] + z * n
+            f_t = F.sigmoid(self.fc_f(x[:, i, :]))
+            i_t = F.sigmoid(self.fc_i(x[:, i, :]))
+            tilde_h_t = g(self.fc_h(x[:, i, :]))
+            f_prime_t = f_t / (f_t + i_t)
+            i_prime_t = i_t / (f_t + i_t)
+            h_t = f_prime_t * h[-1] + i_prime_t * tilde_h_t
             h.append(h_t)
 
         return torch.cat(h[1:], dim=-2)
@@ -45,13 +50,12 @@ class MinGRU(nn.Module):
         B, _, D = x.shape
         h0 = torch.zeros((B,1,D)).to(x.device)
           
-        k = self.fc_z(x)
-        log_z = -F.softplus(-k)
-        log_coeffs = -F.softplus(k)
-        log_h0 = log_g(h0)
-        log_h_ = log_g(self.fc_n(x))
-        log_values = torch.cat([log_h0, log_z + log_h_], dim = -2)
-        h = parallel_scan_log(log_coeffs=log_coeffs, log_values=log_values)
+        diff = F.softplus(-self.fc_f(x)) - F.softplus(-self.fc_i(x))
+        log_f = -F.softplus(diff)
+        log_i = -F.softplus(-diff)
+        log_h0 = torch.log(h0)
+        log_tilde_h = log_g(self.fc_h(x))
+        h = parallel_scan_log(log_coeffs=log_f, log_values=torch.cat([log_h0, log_i + log_tilde_h], dim=-2))
         return h
     
 def parallel_scan_log(log_coeffs, log_values):
