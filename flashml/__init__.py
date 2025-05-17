@@ -1,2 +1,1 @@
-from importlib.metadata import version
-__version__ = version("flashml")
+__version__ = "0.5"

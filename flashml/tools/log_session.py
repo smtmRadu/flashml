@@ -167,12 +167,3 @@ def log_session(hyperparameters: dict[str, Any] | None = None, train_func: Calla
     """
     logger = _TrainingLogger()
     logger._log_session(hyperparameters, train_func, sort_by)
-
-# Example usage
-if __name__ == "__main__":
-    def train():
-        time.sleep(1)
-        return {"f1": 0.88, "accuracy": 0.92}
-
-    log_session({"lr": 0.01, "batch": 32}, train)
-    log_session({"lr": 0.02, "batch": 64}, train, sort_by="f1")

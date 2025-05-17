@@ -1,86 +1,69 @@
-from typing import Any
-import tkinter as tk
-from tkinter import scrolledtext, filedialog
+import json
+from typing import Literal
 from datetime import datetime
-from flashml.tools.colors import *
-
-_LOGS = []
+import os
 
 
-def log(msg: Any, color: str = 'white', print_:bool=True) -> None:
-    """
-    Logs a message in a ledger of logs. Also prints it in the console using ANSI color codes.
-    The original color value is saved with the log entry for use in the GUI.
-    
+def log(
+    record: dict | str,
+    path="flashml_logger.jsonl",
+    augment_log=True,
+    mode: str = "a",
+    utf="utf-8",
+):
+    """Records a dictionary as a json object in a jsonl file.
+
     Args:
-        msg (Any): The message to log.
-        color (str, optional): The color name or hex value (e.g., '#RRGGBB'). Defaults to 'white'.
+        record (dict | str): A message or a dictionary
+        path (flashml_logger.jsonl): _description_
+        mode (str, optional): _description_. Defaults to "a".
+        utf (str, optional): _description_. Defaults to "utf-8".
     """
-    global _LOGS
-    RESET = '\033[0m'
-    
-    # Determine terminal color code
-    if color.startswith('#'):
-        try:
-            color_code = hex_to_ansi(color)
-        except ValueError:
-            color_code = ansi_of('white')
+    if isinstance(record, str):
+        record = {"message": record}
+    if augment_log:
+        new_dict = {"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), **record}
     else:
-        color_code = ansi_of(color)
-    
-    msg_str = str(msg)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Save log entry with the original color value (so the GUI can use it directly)
-    _LOGS.append({'timestamp': timestamp, 'message': msg_str, 'color': color})
-    if print_:
-        print(f"{color_code}{msg_str}{RESET}")
+        new_dict = record
 
-def display_logs() -> None:
+    with open(path, mode, encoding=utf) as f:
+        f.write(json.dumps(new_dict) + "\n")
+
+
+def load_logs(
+    path="flashml_logger.jsonl",
+    as_df: Literal["pd", "pl"] = "list_of_dicts",
+    utf="utf-8",
+) -> list[dict]:
+    """Loads the jsonl file and returns a polars/pandas dataframe.
+
+    Returns:
+        list[dict] | polars/pandas df | **None** if file is empty.
     """
-    Display all the logs in a GUI window with timestamps and an export option.
-    Logs are shown in chronological order, separated like blocks, with scrolling.
-    """
-    global _LOGS
-    root = tk.Tk()
-    root.title("Log Viewer")
-    root.configure(bg="#212121")  # Set the dark background color
-
-    # Styled text area for log display
-    text_area = scrolledtext.ScrolledText(
-        root, wrap=tk.WORD, width=80, height=20, 
-        bg="#2E2E2E", fg="white", insertbackground="white",
-        font=("Consolas", 10), relief=tk.FLAT
-    )
-    text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-    for log in _LOGS:
-        timestamp = log['timestamp']
-        message = log['message']
-        text_area.insert(tk.END, f"[{timestamp}] {message}\n", "log")
-        text_area.insert(tk.END, "-" * 50 + "\n", "separator")
-
-    # Style tags for different parts of the logs
-    text_area.tag_config("log", foreground="lightgray")
-    text_area.tag_config("separator", foreground="gray")
-    
-    text_area.configure(state='disabled')
-
-    def export_logs():
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+    # check file is empty
+    if not os.path.exists(path):
+        print(
+            f"\033[93mThe file at path {path} couldn't be found, the returned object is None.\033[0m"
         )
-        if file_path:
-            with open(file_path, 'w') as f:
-                for log in _LOGS:
-                    f.write(f"[{log['timestamp']}] {log['message']}\n")
 
-    # Styled export button
-    export_button = tk.Button(
-        root, text="Export Logs", command=export_logs, 
-        bg="#424242", fg="white", activebackground="#616161", 
-        activeforeground="white", font=("Arial", 10, "bold"), relief=tk.FLAT
-    )
-    export_button.pack(pady=5)
+        return None
+        # raise "File does not exist."
 
-    root.mainloop()
+    if os.stat(path).st_size == 0:
+        return None
+
+    if as_df == "list_of_dicts":
+        import pandas
+
+        r = pandas.read_json(path, lines=True, encoding=utf)
+        return r.to_dict(orient="records")
+    elif as_df == "pd":
+        import pandas
+
+        return pandas.read_json(path, lines=True, encoding=utf)
+    elif as_df == "pl":
+        import polars
+
+        return polars.read_ndjson(path)
+    else:
+        raise "Unhandled dataframe type."

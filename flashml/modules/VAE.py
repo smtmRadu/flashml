@@ -28,6 +28,9 @@ class VAE(nn.Module):
         torch.nn.init.kaiming_normal_(self.fc_out3.weight)
 
     def encode(self, x):
+        '''
+        Returns the mean and log variance.
+        '''
         h = F.silu(self.fc2(F.silu(self.fc1(x))))
         return self.mu(h), self.logvar(h)
     

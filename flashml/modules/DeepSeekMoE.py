@@ -4,9 +4,9 @@ import torch.nn.functional as F
 from FFN import FFN
 
 class DeepSeekMoE(nn.Module):
-    def __init__(self, embedding_dim:int, routed_experts:int=15, shared_experts:int=1, k:int=3, hidden_expansion:int=1, router_temperature:float=1) -> None:
-        
-        assert routed_experts % k == 0, "Number of top k experts must be divisible by the number of experts"
+    def __init__(self, embedding_dim:int, routed_experts:int=15, shared_experts:int=1, active_experts:int=3, hidden_expansion:int=1, router_temperature:float=1) -> None:
+        assert "not finished yet"
+        assert routed_experts % active_experts == 0, "Number of top k experts must be divisible by the number of experts"
         assert hidden_expansion >= 1
         assert routed_experts > 1
         '''
@@ -17,7 +17,7 @@ class DeepSeekMoE(nn.Module):
             `router_T` = router temperature
         '''
         super().__init__()
-        self.k = k
+        self.k = active_experts
         self.T = router_temperature
         self.router = nn.Linear(embedding_dim, routed_experts)
         self.shared_experts = nn.ModuleList([FFN(embedding_dim, embedding_dim, embedding_dim * hidden_expansion) for _ in range(shared_experts)])
@@ -48,8 +48,3 @@ class DeepSeekMoE(nn.Module):
 
         return sum(shared_outputs.extend(routed_outputs))
 
-
-moe_ = DeepSeekMoE(4096)
-
-x = torch.randn(1, 12, 4096)
-moe_.forward(x)

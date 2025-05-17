@@ -13,3 +13,9 @@ Processes images by applying filters such as grayscale, sepia, negative, blur et
 
 #### Color Picker
 Fast color picker on the entire screen.
+
+#### Local Chat
+UI for chatting with local models installed with ollama.
+
+#### File Converter
+Convert pdf/text/doc etc. from one format to another.

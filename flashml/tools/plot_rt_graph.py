@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
-from typing import Union, Any
+from typing import Union
 
 _GRAPHS = {}
 
@@ -147,7 +146,7 @@ def plot_rt_graph(
     Plot or update a real-time graph.
     
     Args:
-        name (str): The name of the graph.
+        name (str): The name of window to plot in. You can run multiple graph windows in the same time, specifying different names.
         value (Union[int, float] | list | tuple): The value(s) to plot.
         step (int | list | tuple, optional): The step(s) to plot. Defaults to None.
         x_label, y_label, color, linestyle, marker: Plot styling parameters.
