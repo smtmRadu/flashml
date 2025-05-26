@@ -1,12 +1,10 @@
 from .resource_monitor import resource_monitor
-from .log_metrics import log_metrics, log_metrics2
-from .display_metrics import display_metrics
+from .log_metrics import log_metrics, log_metrics2, display_metrics
 from .plot_graph import plot_graph
 from .benchmark import benchmark, stress_cpu, stress_gpu
 from .plot_confusion_matrix import plot_confusion_matrix
 from .manipulation import (
-    batch_ranges,
-    batch_indices,
+    generate_batches,
     shuffle_tensor,
     shuffle_df,
     sample_from,
@@ -20,18 +18,20 @@ from .sound_effects import bell
 from .plot_distribution import plot_distribution
 from .extern import call_cs_kernel
 from .parallel import parallel_for, parallel_foreach
+from .plot_tensor import plot_tensor
+from .inspect_model import inspect_model
 
 __all__ = [
     "ansi_of",
     "ansi_to_hex",
-    "batch_indices",
-    "batch_ranges",
     "bell",
     "benchmark",
     "call_cs_kernel",
     "display_metrics",
+    "generate_batches",
     "hex_of",
     "hex_to_ansi",
+    "inspect_model",
     "load_logs",
     "log",
     "log_metrics",
@@ -43,6 +43,7 @@ __all__ = [
     "plot_distribution",
     "plot_graph",
     "plot_rt_graph",
+    "plot_tensor",
     "plot_tsne",
     "resource_monitor",
     "sample_from",

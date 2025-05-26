@@ -30,41 +30,24 @@ def test_rl_info():
 
 
 def test_train_info():
+    from tools import display_metrics, log_metrics
+
     loss = 10.0
     epochs = 3
     batches = 300
 
     for it in range(1):
-        for epoch in range(epochs):
-            for batch in range(batches):
-                loss_ = math.log2(abs(loss))
-                acc = loss + random.random()
-                log_metrics(
-                    {"loss": loss_, "acc": acc, "time": datetime.now()},
-                    epoch_idx=(epoch, epochs),
-                    batch_idx=(batch, batches),
-                )
-                loss -= 1e-2
-                time.sleep(0.001)
+        for epoch in range(batches * epochs):
+            loss_ = math.log2(abs(loss))
+            acc = loss + random.random()
+            log_metrics(
+                {"loss": loss_, "acc": acc, "time": datetime.now()},
+                step=(epoch, batches * epochs),
+            )
+            loss -= 1e-2
+            time.sleep(0.001)
         print("\n\n\n")
 
-    display_metrics()
-
-
-def test_train_info2():
-    reward_bias = 0
-    max_steps = 100_000
-    step = 0
-    while step < max_steps:
-        ep_len = 0
-        for i in range(4096):
-            step += 1
-            ep_len += 1
-            if random.random() < 0.01:
-                log_metrics2(metrics={"Rand": random.random()}, step=(step, max_steps))
-                ep_len = 0
-                reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
-            # time.sleep(0.0001)
     display_metrics()
 
 
@@ -240,4 +223,31 @@ def test_logger():
     print(load_logs(as_df="pl"))
 
 
-test_logger()
+from tools import parallel_foreach, benchmark
+
+
+def test_simple_for():
+    lst = []
+    for i in range(10000):
+        lst.append(str(random.random()) * 10)
+
+    for i in range(10000):
+        lst[i] = sorted(lst[i])
+
+
+def test_parallel_for():
+    lst = []
+    for i in range(10000):
+        lst.append(str(random.random()) * 10)
+
+    parallel_foreach(lst, sorted)
+
+
+def plot_tensorx():
+    import torch
+    from tools import plot_tensor
+
+    plot_tensor(torch.randn(42, 121))
+
+
+plot_tensorx()

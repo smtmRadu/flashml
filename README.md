@@ -1,19 +1,48 @@
-# flashml
+# FlashML
 
-**flashml** is a third party tool used in certain ML/RL/NLP related tasks. Not published yet on PyPI,
+**FlashML** is a third party tool used in certain ML/RL/NLP related tasks. Not published yet on PyPI,
 but you can install it by opening it in vscode, and with conda env call:
 
 ```
-pip install -e . --use-pep517
+pip install -e .
 ```
----
 
+
+and add this line to VSCode's settings.json:
+```json
+{
+    ...
+    python.analysis.extraPath":["path\\to\\flashml"]
+    ...
+}
+```
+***
 ### Always-on resource monitor
 ```python
 from flashml.tools import resource_monitor
 
 resource_monitor()
 ```
+<img src="https://github.com/smtmRadu/flashml/blob/main/doc/resource_monitor.jpg?raw=true" width="200" height="350" alt="Resource Monitor">
+
+***
+
+### Model inspection
+```python
+from flashml.tools import inspect_model
+
+model = AutoModel.from_pretrained("<any-torch-model>")
+inspect_model(model)
+```
+![mi](https://github.com/smtmRadu/flashml/blob/main/doc/model_inspector.jpg?raw=true)
+
+***
+### Tensor ploting
+```python
+from flashml.tools import plot_tensor
+plot_tensor(torch.randn(42, 121))
+```
+![tp](https://github.com/smtmRadu/flashml/blob/main/doc/tensor_plot.jpg?raw=true)
 ***
 ### Fast plot
 ```python
@@ -31,19 +60,30 @@ for i in range(T):
 ```
 
 ***
-### ML train plots
+### Parallel For-Loops
+```python
+from flashml.tools import parallel_for, parallel_foreach
+
+def my_func(x):
+    ...
+
+result = parallel_for(0, 1e6, my_func, num_workers=16)
+```
+***
+### ML train utilities
 
 ```python
-from flashml.tools import log_metrics, display_metrics, plot_confusion_matrix
+from flashml.tools import log_metrics, generate_batches, display_metrics, plot_confusion_matrix
 
-for ep in range(epochs):
-    for idx, batch in enumerate(batches):    
+data = ...
+batches = generate_batches(len(data), num_epochs=8, batch_size=32)
+for idx, batch_ids in enumerate(batches):
+        batch = data[batch_ids]
         # Compute loss and perform update
         # Compute validation
         log_metrics(
             metrics={ "loss": loss , "acc" : acc},
-            epoch_idx=(ep, epochs),
-            batch_idx=(idx, batches))
+            step=idx)
 
 display_metrics() # Displays matplot graphs at the end, allowing data export as csv
 plot_confusion_matrix(yHat, y)

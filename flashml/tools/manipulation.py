@@ -73,50 +73,9 @@ def shuffle_df(df, seed: int | None = None):
     raise TypeError("Input must be a Pandas or Polars DataFrame, or a list of them.")
 
 
-def batch_ranges(
-    data_size: int, batch_size: int, discard_partial_batch: bool = True
-) -> List[Tuple[int, int]]:
-    import warnings
-
-    warnings.warn(
-        "batch_ranges() is deprecated. Use batch_indices() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    """
-    This script computes the indices of the batches for a given dataset and batch size.
-    Args:
-        data_size: int, the length of the dataset.
-        batch_size: int, the size of each batch.
-        discard_partial_batch: bool, whether to discard the last batch if it is not full. Discard is recommended if the dataset is shuffled every epoch.
-    Returns:
-        batch_ranges: List[Tuple[int, int]], a list of tuples containing the start and end indices of each batch.
-    Examples:
-        >>> print(batch_ranges(234, 32, discard_partial_batch=True))
-            [(0, 32), (32, 64), (64, 96), (96, 128), (128, 160), (160, 192), (192, 224)]
-        >>> print(batch_ranges(234, 32, discard_partial_batch=False))
-            [(0, 32), (32, 64), (64, 96), (96, 128), (128, 160), (160, 192), (192, 224), (224, 234)]
-        >>> print(batch_ranges(256, 64, discard_partial_batch=True))
-            [(0, 64), (64, 128), (128, 192), (192, 256)]
-        >>> print(batch_ranges(256, 64, discard_partial_batch=False)) # no effect
-            [(0, 64), (64, 128), (128, 192), (192, 256)]
-    """
-    assert batch_size >= 1, "Batch size must be a positive integer."
-    assert data_size >= batch_size, (
-        "Batch size must be smaller than or equal to the length of the dataset."
-    )
-    num_batches = data_size // batch_size
-    if discard_partial_batch or data_size % batch_size == 0:
-        return [(i * batch_size, (i + 1) * batch_size) for i in range(num_batches)]
-    else:
-        ranges = [(i * batch_size, (i + 1) * batch_size) for i in range(num_batches)]
-        ranges.append((num_batches * batch_size, data_size))
-        return ranges
-
-
-def batch_indices(
+def generate_batches(
     data_size: int, num_epochs: int, batch_size: int, shuffle: bool = False
-) -> List[List[int]]:
+) -> List[Tuple]:
     """
     This script computes the indices of the batches for a given dataset, with respect to the number of epochs and batch size.
     You can directly pass through the return as from a dataloader for all epochs.
@@ -128,7 +87,7 @@ def batch_indices(
 
     Example:
         >>> print(batch_indices(21, 2, 4))
-            [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15], [16, 17, 18, 19], [20, 0, 1, 2], [3, 4, 5, 6], [7, 8, 9, 10], [11, 12, 13, 14], [15, 16, 17, 18]]
+            [(0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15), (16, 17, 18, 19), (20, 0, 1, 2), (3, 4, 5, 6), (7, 8, 9, 10), (11, 12, 13, 14), (15, 16, 17, 18)]
 
     Returns:
         List[List[int]]: a list of lists containing the indices of each batch.
@@ -148,6 +107,6 @@ def batch_indices(
             batch = indices[i : i + batch_size]
             if len(batch) < batch_size:
                 batch += indices[: batch_size - len(batch)]
-            all_batches.append(batch)
+            all_batches.append(tuple(batch))
 
     return all_batches
