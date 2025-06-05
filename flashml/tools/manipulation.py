@@ -1,4 +1,4 @@
-from typing import List, Tuple, Sequence
+from typing import List, Tuple, Sequence, Literal
 import random
 
 
@@ -74,8 +74,8 @@ def shuffle_df(df, seed: int | None = None):
 
 
 def generate_batches(
-    data_size: int, num_epochs: int, batch_size: int, shuffle: bool = False
-) -> List[Tuple]:
+    data_size: int, num_epochs: int, batch_size: int, mode: Literal["train", "test"]
+) -> List[Tuple[int, ...]]:
     """
     This script computes the indices of the batches for a given dataset, with respect to the number of epochs and batch size.
     You can directly pass through the return as from a dataloader for all epochs.
@@ -83,30 +83,47 @@ def generate_batches(
         data_size: int, the length of the dataset.
         num_epochs: int, the number of epochs to iterate over the dataset.
         batch_size: int, the size of each batch.
-        shuffle: bool, whether to shuffle the dataset before iterating over it (no doubles will be in the same batch).
+        mode: str, "train" or "test", whether to generate batches for training or testing. If "train", partial batches are skipped and everything is shuffled
 
     Example:
-        >>> print(batch_indices(21, 2, 4))
-            [(0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15), (16, 17, 18, 19), (20, 0, 1, 2), (3, 4, 5, 6), (7, 8, 9, 10), (11, 12, 13, 14), (15, 16, 17, 18)]
-
+        >>> print(generate_batches(21, num_epochs=2, batch_size=4, mode="train"))
+            [(14, 13, 8, 15), (10, 11, 9, 2), (17, 4, 20, 6), (19, 3, 5, 0), (16, 18, 12, 1), (7, 15, 13, 7), (6, 2, 10, 19), (17, 5, 0, 9), (16, 18, 14, 20), (3, 11, 12, 4), (1, 8, 14, 13)]
+        >>> print(generate_batches(21, num_epochs=2, batch_size=4, mode="test"))
+            [(0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15), (16, 17, 18, 19), (20, 0, 1, 2), (3, 4, 5, 6), (7, 8, 9, 10), (11, 12, 13, 14), (15, 16, 17, 18), (19, 20)]
     Returns:
-        List[List[int]]: a list of lists containing the indices of each batch.
+        List[Tuple[int,]]: a list of tuples containing the indices of each element in the batches.
     """
     assert batch_size >= 1, "Batch size must be a positive integer."
     assert num_epochs >= 1, "Number of epochs must be a positive integer."
     assert data_size >= batch_size, (
         "Batch size must be smaller than or equal to the length of the dataset."
     )
-    all_batches = []
+    if mode not in ["train", "test"]:
+        raise ValueError("Mode must be either 'train' or 'test'.")
 
+    shuffle = True if mode == "train" else False
+    skip_partial_batch = True if mode == "train" else False
+
+    stream: List[int] = []
     for _ in range(num_epochs):
-        indices = list(range(data_size))
+        epoch_inds = list(range(data_size))
         if shuffle:
-            random.shuffle(indices)
-        for i in range(0, data_size, batch_size):
-            batch = indices[i : i + batch_size]
-            if len(batch) < batch_size:
-                batch += indices[: batch_size - len(batch)]
+            random.shuffle(epoch_inds)
+        stream.extend(epoch_inds)
+
+    all_batches: List[Tuple[int, ...]] = []
+    total = len(stream)
+    for start in range(0, total, batch_size):
+        batch = stream[start : start + batch_size]
+        if len(batch) == batch_size:
             all_batches.append(tuple(batch))
+        else:
+            if skip_partial_batch:
+                pad_needed = batch_size - len(batch)
+                batch.extend(stream[:pad_needed])
+                all_batches.append(tuple(batch))
+            else:
+                all_batches.append(tuple(batch))
+            break
 
     return all_batches

@@ -8,6 +8,7 @@ version = "0.5.1"
 authors = [{ name = "kbradu" }]
 dependencies = [
     "matplotlib",
+    "plotly",
     "numpy",
     "torch",
     "torchtune",
@@ -36,6 +37,7 @@ dependencies = [
     "transformers",
     "peft",
     "ipykernel",
+    "opencv-python",
 ]
 
 [tool.setuptools]

@@ -8,8 +8,10 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 def test_rl_info():
+    from tools.rl import log_episode, plot_episodes
+
     reward_bias = 0
-    max_steps = 100_000
+    max_steps = 12000
     step = 0
     while step < max_steps:
         ep_len = 0
@@ -26,11 +28,11 @@ def test_rl_info():
                 ep_len = 0
                 reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
 
-    display_episodes()
+        plot_episodes()
 
 
 def test_train_info():
-    from tools import display_metrics, log_metrics
+    from tools import plot_metrics, log_metrics
 
     loss = 10.0
     epochs = 3
@@ -46,9 +48,11 @@ def test_train_info():
             )
             loss -= 1e-2
             time.sleep(0.001)
+            if epoch % 100 == 0:
+                plot_metrics(False)
         print("\n\n\n")
 
-    display_metrics()
+    plot_metrics()
 
 
 def test_plotting():
@@ -64,18 +68,11 @@ def test_plotting():
 
 
 def test_conf_matrix():
+    from tools import plot_confusion_matrix
+
     y = [0, 0, 1, 20, 0, 0, 1, 2, 3, 4, 5, 6, 7, 12, 11, 14]
     y_hat = [0, 1, 1, 20, 0, 0, 1, 2, 9, 3, 4, 5, 10, 12, 11, 14]
-    plot_confusion_matrix(y_hat, y, normalize=True)
-
-
-def test_batch_ranges():
-    from tools import batch_ranges
-
-    print(batch_ranges(234, 32))
-    print(batch_ranges(234, 32, discard_partial_batch=False))
-    print(batch_ranges(256, 64))
-    print(batch_ranges(256, 64, discard_partial_batch=False))
+    plot_confusion_matrix(y_hat, y, average="macro")
 
 
 def test_scheduler():
@@ -223,9 +220,6 @@ def test_logger():
     print(load_logs(as_df="pl"))
 
 
-from tools import parallel_foreach, benchmark
-
-
 def test_simple_for():
     lst = []
     for i in range(10000):
@@ -250,4 +244,21 @@ def plot_tensorx():
     plot_tensor(torch.randn(42, 121))
 
 
-plot_tensorx()
+def test_batch_generation():
+    from tools import generate_batches
+
+    print(generate_batches(21, 1, 4, "train"))
+    print(generate_batches(21, 1, 4, "test"))
+    print(generate_batches(21, 2, 4, "train"))
+    print(generate_batches(21, 2, 4, "test"))
+
+
+def test_plot_tsne():
+    import numpy as np
+    from tools import plot_tsne
+
+    data = np.random.rand(1200, 10)
+    plot_tsne(data, verbose=1)
+
+
+from flashml.tools import plot_chat

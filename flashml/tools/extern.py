@@ -1,13 +1,12 @@
-import subprocess
 import os
-import tempfile
-import shutil
-import platform
+
 
 DOTNET_TARGET_FRAMEWORK = "net8.0"
 
 
 def run_compiled_csharp(executable_path, arguments=None):
+    import subprocess
+
     """
     Runs a compiled C# executable and captures its output.
     This is a helper function, similar to the original run_csharp_script.
@@ -44,6 +43,11 @@ def run_compiled_csharp(executable_path, arguments=None):
 
 
 def call_cs_kernel(cs_file_path: str, input_args: list = None) -> str:
+    import tempfile
+    import shutil
+    import platform
+    import subprocess
+
     """
     Compiles a C# source file and runs it, returning its standard output.
 

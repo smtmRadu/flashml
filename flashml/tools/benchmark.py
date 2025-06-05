@@ -1,5 +1,4 @@
 import time
-import numpy as np
 
 
 def stress_gpu(duration_seconds=60, matrix_size=8192):
@@ -28,6 +27,8 @@ def stress_gpu(duration_seconds=60, matrix_size=8192):
 
 
 def _cpu_stress_worker(matrix_size):
+    import numpy as np
+
     matrix1 = np.random.rand(matrix_size, matrix_size)
     matrix2 = np.random.rand(matrix_size, matrix_size)
     while True:

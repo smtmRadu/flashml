@@ -1,9 +1,4 @@
-from typing import Any, Tuple, Union, overload, Any, Tuple, List
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-from tkinter import filedialog
-import csv
-from matplotlib.widgets import Button
+from typing import Any, Tuple, List
 
 
 def log_metrics(metrics: dict[str, Any], step: Tuple[int, int]) -> None:
@@ -48,6 +43,8 @@ class _TrainingLogger_step:
         return cls._instance
 
     def __init__(self, num_steps: int = 1):
+        from tqdm import tqdm
+
         if hasattr(self, "_initialized"):
             return
 
@@ -59,7 +56,7 @@ class _TrainingLogger_step:
         self.history_log: list[Tuple[dict[str, Any], int]] = []  # holds out all records
 
     def _update(self, log: Tuple[dict[str, Any], int]) -> None:
-        self.display.set_description(f"Training Progress")
+        self.display.set_description(desc="Training Progress")
 
         self.display.set_postfix(log[0])
         self.display.n = log[1]
@@ -68,7 +65,7 @@ class _TrainingLogger_step:
 
     @staticmethod
     def log_metrics(metrics: dict[str, Any], step: Tuple[int, int]):
-        assert metrics != None, "You logged no metric"
+        assert metrics is not None, "You logged no metric"
         assert len(metrics) > 0, "Metric log is empty"
         logger = _TrainingLogger_step(num_steps=step[1])
         logger._update((metrics, step[0]))
@@ -83,6 +80,8 @@ class _TrainingLogger_epoch_batch:
         return cls._instance
 
     def __init__(self, num_iters: int = 1, num_bar_steps: int = 1):
+        from tqdm import tqdm
+
         if hasattr(self, "_initialized"):
             return
 
@@ -113,7 +112,7 @@ class _TrainingLogger_epoch_batch:
 
         self.display.set_description(
             f"[Epoch {epoch_idx + 1}/{self.num_iterations}]"
-            if self.num_iterations != None
+            if self.num_iterations is not None
             else f"[Iter {epoch_idx + 1}]"
         )
 
@@ -128,7 +127,7 @@ class _TrainingLogger_epoch_batch:
         epoch_idx: int | Tuple[int, int],
         batch_idx: Tuple[int, int],
     ):
-        assert metrics != None, "You logged no metric"
+        assert metrics is not None, "You logged no metric"
         assert len(metrics) > 0, "Metric log is empty"
         assert isinstance(batch_idx, Tuple), (
             f"LOG_METRICS ERROR:batch_idx should be a tuple(current_batch, total_batches), got type: {type(batch_idx)}"
@@ -146,7 +145,10 @@ class _TrainingLogger_epoch_batch:
         )
 
 
-def _display_metrics_on_thread(show_epoch_ticks: bool = False) -> None:
+def _plot_metrics_on_thread(block: bool, show_epoch_ticks: bool) -> None:
+    from matplotlib.widgets import Button
+    import matplotlib.pyplot as plt
+
     """
     Show the collected metrics from `log_metrics` at the end of the training. The graphs can be exported as csv.
     The labels are: `Metric` (metric name), `Value` (metric value), `Epoch` (epoch idx), `Batch Index` (batch idx in epoch), `Step` (optim step)
@@ -172,7 +174,7 @@ def _display_metrics_on_thread(show_epoch_ticks: bool = False) -> None:
             ]
 
             fig, ax = plt.subplots(figsize=(8, 5))
-            fig.canvas.manager.set_window_title("torchex")
+            fig.canvas.manager.set_window_title("flashml")
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
             ax.plot(steps, values_for_name, linestyle="-", linewidth=0.75)
 
@@ -195,7 +197,7 @@ def _display_metrics_on_thread(show_epoch_ticks: bool = False) -> None:
             export_button.on_clicked(
                 lambda x: _export_values_batch_epoch(history, metric_name=name)
             )
-            plt.show()
+            plt.show(block=block)
 
     elif (
         _TrainingLogger_step._instance is not None
@@ -213,7 +215,7 @@ def _display_metrics_on_thread(show_epoch_ticks: bool = False) -> None:
             ]
 
             fig, ax = plt.subplots(figsize=(8, 5))
-            fig.canvas.manager.set_window_title("torchex")
+            fig.canvas.manager.set_window_title("flashml")
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
             ax.plot(steps, values_for_name, linestyle="-", linewidth=0.75)
 
@@ -228,13 +230,16 @@ def _display_metrics_on_thread(show_epoch_ticks: bool = False) -> None:
             export_button.on_clicked(
                 lambda x: _export_values_step(history, metric_name=name)
             )
-            plt.show()
+            plt.show(block=block)
 
     else:
         raise "Training logger was not initialized. You need to `log_metrics` or `log_metrics2` before calling `display_metrics`"
 
 
 def _export_values_step(history, metric_name):
+    import csv
+    from tkinter import filedialog
+
     file_path = filedialog.asksaveasfilename(
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -250,6 +255,9 @@ def _export_values_step(history, metric_name):
 
 
 def _export_values_batch_epoch(history, metric_name):
+    import csv
+    from tkinter import filedialog
+
     file_path = filedialog.asksaveasfilename(
         defaultextension=".csv",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -270,9 +278,13 @@ def _export_values_batch_epoch(history, metric_name):
                 )
 
 
-def display_metrics(show_epoch_ticks: bool = False) -> None:
+def plot_metrics(block=True, show_epoch_ticks: bool = False) -> None:
     """
-    Show the collected metrics from `log_metrics` without interrupting the training process. The graphs can be exported as csv.
+    Show the current collected metrics from `log_metrics` (can be called multiple times, even if the training didn't end). The graphs can be exported as csv.
+
+    Args:
+        block (bool, optional): If True, the function will block the main thread until the plot is closed. Defaults to True.
+        show_epoch_ticks (bool, optional): If True, the x-axis will show the epoch index instead of the step index. Defaults to False.
     """
     # assert _TrainingLogger._instance is not None, "Training logger not initialized. You need to log_metrics before calling display_metrics."
     # assert len(_TrainingLogger._instance.history_log) > 0, "No metrics logged. You need to set retain_logs=True in display_metrics."
@@ -281,4 +293,4 @@ def display_metrics(show_epoch_ticks: bool = False) -> None:
     # thread.start()
 
     # for now they are disabled
-    _display_metrics_on_thread(show_epoch_ticks)
+    _plot_metrics_on_thread(block, show_epoch_ticks)

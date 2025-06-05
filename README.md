@@ -1,7 +1,7 @@
 # FlashML
 
-**FlashML** is a third party tool used in certain ML/RL/NLP related tasks. Not published yet on PyPI,
-but you can install it by opening it in vscode, and with conda env call:
+**FlashML** is a lightweight library (with minimal import overhead) dedicated to ML/RL/NLP engineers working with PyTorch. Not published yet on PyPI,
+but you can install it by opening this project in VSCode, and with conda env call:
 
 ```
 pip install -e .
@@ -10,11 +10,7 @@ pip install -e .
 
 and add this line to VSCode's settings.json:
 ```json
-{
-    ...
-    python.analysis.extraPath":["path\\to\\flashml"]
-    ...
-}
+python.analysis.extraPath":["path\\to\\flashml"],
 ```
 ***
 ### Always-on resource monitor
@@ -29,12 +25,15 @@ resource_monitor()
 
 ### Model inspection
 ```python
-from flashml.tools import inspect_model
+from flashml.tools import inspect_model, inspect_tokenizer
 
-model = AutoModel.from_pretrained("<any-torch-model>")
+tokenizer = AutoTokenizer.from_pretrained("<any-huggingface-tokenizer>")
+model = AutoModelForCausalLM.from_pretrained("<any-pytorch-model>")
 inspect_model(model)
+inspect_tokenizer(tokenizer)
 ```
 ![mi](https://github.com/smtmRadu/flashml/blob/main/doc/model_inspector.jpg?raw=true)
+![mi](https://github.com/smtmRadu/flashml/blob/main/doc/tokenizer_inspector.jpg?raw=true)
 
 ***
 ### Tensor ploting
@@ -76,7 +75,7 @@ result = parallel_for(0, 1e6, my_func, num_workers=16)
 from flashml.tools import log_metrics, generate_batches, display_metrics, plot_confusion_matrix
 
 data = ...
-batches = generate_batches(len(data), num_epochs=8, batch_size=32)
+batches = generate_batches(len(data), num_epochs=8, batch_size=32, mode="train")
 for idx, batch_ids in enumerate(batches):
         batch = data[batch_ids]
         # Compute loss and perform update

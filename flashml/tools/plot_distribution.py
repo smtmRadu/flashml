@@ -1,5 +1,4 @@
 from typing import Literal
-import matplotlib.pyplot as plt
 
 
 def plot_distribution(
@@ -34,6 +33,8 @@ def plot_distribution(
         show_values: If True, displays the frequency value on top of each bar.
         grid: If True, adds a grid to the plot.
     """
+    import matplotlib.pyplot as plt
+
     if not isinstance(freq_dict, dict):
         raise TypeError("freq_dict must be a dictionary.")
     if not freq_dict:

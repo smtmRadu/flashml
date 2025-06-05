@@ -1,15 +1,11 @@
 from nltk.corpus import stopwords
 import nltk
 from nltk.tokenize import word_tokenize
-from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 from nltk.stem import WordNetLemmatizer
 import string
 import re
 import polars as pl
-
-
-
 
 
 def expand_contractions(df, column_name):
@@ -43,7 +39,7 @@ def expand_contractions(df, column_name):
             return None
         text = str(text).lower()  # Case-insensitive matching
         for contraction, expansion in contractions.items():
-            text = re.sub(r'\b' + re.escape(contraction) + r'\b', expansion, text)
+            text = re.sub(r"\b" + re.escape(contraction) + r"\b", expansion, text)
         return text
 
     if df.__class__.__module__.startswith("pandas"):
@@ -52,10 +48,13 @@ def expand_contractions(df, column_name):
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).map_elements(_expand_func, return_dtype=pl.Utf8).alias(column_name)
+            pl.col(column_name)
+            .map_elements(_expand_func, return_dtype=pl.Utf8)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def lowercase(df, column_name):
     """
@@ -79,6 +78,7 @@ def lowercase(df, column_name):
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
 
+
 def lemmatize(df, column_name):
     """
     Applies lemmatization to words in a text column in a Pandas or Polars DataFrame.
@@ -91,9 +91,9 @@ def lemmatize(df, column_name):
         A DataFrame with lemmatized words in the specified column
     """
     try:
-        nltk.data.find('tokenizers/wordnet')
+        nltk.data.find("tokenizers/wordnet")
     except:
-        nltk.download('wordnet', quiet=True)
+        nltk.download("wordnet", quiet=True)
     lemmatizer = WordNetLemmatizer()
 
     def _lemmatize_func(text):
@@ -102,7 +102,7 @@ def lemmatize(df, column_name):
         try:
             words = word_tokenize(str(text))
             lemmatized_words = [lemmatizer.lemmatize(word) for word in words]
-            return ' '.join(lemmatized_words)
+            return " ".join(lemmatized_words)
         except Exception:
             return str(text)
 
@@ -112,10 +112,13 @@ def lemmatize(df, column_name):
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).map_elements(_lemmatize_func, return_dtype=pl.Utf8).alias(column_name)
+            pl.col(column_name)
+            .map_elements(_lemmatize_func, return_dtype=pl.Utf8)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def stem(df, column_name):
     """
@@ -136,7 +139,7 @@ def stem(df, column_name):
         try:
             words = word_tokenize(str(text))
             stemmed_words = [stemmer.stem(word) for word in words]
-            return ' '.join(stemmed_words)
+            return " ".join(stemmed_words)
         except Exception:
             return str(text)
 
@@ -146,21 +149,24 @@ def stem(df, column_name):
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).map_elements(_stem_func, return_dtype=pl.Utf8).alias(column_name)
+            pl.col(column_name)
+            .map_elements(_stem_func, return_dtype=pl.Utf8)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
 
+
 # REMOVING
-def remove_stopwords(df, column_name, language='english'):
+def remove_stopwords(df, column_name, language="english"):
     try:
-        nltk.data.find('corpora/stopwords')
+        nltk.data.find("corpora/stopwords")
     except:
-        nltk.download('stopwords', quiet=True)
+        nltk.download("stopwords", quiet=True)
     try:
-        nltk.data.find('tokenizers/punkt')
+        nltk.data.find("tokenizers/punkt")
     except:
-        nltk.download('punkt', quiet=True)
+        nltk.download("punkt", quiet=True)
 
     """
     Removes stopwords from a text column in a Pandas or Polars DataFrame.
@@ -177,15 +183,15 @@ def remove_stopwords(df, column_name, language='english'):
 
     # Define the function once
     def _remove_stopwords_func(text):
-        if text is None: # Handle potential nulls
+        if text is None:  # Handle potential nulls
             return None
         try:
-             # Ensure text is string for tokenization
+            # Ensure text is string for tokenization
             words = word_tokenize(str(text))
             filtered_words = [word for word in words if word.lower() not in stop_words]
-            return ' '.join(filtered_words)
-        except Exception: # Catch potential tokenization errors on weird input
-             return str(text) # Return original text if processing fails
+            return " ".join(filtered_words)
+        except Exception:  # Catch potential tokenization errors on weird input
+            return str(text)  # Return original text if processing fails
 
     if df.__class__.__module__.startswith("pandas"):
         df[column_name] = df[column_name].apply(_remove_stopwords_func)
@@ -193,13 +199,16 @@ def remove_stopwords(df, column_name, language='english'):
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            df[column_name].map_elements(
+            df[column_name]
+            .map_elements(
                 _remove_stopwords_func,
-                return_dtype=pl.Utf8 # Specify return type for efficiency
-            ).alias(column_name)
+                return_dtype=pl.Utf8,  # Specify return type for efficiency
+            )
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def remove_double_spacing(df, column_name):
     """
@@ -213,18 +222,24 @@ def remove_double_spacing(df, column_name):
         A DataFrame with multiple spaces reduced to single spaces in the specified column
     """
     # Regex to match two or more whitespace characters
-    space_pattern = r'\s+'
+    space_pattern = r"\s+"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(space_pattern, ' ', regex=True)
+        df[column_name] = (
+            df[column_name].astype(str).str.replace(space_pattern, " ", regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(space_pattern, ' ').alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(space_pattern, " ")
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 # REPLACING
 def replace_numbers(df, column_name, replacement="NUM", including_floats=True):
@@ -240,20 +255,26 @@ def replace_numbers(df, column_name, replacement="NUM", including_floats=True):
         A DataFrame with numbers replaced in the specified column
     """
     # Regex to find one or more digits
-    number_pattern = r'\d+' if not including_floats else  r'-?\b\d+(?:[\.,]\d+)?\b'
+    number_pattern = r"\d+" if not including_floats else r"-?\b\d+(?:[\.,]\d+)?\b"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(number_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(number_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(
-                number_pattern, replacement
-            ).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(number_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def replace_urls(df, column_name, replacement="URL"):
     """
@@ -271,17 +292,23 @@ def replace_urls(df, column_name, replacement="URL"):
     url_pattern = r"http\S+|www\S+|https\S+"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(url_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(url_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(
-                url_pattern, replacement
-            ).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(url_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def replace_emails(df, column_name, replacement="EMAIL"):
     """
@@ -296,18 +323,26 @@ def replace_emails(df, column_name, replacement="EMAIL"):
         A DataFrame with email addresses replaced in the specified column
     """
     # Regex to match email addresses
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(email_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(email_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(email_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(email_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def replace_punctuation(df, column_name, replacement="PUNC"):
     """
@@ -327,21 +362,27 @@ def replace_punctuation(df, column_name, replacement="PUNC"):
     punct_pattern = f"[{re.escape(string.punctuation)}]+"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(punct_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(punct_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(
-                punct_pattern, replacement
-            ).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(punct_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
 
+
 def replace_pattern(df, column_name, regex_pattern, replacement="MATCH"):
     """
-    Replaces text matching a regex pattern in a text column of a Pandas or Polars DataFrame.
+    GENERAL - Replaces text matching a regex pattern in a text column of a Pandas or Polars DataFrame.
 
     Args:
         df: A pandas.DataFrame or polars.DataFrame
@@ -353,19 +394,27 @@ def replace_pattern(df, column_name, regex_pattern, replacement="MATCH"):
         A DataFrame with the matched patterns replaced in the specified column
     """
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(regex_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(regex_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(regex_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(regex_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
-    
+
+
 def replace_hashtags(df, column_name, replacement="HASHTAG"):
     """
-    Replaces hashtags in a text column with a placeholder in a Pandas or Polars DataFrame.
+    Replaces hashtags (e.g. #ab4_23a) in a text column with a placeholder in a Pandas or Polars DataFrame.
 
     Args:
         df: A pandas.DataFrame or polars.DataFrame
@@ -376,18 +425,26 @@ def replace_hashtags(df, column_name, replacement="HASHTAG"):
         A DataFrame with hashtags replaced in the specified column
     """
     # Regex to match hashtags: # followed by letters, numbers, or underscores
-    hashtag_pattern = r'#[\w]+'
+    hashtag_pattern = r"#[\w]+"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(hashtag_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(hashtag_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(hashtag_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(hashtag_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
 
 def replace_emojis(df, column_name, replacement="EMOJI"):
     """
@@ -403,25 +460,35 @@ def replace_emojis(df, column_name, replacement="EMOJI"):
     """
     # Regex pattern to match common emojis (covers most Unicode emoji ranges)
     emoji_pattern = (
-        r'[\U0001F600-\U0001F64F'  # Emoticons
-        r'\U0001F300-\U0001F5FF'   # Misc Symbols and Pictographs
-        r'\U0001F680-\U0001F6FF'   # Transport and Map Symbols
-        r'\U0001F700-\U0001F77F'   # Alchemical Symbols
-        r'\U0001F900-\U0001F9FF'   # Supplemental Symbols and Pictographs
-        r'\U00002600-\U000026FF'   # Miscellaneous Symbols (e.g., ☀️)
-        r'\U00002700-\U000027BF]'  # Dingbats (e.g., ✂️)
+        r"[\U0001F600-\U0001F64F"  # Emoticons
+        r"\U0001F300-\U0001F5FF"  # Misc Symbols and Pictographs
+        r"\U0001F680-\U0001F6FF"  # Transport and Map Symbols
+        r"\U0001F700-\U0001F77F"  # Alchemical Symbols
+        r"\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        r"\U00002600-\U000026FF"  # Miscellaneous Symbols (e.g., ☀️)
+        r"\U00002700-\U000027BF]"  # Dingbats (e.g., ✂️)
     )
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(emoji_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(emoji_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(emoji_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(emoji_pattern, replacement)
+            .alias(column_name)
         )
     else:
-        raise TypeError("Unsupported 不过另外一邊是什麼意思 Unsupported DataFrame type. Must be pandas or polars.")
+        raise TypeError(
+            "Unsupported 不过另外一邊是什麼意思 Unsupported DataFrame type. Must be pandas or polars."
+        )
+
 
 def replace_smileys(df, column_name, replacement="SMILEY"):
     """
@@ -436,19 +503,27 @@ def replace_smileys(df, column_name, replacement="SMILEY"):
         A DataFrame with smiley faces replaced in the specified column
     """
     # Regex pattern for smiley faces like :), :-), =))))
-    smiley_pattern = r'[:=]-?\)+'
+    smiley_pattern = r"[:=]-?\)+"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(smiley_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(smiley_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(smiley_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(smiley_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
-    
+
+
 def replace_currency(df, column_name, replacement="CURRENCY"):
     """
     Replaces currencies ($100, €50, ¥1000) in a text column with a placeholder in a Pandas or Polars DataFrame.
@@ -461,20 +536,28 @@ def replace_currency(df, column_name, replacement="CURRENCY"):
     Returns:
         A DataFrame with email addresses replaced in the specified column
     """
-    currency_pattern = r'[$€£¥₹]\s?-?\d+(?:[\.,]\d+)?|-?\d+(?:[\.,]\d+)?\s?[$€£¥₹]'
+    currency_pattern = r"[$€£¥₹]\s?-?\d+(?:[\.,]\d+)?|-?\d+(?:[\.,]\d+)?\s?[$€£¥₹]"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace(currency_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name]
+            .astype(str)
+            .str.replace(currency_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all(currency_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(currency_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
 
-def replace_measurements(df, column_name, replacement = "SIZE"):
+
+def replace_measurements(df, column_name, replacement="SIZE"):
     """
     Replaces measurements (8oz, 13kg etc.) in a text column with a placeholder in a Pandas or Polars DataFrame.
 
@@ -487,18 +570,25 @@ def replace_measurements(df, column_name, replacement = "SIZE"):
         A DataFrame with smiley faces replaced in the specified column
     """
     # Regex pattern for smiley faces like :), :-), =))))
-    m_pattern = r'\b\d+(\.\d+)?\s?(oz|kg|g|lb|lbs|m|cm|mm|in|ft|yd|L|ml|gallon|pound)\b'
+    m_pattern = r"\b\d+(\.\d+)?\s?(oz|kg|g|lb|lbs|m|cm|mm|in|ft|yd|L|ml|gallon|pound)\b"
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].astype(str).str.replace( m_pattern, replacement, regex=True)
+        df[column_name] = (
+            df[column_name].astype(str).str.replace(m_pattern, replacement, regex=True)
+        )
         return df
 
     elif df.__class__.__module__.startswith("polars"):
         return df.with_columns(
-            pl.col(column_name).cast(pl.Utf8).str.replace_all( m_pattern, replacement).alias(column_name)
+            pl.col(column_name)
+            .cast(pl.Utf8)
+            .str.replace_all(m_pattern, replacement)
+            .alias(column_name)
         )
     else:
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+
+
 if __name__ == "__main__":
     try:
         import pandas as pd
@@ -513,7 +603,7 @@ if __name__ == "__main__":
             "I can't wait for #AwesomeDay :))) with @USER_________ 🎉",
             "You're running at 456.4 mph :-)) see <User> or #FastRun 🚀",
             None,
-            "It's $100  a great day 100 =)))))) with #HappyVibes 🌞 at info@site.co.uk"
+            "It's $100  a great day 100 =)))))) with #HappyVibes 🌞 at info@site.co.uk",
         ]
     }
 
@@ -523,94 +613,137 @@ if __name__ == "__main__":
         pl_df = pl.DataFrame(test_data)
 
     def run_test(df_type, df):
-        print(f"\n{'='*40}\nTesting with {df_type} DataFrame\n{'='*40}")
+        print(f"\n{'=' * 40}\nTesting with {df_type} DataFrame\n{'=' * 40}")
         orig_df = df.copy() if df_type == "pandas" else df.clone()
 
         # Existing tests
         print("\n--- Testing lowercase ---")
         print("Before:\n", orig_df["text"])
-        result = lowercase(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = lowercase(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing remove_stopwords ---")
         print("Before:\n", orig_df["text"])
-        result = remove_stopwords(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = remove_stopwords(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing remove_double_spacing ---")
         print("Before:\n", orig_df["text"])
-        result = remove_double_spacing(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = remove_double_spacing(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_numbers ---")
         print("Before:\n", orig_df["text"])
-        result = replace_numbers(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "NUMBER")
+        result = replace_numbers(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "NUMBER"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_urls ---")
         print("Before:\n", orig_df["text"])
-        result = replace_urls(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "URL_PLACEHOLDER")
+        result = replace_urls(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(),
+            "text",
+            "URL_PLACEHOLDER",
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_punctuation ---")
         print("Before:\n", orig_df["text"])
-        result = replace_punctuation(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "_PUNCT_")
+        result = replace_punctuation(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(),
+            "text",
+            "_PUNCT_",
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_emails ---")
         print("Before:\n", orig_df["text"])
-        result = replace_emails(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "EMAIL")
+        result = replace_emails(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "EMAIL"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing stem_words ---")
         print("Before:\n", orig_df["text"])
-        result = stem(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = stem(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing lemmatize_words ---")
         print("Before:\n", orig_df["text"])
-        result = lemmatize(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = lemmatize(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing expand_contractions ---")
         print("Before:\n", orig_df["text"])
-        result = expand_contractions(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = expand_contractions(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_by_regex (for @USER_ patterns) ---")
         print("Before:\n", orig_df["text"])
-        user_pattern = r'@USER_+'
-        result = replace_pattern(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", user_pattern, "USER")
+        user_pattern = r"@USER_+"
+        result = replace_pattern(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(),
+            "text",
+            user_pattern,
+            "USER",
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_hashtags ---")
         print("Before:\n", orig_df["text"])
-        result = replace_hashtags(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "HASHTAG")
+        result = replace_hashtags(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(),
+            "text",
+            "HASHTAG",
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_emojis ---")
         print("Before:\n", orig_df["text"])
-        result = replace_emojis(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "EMOJI")
+        result = replace_emojis(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "EMOJI"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_user_tags ---")
         print("Before:\n", orig_df["text"])
-        result = replace_pattern(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "USER")
+        result = replace_pattern(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "USER"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_smileys ---")
         print("Before:\n", orig_df["text"])
-        result = replace_smileys(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "SMILEY")
+        result = replace_smileys(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text", "SMILEY"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_currency ---")
         print("Before:\n", orig_df["text"])
-        result = replace_currency(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = replace_currency(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
         print("\n--- Testing replace_measurement ---")
         print("Before:\n", orig_df["text"])
-        result = replace_measurements(orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text")
+        result = replace_measurements(
+            orig_df.copy() if df_type == "pandas" else orig_df.clone(), "text"
+        )
         print("After:\n", result["text"])
 
     if pd:

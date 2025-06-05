@@ -1,9 +1,11 @@
-from joblib import Parallel, delayed
+### begin of file
 
 
 def parallel_for(
     fromInclusive: int, toExclusive: int, func: callable, num_workers: int = 8
 ) -> list:
+    from joblib import Parallel, delayed
+
     if fromInclusive >= toExclusive:
         return []
 
@@ -26,6 +28,8 @@ def parallel_for(
 
 
 def parallel_foreach(lst: list, func: callable, num_workers: int = 8) -> list:
+    from joblib import Parallel, delayed
+
     if not lst:
         return []
 

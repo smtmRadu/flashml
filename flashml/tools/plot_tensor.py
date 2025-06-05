@@ -1,355 +1,529 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.colors as mcolors
+from typing import Optional
 
 
 def plot_tensor(
     tensor,
-    title="Tensor Heatmap",
-    cmap="winter",
-    annotate_threshold=10,
-    element_display_size_px=50,
-    max_figure_dim_px=1200,
-    hide_axis_labels_if_total_elements_gt=1000,
+    title: str = "Interactive Tensor Visualization",
+    colorscale: str = "Viridis",
+    show_values: bool = True,
+    animation_frame_duration: int = 800,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
 ):
     """
-    Plots a 0D, 1D, 2D, or 3D tensor primarily as heatmaps with indices.
-    Figure size is proportional to tensor shape for square elements.
-    Adjusts aspect for 1D. Uses constrained_layout for 3D.
-    Hides row/column annotations for large tensors.
+    Creates interactive Plotly visualizations for 0D, 1D, 2D, and 3D tensors.
+
+    Features:
+    - 0D: Single value display with gauge
+    - 1D: Interactive bar chart and heatmap
+    - 2D: Interactive heatmap with hover details
+    - 3D: Animated slice navigation + 3D surface plots + interactive slice selector
 
     Args:
-        tensor (torch.tensor, numpy.ndarray or list): The tensor to plot.
-        title (str, optional): The overall title for the plot(s). Defaults to "Tensor Heatmap".
-        cmap (str, optional): The colormap to use. Defaults to "winter".
-        annotate_threshold (int, optional): For cell *value* annotations. If a dimension
-                                           (rows or cols) has this many elements or fewer,
-                                           cell values will be annotated. Set to 0 to disable.
-                                           Defaults to 10.
-        element_display_size_px (int, optional): Desired display size of each square tensor
-                                                 element in pixels. Defaults to 50.
-        max_figure_dim_px (int, optional): Maximum width or height of the generated
-                                           figure in pixels. Defaults to 1200.
-        hide_axis_labels_if_total_elements_gt (int, optional): If the total number of
-                                           elements in a 2D view (e.g., a 2D tensor or a
-                                           slice of a 3D tensor) exceeds this,
-                                           row and column tick labels are hidden. Defaults to 1000.
+        tensor: Input tensor (numpy array, torch tensor, or list)
+        title: Plot title
+        colorscale: Plotly colorscale ('Viridis', 'Plasma', 'Turbo', 'RdBu', etc.)
+        show_values: Whether to show values on heatmaps (for small tensors)
+        animation_frame_duration: Animation speed for 3D tensor slices (ms)
+        width/height: Figure dimensions (auto-calculated if None)
+
+    Returns:
+        Plotly figure object
     """
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    import numpy as np
+
+    pio.templates.default = "plotly_dark"
+    # Convert input to numpy array
     if not isinstance(tensor, np.ndarray):
         try:
-            tensor = np.array(tensor.cpu())
+            if hasattr(tensor, "cpu"):  # PyTorch tensor
+                tensor = np.array(tensor.cpu())
+            else:
+                tensor = np.array(tensor)
         except Exception as e:
-            print(f"Error: Could not convert input to NumPy array. {e}")
-            return
+            raise ValueError(f"Could not convert input to NumPy array: {e}")
 
-    try:
-        dpi = plt.rcParams["figure.dpi"]
-        if dpi <= 0:
-            dpi = 100.0
-    except KeyError:
-        dpi = 100.0
-
-    element_size_inches = element_display_size_px / dpi
-    max_fig_dim_inches = max_figure_dim_px / dpi
-    min_practical_fig_dim_inches = 0.5
-
-    def set_window_top_left():
-        try:
-            manager = plt.get_current_fig_manager()
-            if manager is None:
-                return
-            backend = plt.get_backend()
-            if backend == "TkAgg":
-                current_geometry = manager.window.geometry()
-                size_part = current_geometry.split("+")[0]
-                if "x" in size_part:
-                    manager.window.geometry(f"{size_part}+0+0")
-                else:
-                    manager.window.wm_geometry("+0+0")
-            elif backend.startswith("Qt"):
-                manager.window.move(0, 0)
-            elif backend == "WXAgg":
-                manager.window.SetPosition((0, 0))
-            elif backend.startswith("GTK"):
-                manager.window.move(0, 0)
-        except Exception:
-            pass
-
-    def annotate_heatmap_cells(
-        ax, data_slice, cmap_obj, norm_obj, cell_val_annotate_thresh
-    ):
-        if not (
-            cell_val_annotate_thresh > 0
-            and data_slice.ndim == 2  # Ensure data_slice is 2D
-            and data_slice.shape[0] <= cell_val_annotate_thresh
-            and data_slice.shape[1] <= cell_val_annotate_thresh
-        ):
-            return
-
-        for i in range(data_slice.shape[0]):
-            for j in range(data_slice.shape[1]):
-                val = data_slice[i, j]
-                bg_color_rgba = cmap_obj(norm_obj(val))
-                luminance = (
-                    0.299 * bg_color_rgba[0]
-                    + 0.587 * bg_color_rgba[1]
-                    + 0.114 * bg_color_rgba[2]
-                )
-                text_color = "white" if luminance < 0.5 else "black"
-                ax.text(
-                    j,
-                    i,
-                    f"{val:.2g}",
-                    ha="center",
-                    va="center",
-                    color=text_color,
-                    fontsize=8,
-                )
-
-    def _calculate_dynamic_figsize(
-        num_rows, num_cols, elem_size_in, max_dim_in, min_dim_in
-    ):
-        if num_rows <= 0:
-            num_rows = 1
-        if num_cols <= 0:
-            num_cols = 1
-
-        fig_w_ideal = num_cols * elem_size_in
-        fig_h_ideal = num_rows * elem_size_in
-
-        scale = 1.0
-        if fig_w_ideal > max_dim_in and fig_w_ideal > 0:
-            scale = min(scale, max_dim_in / fig_w_ideal)
-        if fig_h_ideal > max_dim_in and fig_h_ideal > 0:
-            scale = min(scale, max_dim_in / fig_h_ideal)
-
-        final_w = max(fig_w_ideal * scale, min_dim_in if num_cols > 0 else elem_size_in)
-        final_h = max(fig_h_ideal * scale, min_dim_in if num_rows > 0 else elem_size_in)
-        return (final_w, final_h)
-
+    # Handle empty tensor
     if tensor.size == 0:
-        empty_fig_size = _calculate_dynamic_figsize(
-            5, 10, element_size_inches, max_fig_dim_inches, min_practical_fig_dim_inches
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Empty Tensor<br>Shape: {tensor.shape}",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=20, color="orange"),
         )
-        empty_fig_size = (min(empty_fig_size[0], 8), min(empty_fig_size[1], 4))
-
-        fig, ax = plt.subplots(figsize=empty_fig_size)
-        ax.text(
-            0.5,
-            0.5,
-            f"Tensor is empty (shape: {tensor.shape}).\nCannot plot.",
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="orange",
+        fig.update_layout(
+            title=f"{title} - Empty Tensor",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            width=600,
+            height=400,
         )
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_title("Empty Tensor", fontsize=12)
-        plt.tight_layout()
-        set_window_top_left()
-        plt.show()
-        return
+        return fig
 
     dim = tensor.ndim
-    cmap_obj = plt.get_cmap(cmap)
+
+    # Auto-calculate dimensions if not provided
+    if width is None or height is None:
+        if dim <= 1:
+            width, height = 800, 500
+        elif dim == 2:
+            aspect_ratio = tensor.shape[1] / tensor.shape[0]
+            width = min(1000, max(600, int(600 * aspect_ratio)))
+            height = min(800, max(400, int(600 / aspect_ratio)))
+        else:  # 3D
+            width, height = 1200, 800
 
     if dim == 0:
-        current_figsize = _calculate_dynamic_figsize(
-            1, 1, element_size_inches, max_fig_dim_inches, min_practical_fig_dim_inches
-        )
-        fig, ax = plt.subplots(figsize=current_figsize)
-        data_0d = np.array([[tensor.item()]])
-        vmin, vmax = data_0d.min(), data_0d.max()
-        if vmin == vmax:
-            vmin -= 0.5
-            vmax += 0.5
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        im = ax.imshow(data_0d, cmap=cmap_obj, norm=norm, aspect="auto")
-
-        ax.set_xticks([0])
-        ax.set_xticklabels(["0"])
-        ax.set_yticks([0])
-        ax.set_yticklabels(["0"])
-        ax.set_title(f"{title}\n0D Tensor (Scalar)", fontsize=10)
-        annotate_heatmap_cells(ax, data_0d, cmap_obj, norm, 1)
-        fig.colorbar(
-            im, ax=ax, label="Value", orientation="vertical", fraction=0.1, pad=0.1
-        )
-        plt.tight_layout()
-
+        return _plot_0d_tensor(tensor, title, colorscale, width, height)
     elif dim == 1:
-        num_elements = tensor.shape[0]
-        data_1d = tensor.reshape(1, -1)
-        rows_display, cols_display = data_1d.shape
-
-        current_figsize = _calculate_dynamic_figsize(
-            rows_display,
-            cols_display,
-            element_size_inches,
-            max_fig_dim_inches,
-            min_practical_fig_dim_inches,
-        )
-        fig, ax = plt.subplots(figsize=current_figsize)
-
-        vmin, vmax = data_1d.min(), data_1d.max()
-        if vmin == vmax:
-            vmin -= 0.5
-            vmax += 0.5
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        im = ax.imshow(data_1d, cmap=cmap_obj, norm=norm, aspect="auto")
-
-        show_labels = data_1d.size <= hide_axis_labels_if_total_elements_gt
-        ax.set_yticks([0])
-        if show_labels:
-            ax.set_yticklabels(["0 (Row)"])
-            ax.set_xticks(np.arange(cols_display))
-            ax.set_xticklabels([str(i) for i in np.arange(cols_display)], fontsize=8)
-            ax.set_xlabel("Column Index", fontsize=10)
-        else:
-            ax.set_yticklabels([""])
-            ax.set_xticks([])
-
-        ax.set_title(f"{title}\n1D Tensor ({num_elements} elements)", fontsize=12)
-        annotate_heatmap_cells(ax, data_1d, cmap_obj, norm, annotate_threshold)
-        fig.colorbar(
-            im, ax=ax, label="Value", orientation="vertical", fraction=0.08, pad=0.04
-        )
-        plt.tight_layout()
-
+        return _plot_1d_tensor(tensor, title, colorscale, show_values, width, height)
     elif dim == 2:
-        rows_display, cols_display = tensor.shape
-        current_figsize = _calculate_dynamic_figsize(
-            rows_display,
-            cols_display,
-            element_size_inches,
-            max_fig_dim_inches,
-            min_practical_fig_dim_inches,
-        )
-        fig, ax = plt.subplots(figsize=current_figsize)
-
-        vmin, vmax = tensor.min(), tensor.max()
-        if vmin == vmax:
-            vmin -= 0.5
-            vmax += 0.5
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        im = ax.imshow(tensor, cmap=cmap_obj, norm=norm, aspect="auto")
-
-        show_labels = tensor.size <= hide_axis_labels_if_total_elements_gt
-        if show_labels:
-            ax.set_yticks(np.arange(rows_display))
-            ax.set_yticklabels([str(i) for i in np.arange(rows_display)], fontsize=8)
-            ax.set_ylabel("Row Index", fontsize=10)
-            ax.set_xticks(np.arange(cols_display))
-            ax.set_xticklabels([str(i) for i in np.arange(cols_display)], fontsize=8)
-            ax.set_xlabel("Column Index", fontsize=10)
-        else:
-            ax.set_xticks([])
-            ax.set_yticks([])
-
-        ax.set_title(f"{title}\n2D Tensor ({rows_display}x{cols_display})", fontsize=12)
-        annotate_heatmap_cells(ax, tensor, cmap_obj, norm, annotate_threshold)
-        fig.colorbar(im, ax=ax, label="Value")
-        plt.tight_layout()
-
+        return _plot_2d_tensor(tensor, title, colorscale, show_values, width, height)
     elif dim == 3:
-        num_slices, slice_rows, slice_cols = tensor.shape
-        if num_slices == 0:
-            print("Error: 3D tensor has 0 slices.")
-            return
-
-        grid_cols = int(np.ceil(np.sqrt(num_slices)))
-        grid_rows = int(np.ceil(num_slices / grid_cols))
-
-        total_elements_high = grid_rows * slice_rows
-        total_elements_wide = grid_cols * slice_cols
-
-        current_figsize = _calculate_dynamic_figsize(
-            total_elements_high,
-            total_elements_wide,
-            element_size_inches,
-            max_fig_dim_inches,
-            min_practical_fig_dim_inches,
+        return _plot_3d_tensor(
+            tensor,
+            title,
+            colorscale,
+            show_values,
+            animation_frame_duration,
+            width,
+            height,
         )
-
-        fig, axes = plt.subplots(
-            grid_rows,
-            grid_cols,
-            figsize=current_figsize,
-            squeeze=False,
-            constrained_layout=True,
-        )
-        axes_flat = axes.flatten()
-
-        global_min, global_max = tensor.min(), tensor.max()
-        if global_min == global_max:
-            global_min -= 0.5
-            global_max += 0.5
-        norm = mcolors.Normalize(vmin=global_min, vmax=global_max)
-        mappable = None
-
-        for i in range(num_slices):
-            ax = axes_flat[i]
-            slice_data = tensor[i, :, :]
-            current_mappable = ax.imshow(
-                slice_data, cmap=cmap_obj, norm=norm, aspect="auto"
-            )
-            if i == 0:
-                mappable = current_mappable
-
-            show_labels_slice = slice_data.size <= hide_axis_labels_if_total_elements_gt
-            if show_labels_slice:
-                ax.set_yticks(np.arange(slice_rows))
-                ax.set_yticklabels([str(j) for j in np.arange(slice_rows)], fontsize=7)
-                ax.set_ylabel("Row", fontsize=8)
-                ax.set_xticks(np.arange(slice_cols))
-                ax.set_xticklabels([str(k) for k in np.arange(slice_cols)], fontsize=7)
-                ax.set_xlabel("Col", fontsize=8)
-            else:
-                ax.set_xticks([])
-                ax.set_yticks([])
-
-            ax.set_title(f"Slice: {i}", fontsize=9)
-            annotate_heatmap_cells(ax, slice_data, cmap_obj, norm, annotate_threshold)
-
-        for i in range(num_slices, len(axes_flat)):
-            axes_flat[i].axis("off")
-
-        fig.suptitle(
-            f"{title}\n3D Tensor ({num_slices} Slices as Heatmaps)",
-            fontsize=14,
-            fontweight="bold",
-        )
-        if mappable is not None:
-            fig.colorbar(
-                mappable,
-                ax=axes.ravel().tolist(),
-                label="Value",
-                shrink=0.7,
-                aspect=25,
-                pad=0.02,
-            )
-
     else:
-        error_fig_size = _calculate_dynamic_figsize(
-            3, 10, element_size_inches, max_fig_dim_inches, min_practical_fig_dim_inches
+        # High-dimensional tensor - show error
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Cannot visualize {dim}D tensor<br>Supports 0D-3D tensors only",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=20, color="red"),
         )
-        error_fig_size = (min(error_fig_size[0], 6), min(error_fig_size[1], 2.5))  # Cap
-
-        fig, ax = plt.subplots(figsize=error_fig_size)
-        ax.text(
-            0.5,
-            0.5,
-            f"Cannot plot {dim}D tensor.\nSupports 0D, 1D, 2D, and 3D.",
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="red",
+        fig.update_layout(
+            title=f"{title} - Unsupported Dimension ({dim}D)",
+            width=width,
+            height=height,
         )
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_title("Unsupported Tensor Dimension", fontsize=12)
-        plt.tight_layout()
+        fig.show(renderer="browser")
 
-    set_window_top_left()
-    plt.show()
+
+def _plot_0d_tensor(tensor, title, colorscale, width, height):
+    """Plot 0D tensor (scalar) with gauge and info card"""
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+
+    value = tensor.item()
+
+    # Create subplot with gauge and info
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        column_widths=[0.6, 0.4],
+        specs=[[{"type": "indicator"}, {"type": "table"}]],
+        subplot_titles=["Value Gauge", "Tensor Info"],
+    )
+
+    # Gauge plot
+    fig.add_trace(
+        go.Indicator(
+            mode="gauge+number+delta",
+            value=value,
+            domain={"x": [0, 1], "y": [0, 1]},
+            title={"text": "Scalar Value"},
+            gauge={
+                "axis": {
+                    "range": [value - abs(value), value + abs(value)]
+                    if value != 0
+                    else [-1, 1]
+                },
+                "bar": {"color": px.colors.sequential.Viridis[4]},
+                "bgcolor": "white",
+                "borderwidth": 2,
+                "bordercolor": "gray",
+                "steps": [
+                    {
+                        "range": [
+                            value - abs(value) / 2 if value != 0 else -0.5,
+                            value + abs(value) / 2 if value != 0 else 0.5,
+                        ],
+                        "color": "lightgray",
+                    }
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 4},
+                    "thickness": 0.75,
+                    "value": value,
+                },
+            },
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Info table
+    fig.add_trace(
+        go.Table(
+            header=dict(values=["Property", "Value"], fill_color="paleturquoise"),
+            cells=dict(
+                values=[
+                    ["Dimension", "Shape", "Type", "Value"],
+                    [
+                        "0D (Scalar)",
+                        str(tensor.shape),
+                        str(tensor.dtype),
+                        f"{value:.6g}",
+                    ],
+                ]
+            ),
+        ),
+        row=1,
+        col=2,
+    )
+
+    fig.update_layout(title=f"{title} - 0D Tensor (Scalar)", width=width, height=height)
+
+    fig.show(renderer="browser")
+
+
+def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go
+    import numpy as np
+
+    """Plot 1D tensor with bar chart and heatmap views"""
+
+    # Create subplots: bar chart and heatmap
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        row_heights=[0.6, 0.4],
+        subplot_titles=["Bar Chart View", "Heatmap View"],
+        vertical_spacing=0.15,
+    )
+
+    indices = np.arange(len(tensor))
+
+    # Bar chart
+    fig.add_trace(
+        go.Bar(
+            x=indices,
+            y=tensor,
+            marker=dict(
+                color=tensor,
+                colorscale=colorscale,
+                showscale=True,
+                colorbar=dict(title="Value", y=0.8, len=0.6),
+            ),
+            hovertemplate="Index: %{x}<br>Value: %{y:.4f}<extra></extra>",
+            name="Values",
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Heatmap view
+    tensor_2d = tensor.reshape(1, -1)
+
+    fig.add_trace(
+        go.Heatmap(
+            z=tensor_2d,
+            colorscale=colorscale,
+            showscale=False,
+            hovertemplate="Index: %{x}<br>Value: %{z:.4f}<extra></extra>",
+            name="Heatmap",
+        ),
+        row=2,
+        col=1,
+    )
+
+    # Add value annotations if requested and tensor is small
+    if show_values and len(tensor) <= 20:
+        for i, val in enumerate(tensor):
+            fig.add_annotation(
+                x=i,
+                y=0,
+                text=f"{val:.2g}",
+                showarrow=False,
+                row=2,
+                col=1,
+                font=dict(
+                    color="white"
+                    if abs(val - tensor.mean()) > tensor.std()
+                    else "black"
+                ),
+            )
+
+    fig.update_xaxes(title="Index", row=1, col=1)
+    fig.update_yaxes(title="Value", row=1, col=1)
+    fig.update_xaxes(title="Index", row=2, col=1)
+    fig.update_yaxes(showticklabels=False, row=2, col=1)
+
+    fig.update_layout(
+        title=f"{title} - 1D Tensor ({len(tensor)} elements)",
+        width=width,
+        height=height,
+        showlegend=False,
+    )
+
+    fig.show(renderer="browser")
+
+
+def _plot_2d_tensor(tensor, title, colorscale, show_values, width, height):
+    """Plot 2D tensor with interactive heatmap"""
+    import plotly.graph_objects as go
+
+    rows, cols = tensor.shape
+
+    # Create heatmap
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=tensor,
+            colorscale=colorscale,
+            hovertemplate="Row: %{y}<br>Col: %{x}<br>Value: %{z:.4f}<extra></extra>",
+            colorbar=dict(title="Value"),
+        )
+    )
+
+    # Add value annotations if requested and tensor is small enough
+    if show_values and tensor.size <= 400:  # Only for small tensors
+        annotations = []
+        for i in range(rows):
+            for j in range(cols):
+                # Determine text color based on value relative to colorscale
+                val = tensor[i, j]
+                normalized_val = (
+                    (val - tensor.min()) / (tensor.max() - tensor.min())
+                    if tensor.max() != tensor.min()
+                    else 0.5
+                )
+                text_color = "white" if normalized_val < 0.5 else "black"
+
+                annotations.append(
+                    dict(
+                        x=j,
+                        y=i,
+                        text=f"{val:.2g}",
+                        showarrow=False,
+                        font=dict(color=text_color, size=10),
+                    )
+                )
+        fig.update_layout(annotations=annotations)
+
+    fig.update_layout(
+        title=f"{title} - 2D Tensor ({rows}×{cols})",
+        xaxis_title="Column Index",
+        yaxis_title="Row Index",
+        width=width,
+        height=height,
+        yaxis=dict(autorange="reversed"),  # Match matrix convention
+    )
+
+    fig.show(renderer="browser")
+
+
+def _plot_3d_tensor(
+    tensor, title, colorscale, show_values, animation_frame_duration, width, height
+):
+    """Plot 3D tensor with multiple interactive views"""
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import numpy as np
+
+    depth, rows, cols = tensor.shape
+
+    # Create subplot layout:
+    # Top row: Animated slice viewer, 3D surface
+    # Bottom row: Slice selector heatmaps, statistics
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        specs=[
+            [{"type": "heatmap"}, {"type": "surface"}],
+            [{"type": "heatmap"}, {"type": "bar"}],
+        ],
+        subplot_titles=[
+            "Animated Slice Viewer",
+            "3D Surface (First Slice)",
+            "All Slices Overview",
+            "Slice Statistics",
+        ],
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1,
+    )
+
+    # 1. Animated slice viewer (top-left)
+    frames = []
+    for i in range(depth):
+        frame_data = [
+            go.Heatmap(
+                z=tensor[i],
+                colorscale=colorscale,
+                showscale=False,
+                hovertemplate=f"Slice {i}<br>Row: %{{y}}<br>Col: %{{x}}<br>Value: %{{z:.4f}}<extra></extra>",
+            )
+        ]
+        frames.append(go.Frame(data=frame_data, name=str(i)))
+
+    # Initial slice
+    fig.add_trace(
+        go.Heatmap(
+            z=tensor[0],
+            colorscale=colorscale,
+            showscale=True,
+            colorbar=dict(title="Value", x=0.48, len=0.4, y=0.78),
+            hovertemplate="Slice 0<br>Row: %{y}<br>Col: %{x}<br>Value: %{z:.4f}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+
+    # 2. 3D Surface plot (top-right)
+    x_surf = np.arange(cols)
+    y_surf = np.arange(rows)
+    X_surf, Y_surf = np.meshgrid(x_surf, y_surf)
+
+    fig.add_trace(
+        go.Surface(
+            z=tensor[0],
+            x=X_surf,
+            y=Y_surf,
+            colorscale=colorscale,
+            showscale=False,
+            name="Surface",
+        ),
+        row=1,
+        col=2,
+    )
+
+    # 3. All slices overview (bottom-left) - create a mosaic
+    if depth <= 16:  # Only if not too many slices
+        grid_size = int(np.ceil(np.sqrt(depth)))
+        mosaic = np.zeros((grid_size * rows, grid_size * cols))
+
+        for i in range(depth):
+            row_start = (i // grid_size) * rows
+            col_start = (i % grid_size) * cols
+            mosaic[row_start : row_start + rows, col_start : col_start + cols] = tensor[
+                i
+            ]
+
+        fig.add_trace(
+            go.Heatmap(
+                z=mosaic,
+                colorscale=colorscale,
+                showscale=False,
+                hovertemplate="Mosaic View<br>Value: %{z:.4f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+    else:
+        # For many slices, show a representative sample
+        sample_indices = np.linspace(0, depth - 1, min(9, depth), dtype=int)
+        grid_size = 3
+        mosaic = np.zeros((grid_size * rows, grid_size * cols))
+
+        for idx, i in enumerate(sample_indices):
+            row_start = (idx // grid_size) * rows
+            col_start = (idx % grid_size) * cols
+            if row_start < grid_size * rows and col_start < grid_size * cols:
+                mosaic[row_start : row_start + rows, col_start : col_start + cols] = (
+                    tensor[i]
+                )
+
+        fig.add_trace(
+            go.Heatmap(
+                z=mosaic,
+                colorscale=colorscale,
+                showscale=False,
+                hovertemplate="Sample Slices<br>Value: %{z:.4f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+
+    # 4. Slice statistics (bottom-right)
+    slice_means = [tensor[i].mean() for i in range(depth)]
+    # slice_stds = [tensor[i].std() for i in range(depth)]
+    # slice_mins = [tensor[i].min() for i in range(depth)]
+    # slice_maxs = [tensor[i].max() for i in range(depth)]
+
+    fig.add_trace(
+        go.Bar(
+            x=list(range(depth)),
+            y=slice_means,
+            name="Mean",
+            marker_color="blue",
+            opacity=0.7,
+            hovertemplate="Slice: %{x}<br>Mean: %{y:.4f}<extra></extra>",
+        ),
+        row=2,
+        col=2,
+    )
+
+    # Add animation controls
+    fig.frames = frames
+
+    sliders = [
+        dict(
+            steps=[
+                dict(
+                    args=[
+                        ["{}".format(i)],
+                        {"frame": {"duration": animation_frame_duration}},
+                    ],
+                    label="{}".format(i),
+                    method="animate",
+                )
+                for i in range(depth)
+            ],
+            active=0,
+            x=0.1,
+            y=0.02,
+            len=0.8,
+            currentvalue={"prefix": "Slice: "},
+        )
+    ]
+
+    play_button = dict(
+        type="buttons",
+        showactive=False,
+        x=0.05,
+        y=0.02,
+        buttons=[
+            dict(
+                label="▶",
+                method="animate",
+                args=[None, {"frame": {"duration": animation_frame_duration}}],
+            ),
+            dict(
+                label="⏸", method="animate", args=[[None], {"frame": {"duration": 0}}]
+            ),
+        ],
+    )
+
+    fig.update_layout(
+        title=f"{title} - 3D Tensor Interactive Explorer ({depth}×{rows}×{cols})",
+        width=width,
+        height=height,
+        sliders=sliders,
+        updatemenus=[play_button],
+        scene=dict(xaxis_title="Column", yaxis_title="Row", zaxis_title="Value"),
+    )
+
+    # Update subplot titles and axes
+    fig.update_xaxes(title="Column", row=1, col=1)
+    fig.update_yaxes(title="Row", row=1, col=1, autorange="reversed")
+    fig.update_xaxes(title="Slice", row=2, col=2)
+    fig.update_yaxes(title="Mean Value", row=2, col=2)
+
+    fig.show(renderer="browser")

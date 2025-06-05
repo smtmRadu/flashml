@@ -1,14 +1,21 @@
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 class FFN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_dim = 4096, layers_num=1, hidden_activation = nn.SiLU):
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        hidden_dim=4096,
+        layers_num=1,
+        hidden_activation=nn.SiLU,
+    ):
         super(FFN, self).__init__()
         self.layers = nn.ModuleList()
-        self.layers.append( nn.Linear(input_size, hidden_dim))
+        self.layers.append(nn.Linear(input_size, hidden_dim))
         self.layers.append(hidden_activation())
 
-        for i in range(layers_num-1):
+        for i in range(layers_num - 1):
             self.layers.append(nn.Linear(hidden_dim, hidden_dim))
             self.layers.append(hidden_activation())
         self.layers.append(nn.Linear(hidden_dim, output_size))

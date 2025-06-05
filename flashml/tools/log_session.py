@@ -1,8 +1,7 @@
-import time
 from datetime import datetime
-import polars as pl
 import os
 from typing import Any, Callable, Dict
+
 
 class _TrainingLogger:
     _instance = None
@@ -14,13 +13,15 @@ class _TrainingLogger:
         return cls._instance
 
     def __init__(self):
-        if hasattr(self, '_initialized'):
+        if hasattr(self, "_initialized"):
             return
         self._initialized = True
         self.metric_columns = set()  # Tracks all metric names
         self.hyperparam_columns = set()  # Tracks all hyperparameter names
 
     def _read_existing_table(self):
+        import polars as pl
+
         """Read the existing markdown table into a Polars DataFrame."""
         if not os.path.exists(self._output_file):
             return None
@@ -41,9 +42,18 @@ class _TrainingLogger:
         if not rows:
             return None
 
-        return pl.DataFrame({col: [row[i] for row in rows] for i, col in enumerate(headers)})
+        return pl.DataFrame(
+            {col: [row[i] for row in rows] for i, col in enumerate(headers)}
+        )
 
-    def _log_session(self, hyperparameters: dict[str, Any] | None, train_func: Callable[[], Dict[str, Any]] | None, sort_by: str | None):
+    def _log_session(
+        self,
+        hyperparameters: dict[str, Any] | None,
+        train_func: Callable[[], Dict[str, Any]] | None,
+        sort_by: str | None,
+    ):
+        import polars as pl
+
         """
         Log a training session or sort the existing table.
 
@@ -68,7 +78,11 @@ class _TrainingLogger:
             if sort_by and sort_by in existing_df.columns:
                 try:
                     existing_df = existing_df.with_columns(
-                        pl.col(sort_by).cast(str).replace("N/A", None).cast(pl.Float64, strict=False).alias(sort_by)
+                        pl.col(sort_by)
+                        .cast(str)
+                        .replace("N/A", None)
+                        .cast(pl.Float64, strict=False)
+                        .alias(sort_by)
                     ).sort(sort_by, descending=True, nulls_last=True)
                 except Exception as e:
                     print(f"\033[93mFailed to sort by '{sort_by}'. Error: {e}\033[0m")
@@ -101,7 +115,16 @@ class _TrainingLogger:
             self.hyperparam_columns.update(hyperparameters.keys())
 
         # Combine with existing sessions
-        all_sessions = ([s for s in existing_df.drop("Index").to_dicts()] if "Index" in existing_df.columns else existing_df.to_dicts()) + [session] if len(existing_df) > 0 else [session]
+        all_sessions = (
+            (
+                [s for s in existing_df.drop("Index").to_dicts()]
+                if "Index" in existing_df.columns
+                else existing_df.to_dicts()
+            )
+            + [session]
+            if len(existing_df) > 0
+            else [session]
+        )
 
         # Fill missing columns with "N/A"
         all_columns = {col for s in all_sessions for col in s.keys()}
@@ -113,9 +136,31 @@ class _TrainingLogger:
 
         # Define column order
         fixed_cols = ["Start Time", "End Time", "Duration"]
-        metric_cols = sorted([col for col in df.columns if col in self.metric_columns and col not in fixed_cols])
-        hyper_cols = sorted([col for col in df.columns if col in self.hyperparam_columns and col not in self.metric_columns and col not in fixed_cols])
-        other_cols = sorted([col for col in df.columns if col not in fixed_cols and col not in metric_cols and col not in hyper_cols])
+        metric_cols = sorted(
+            [
+                col
+                for col in df.columns
+                if col in self.metric_columns and col not in fixed_cols
+            ]
+        )
+        hyper_cols = sorted(
+            [
+                col
+                for col in df.columns
+                if col in self.hyperparam_columns
+                and col not in self.metric_columns
+                and col not in fixed_cols
+            ]
+        )
+        other_cols = sorted(
+            [
+                col
+                for col in df.columns
+                if col not in fixed_cols
+                and col not in metric_cols
+                and col not in hyper_cols
+            ]
+        )
         column_order = fixed_cols + metric_cols + hyper_cols + other_cols
 
         df = df.select(column_order)
@@ -124,39 +169,67 @@ class _TrainingLogger:
         if sort_by and sort_by in df.columns:
             try:
                 df = df.with_columns(
-                    pl.col(sort_by).cast(str).replace("N/A", None).cast(pl.Float64, strict=False).alias(sort_by)
+                    pl.col(sort_by)
+                    .cast(str)
+                    .replace("N/A", None)
+                    .cast(pl.Float64, strict=False)
+                    .alias(sort_by)
                 ).sort(sort_by, descending=True, nulls_last=True)
             except Exception as e:
                 print(f"\033[93mFailed to sort by '{sort_by}'. Error: {e}\033[0m")
 
         self._write_table(df, sort_by, is_new_session=True)
 
-    def _write_table(self, df: pl.DataFrame, sort_by: str | None, is_new_session: bool = True):
+    def _write_table(self, df, sort_by: str | None, is_new_session: bool = True):
+        import polars as pl
+
         """Write the DataFrame to a markdown file."""
         # Fill null values with "N/A" for all columns
         df = df.with_columns([pl.col(col).fill_null("N/A") for col in df.columns])
-        
+
         # Drop existing "Index" column if it exists to avoid DuplicateError
         if "Index" in df.columns:
             df = df.drop("Index")
-        
+
         # Add a new "Index" column and reorder columns to put "Index" first
-        df = df.with_row_index("Index").select(["Index"] + [col for col in df.columns if col != "Index"])
-        
+        df = df.with_row_index("Index").select(
+            ["Index"] + [col for col in df.columns if col != "Index"]
+        )
+
         # Format headers, adding backticks to the sorted column
         headers = [f"`{h}`" if sort_by == h else h for h in df.columns]
-        
+
         # Construct markdown table
-        markdown_content = "|" + "|".join(headers) + "|\n" + "|" + "|".join(["---"] * len(headers)) + "|\n"
-        markdown_content += "\n".join("|" + "|".join(str(val) for val in row) + "|" for row in df.rows()) + "\n"
-        
+        markdown_content = (
+            "|"
+            + "|".join(headers)
+            + "|\n"
+            + "|"
+            + "|".join(["---"] * len(headers))
+            + "|\n"
+        )
+        markdown_content += (
+            "\n".join(
+                "|" + "|".join(str(val) for val in row) + "|" for row in df.rows()
+            )
+            + "\n"
+        )
+
         # Write to file
         with open(self._output_file, "w") as f:
             f.write(markdown_content)
-        
+
         # Print confirmation message
-        print(f"\033[92m{'Session logged' if is_new_session else 'Table sorted'} to {self._output_file}\033[0m")
-def log_session(hyperparameters: dict[str, Any] | None = None, train_func: Callable[[], Dict[str, Any]] | None = None, sort_by: str | None = None) -> None:
+        print(
+            f"\033[92m{'Session logged' if is_new_session else 'Table sorted'} to {self._output_file}\033[0m"
+        )
+
+
+def log_session(
+    hyperparameters: dict[str, Any] | None = None,
+    train_func: Callable[[], Dict[str, Any]] | None = None,
+    sort_by: str | None = None,
+) -> None:
     """
     Log a training session to a markdown file. When sorting by a column, the name of that columns is highlighted.
 
