@@ -1,14 +1,12 @@
-from typing import Optional
+## begin of file
 
 
 def plot_tensor(
     tensor,
-    title: str = "Interactive Tensor Visualization",
+    title: str = "",
     colorscale: str = "Viridis",
     show_values: bool = True,
-    animation_frame_duration: int = 800,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
+    renderer: str = "vscode",
 ):
     """
     Creates interactive Plotly visualizations for 0D, 1D, 2D, and 3D tensors.
@@ -36,6 +34,12 @@ def plot_tensor(
 
     pio.templates.default = "plotly_dark"
     # Convert input to numpy array
+    original_device = "cpu"
+    try:
+        original_device = tensor.device
+    except:
+        pass
+
     if not isinstance(tensor, np.ndarray):
         try:
             if hasattr(tensor, "cpu"):  # PyTorch tensor
@@ -58,7 +62,7 @@ def plot_tensor(
             font=dict(size=20, color="orange"),
         )
         fig.update_layout(
-            title=f"{title} - Empty Tensor",
+            title=f"{title} Empty Tensor",
             xaxis=dict(visible=False),
             yaxis=dict(visible=False),
             width=600,
@@ -68,32 +72,49 @@ def plot_tensor(
 
     dim = tensor.ndim
 
-    # Auto-calculate dimensions if not provided
-    if width is None or height is None:
-        if dim <= 1:
-            width, height = 800, 500
-        elif dim == 2:
-            aspect_ratio = tensor.shape[1] / tensor.shape[0]
-            width = min(1000, max(600, int(600 * aspect_ratio)))
-            height = min(800, max(400, int(600 / aspect_ratio)))
-        else:  # 3D
-            width, height = 1200, 800
+    if dim <= 1:
+        width, height = 800, 500
+    elif dim == 2:
+        aspect_ratio = tensor.shape[1] / tensor.shape[0]
+        width = min(1000, max(600, int(600 * aspect_ratio)))
+        height = min(800, max(400, int(600 / aspect_ratio)))
+    else:  # 3D
+        width, height = 1200, 800
 
     if dim == 0:
-        return _plot_0d_tensor(tensor, title, colorscale, width, height)
+        return _plot_0d_tensor(
+            tensor, title, colorscale, width, height, original_device, renderer
+        )
     elif dim == 1:
-        return _plot_1d_tensor(tensor, title, colorscale, show_values, width, height)
+        return _plot_1d_tensor(
+            tensor,
+            title,
+            colorscale,
+            show_values,
+            width,
+            height,
+            original_device,
+            renderer,
+        )
     elif dim == 2:
-        return _plot_2d_tensor(tensor, title, colorscale, show_values, width, height)
+        return _plot_2d_tensor(
+            tensor,
+            title,
+            colorscale,
+            show_values,
+            width,
+            height,
+            original_device,
+            renderer,
+        )
     elif dim == 3:
         return _plot_3d_tensor(
             tensor,
             title,
             colorscale,
             show_values,
-            animation_frame_duration,
-            width,
-            height,
+            original_device,
+            renderer=renderer,
         )
     else:
         # High-dimensional tensor - show error
@@ -108,14 +129,16 @@ def plot_tensor(
             font=dict(size=20, color="red"),
         )
         fig.update_layout(
-            title=f"{title} - Unsupported Dimension ({dim}D)",
+            title=f"{title} Unsupported Dimension ({dim}D)",
             width=width,
             height=height,
         )
-        fig.show(renderer="browser")
+        fig.show(renderer=renderer)
 
 
-def _plot_0d_tensor(tensor, title, colorscale, width, height):
+def _plot_0d_tensor(
+    tensor, title, colorscale, width, height, original_device, renderer
+):
     """Plot 0D tensor (scalar) with gauge and info card"""
     import plotly.graph_objects as go
     import plotly.express as px
@@ -189,12 +212,18 @@ def _plot_0d_tensor(tensor, title, colorscale, width, height):
         col=2,
     )
 
-    fig.update_layout(title=f"{title} - 0D Tensor (Scalar)", width=width, height=height)
+    fig.update_layout(
+        title=f"{title} 0D Tensor (Scalar) | Device: {original_device}",
+        width=width,
+        height=height,
+    )
 
-    fig.show(renderer="browser")
+    fig.show(renderer=renderer)
 
 
-def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
+def _plot_1d_tensor(
+    tensor, title, colorscale, show_values, width, height, original_device, renderer
+):
     from plotly.subplots import make_subplots
     import plotly.graph_objects as go
     import numpy as np
@@ -207,7 +236,7 @@ def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
         cols=1,
         row_heights=[0.6, 0.4],
         subplot_titles=["Bar Chart View", "Heatmap View"],
-        vertical_spacing=0.15,
+        vertical_spacing=0.20,  # Increased spacing to prevent overlap
     )
 
     indices = np.arange(len(tensor))
@@ -221,7 +250,12 @@ def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
                 color=tensor,
                 colorscale=colorscale,
                 showscale=True,
-                colorbar=dict(title="Value", y=0.8, len=0.6),
+                colorbar=dict(
+                    title="Value",
+                    y=0.5,  # Center the colorbar vertically
+                    len=1.0,  # Full height of the plot
+                    yanchor="middle",
+                ),
             ),
             hovertemplate="Index: %{x}<br>Value: %{y:.4f}<extra></extra>",
             name="Values",
@@ -256,9 +290,10 @@ def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
                 row=2,
                 col=1,
                 font=dict(
+                    size=10,  # Smaller font size to reduce overlap
                     color="white"
                     if abs(val - tensor.mean()) > tensor.std()
-                    else "black"
+                    else "black",
                 ),
             )
 
@@ -268,16 +303,22 @@ def _plot_1d_tensor(tensor, title, colorscale, show_values, width, height):
     fig.update_yaxes(showticklabels=False, row=2, col=1)
 
     fig.update_layout(
-        title=f"{title} - 1D Tensor ({len(tensor)} elements)",
+        title=dict(
+            text=f"{title} 1D Tensor ({len(tensor)} elements) | Device: {original_device}",
+            x=0.5,  # Center the title horizontally
+            xanchor="center",
+        ),
         width=width,
         height=height,
         showlegend=False,
     )
 
-    fig.show(renderer="browser")
+    fig.show(renderer=renderer)
 
 
-def _plot_2d_tensor(tensor, title, colorscale, show_values, width, height):
+def _plot_2d_tensor(
+    tensor, title, colorscale, show_values, width, height, original_device, renderer
+):
     """Plot 2D tensor with interactive heatmap"""
     import plotly.graph_objects as go
 
@@ -294,7 +335,9 @@ def _plot_2d_tensor(tensor, title, colorscale, show_values, width, height):
     )
 
     # Add value annotations if requested and tensor is small enough
-    if show_values and tensor.size <= 400:  # Only for small tensors
+    if (
+        show_values and tensor.shape[-1] <= 15 and tensor.shape[-2] <= 20
+    ):  # Only for small tensors
         annotations = []
         for i in range(rows):
             for j in range(cols):
@@ -319,7 +362,11 @@ def _plot_2d_tensor(tensor, title, colorscale, show_values, width, height):
         fig.update_layout(annotations=annotations)
 
     fig.update_layout(
-        title=f"{title} - 2D Tensor ({rows}×{cols})",
+        title=dict(
+            text=f"{title} 2D Tensor ({rows}×{cols}) | Device: {original_device}",
+            x=0.5,  # Center the title horizontally
+            xanchor="center",
+        ),
         xaxis_title="Column Index",
         yaxis_title="Row Index",
         width=width,
@@ -327,203 +374,117 @@ def _plot_2d_tensor(tensor, title, colorscale, show_values, width, height):
         yaxis=dict(autorange="reversed"),  # Match matrix convention
     )
 
-    fig.show(renderer="browser")
+    fig.show(renderer=renderer)
 
 
 def _plot_3d_tensor(
-    tensor, title, colorscale, show_values, animation_frame_duration, width, height
+    tensor,
+    title,
+    colorscale,
+    show_values,
+    original_device,
+    renderer,
 ):
-    """Plot 3D tensor with multiple interactive views"""
+    """Plot 3D tensor with slice slider"""
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import numpy as np
 
     depth, rows, cols = tensor.shape
 
-    # Create subplot layout:
-    # Top row: Animated slice viewer, 3D surface
-    # Bottom row: Slice selector heatmaps, statistics
-    fig = make_subplots(
-        rows=2,
-        cols=2,
-        specs=[
-            [{"type": "heatmap"}, {"type": "surface"}],
-            [{"type": "heatmap"}, {"type": "bar"}],
-        ],
-        subplot_titles=[
-            "Animated Slice Viewer",
-            "3D Surface (First Slice)",
-            "All Slices Overview",
-            "Slice Statistics",
-        ],
-        vertical_spacing=0.12,
-        horizontal_spacing=0.1,
+    # Auto-threshold show_values based on slice dimensions
+    if show_values is None:
+        show_values = rows < 15 and cols < 15
+
+    # Create initial heatmap for first slice
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=tensor[0],
+            colorscale=colorscale,
+            hovertemplate="Slice: 0<br>Row: %{y}<br>Col: %{x}<br>Value: %{z:.4f}<extra></extra>",
+            colorbar=dict(title="Value"),
+        )
     )
 
-    # 1. Animated slice viewer (top-left)
-    frames = []
+    # Add value annotations if requested and tensor is small enough
+    if show_values:
+        annotations = []
+        for i in range(rows):
+            for j in range(cols):
+                val = tensor[0, i, j]
+                normalized_val = (
+                    (val - tensor.min()) / (tensor.max() - tensor.min())
+                    if tensor.max() != tensor.min()
+                    else 0.5
+                )
+                text_color = "white" if normalized_val < 0.5 else "black"
+
+                annotations.append(
+                    dict(
+                        x=j,
+                        y=i,
+                        text=f"{val:.2g}",
+                        showarrow=False,
+                        font=dict(color=text_color, size=10),
+                    )
+                )
+        fig.update_layout(annotations=annotations)
+
+    # Create slider steps
+    steps = []
     for i in range(depth):
-        frame_data = [
-            go.Heatmap(
-                z=tensor[i],
-                colorscale=colorscale,
-                showscale=False,
-                hovertemplate=f"Slice {i}<br>Row: %{{y}}<br>Col: %{{x}}<br>Value: %{{z:.4f}}<extra></extra>",
-            )
-        ]
-        frames.append(go.Frame(data=frame_data, name=str(i)))
+        # Prepare annotations for this slice if show_values is enabled
+        slice_annotations = []
+        if show_values:
+            for row in range(rows):
+                for col in range(cols):
+                    val = tensor[i, row, col]
+                    normalized_val = (
+                        (val - tensor.min()) / (tensor.max() - tensor.min())
+                        if tensor.max() != tensor.min()
+                        else 0.5
+                    )
+                    text_color = "white" if normalized_val < 0.5 else "black"
 
-    # Initial slice
-    fig.add_trace(
-        go.Heatmap(
-            z=tensor[0],
-            colorscale=colorscale,
-            showscale=True,
-            colorbar=dict(title="Value", x=0.48, len=0.4, y=0.78),
-            hovertemplate="Slice 0<br>Row: %{y}<br>Col: %{x}<br>Value: %{z:.4f}<extra></extra>",
-        ),
-        row=1,
-        col=1,
-    )
+                    slice_annotations.append(
+                        dict(
+                            x=col,
+                            y=row,
+                            text=f"{val:.2g}",
+                            showarrow=False,
+                            font=dict(color=text_color, size=10),
+                        )
+                    )
 
-    # 2. 3D Surface plot (top-right)
-    x_surf = np.arange(cols)
-    y_surf = np.arange(rows)
-    X_surf, Y_surf = np.meshgrid(x_surf, y_surf)
-
-    fig.add_trace(
-        go.Surface(
-            z=tensor[0],
-            x=X_surf,
-            y=Y_surf,
-            colorscale=colorscale,
-            showscale=False,
-            name="Surface",
-        ),
-        row=1,
-        col=2,
-    )
-
-    # 3. All slices overview (bottom-left) - create a mosaic
-    if depth <= 16:  # Only if not too many slices
-        grid_size = int(np.ceil(np.sqrt(depth)))
-        mosaic = np.zeros((grid_size * rows, grid_size * cols))
-
-        for i in range(depth):
-            row_start = (i // grid_size) * rows
-            col_start = (i % grid_size) * cols
-            mosaic[row_start : row_start + rows, col_start : col_start + cols] = tensor[
-                i
-            ]
-
-        fig.add_trace(
-            go.Heatmap(
-                z=mosaic,
-                colorscale=colorscale,
-                showscale=False,
-                hovertemplate="Mosaic View<br>Value: %{z:.4f}<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-    else:
-        # For many slices, show a representative sample
-        sample_indices = np.linspace(0, depth - 1, min(9, depth), dtype=int)
-        grid_size = 3
-        mosaic = np.zeros((grid_size * rows, grid_size * cols))
-
-        for idx, i in enumerate(sample_indices):
-            row_start = (idx // grid_size) * rows
-            col_start = (idx % grid_size) * cols
-            if row_start < grid_size * rows and col_start < grid_size * cols:
-                mosaic[row_start : row_start + rows, col_start : col_start + cols] = (
-                    tensor[i]
-                )
-
-        fig.add_trace(
-            go.Heatmap(
-                z=mosaic,
-                colorscale=colorscale,
-                showscale=False,
-                hovertemplate="Sample Slices<br>Value: %{z:.4f}<extra></extra>",
-            ),
-            row=2,
-            col=1,
-        )
-
-    # 4. Slice statistics (bottom-right)
-    slice_means = [tensor[i].mean() for i in range(depth)]
-    # slice_stds = [tensor[i].std() for i in range(depth)]
-    # slice_mins = [tensor[i].min() for i in range(depth)]
-    # slice_maxs = [tensor[i].max() for i in range(depth)]
-
-    fig.add_trace(
-        go.Bar(
-            x=list(range(depth)),
-            y=slice_means,
-            name="Mean",
-            marker_color="blue",
-            opacity=0.7,
-            hovertemplate="Slice: %{x}<br>Mean: %{y:.4f}<extra></extra>",
-        ),
-        row=2,
-        col=2,
-    )
-
-    # Add animation controls
-    fig.frames = frames
-
-    sliders = [
-        dict(
-            steps=[
-                dict(
-                    args=[
-                        ["{}".format(i)],
-                        {"frame": {"duration": animation_frame_duration}},
-                    ],
-                    label="{}".format(i),
-                    method="animate",
-                )
-                for i in range(depth)
+        step = dict(
+            method="update",
+            args=[
+                {"z": [tensor[i]]},
+                {
+                    "title": f"{title} (Slice {i}) 3D Tensor ({depth}×{rows}×{cols})",
+                    "annotations": slice_annotations,
+                },
             ],
-            active=0,
-            x=0.1,
-            y=0.02,
-            len=0.8,
-            currentvalue={"prefix": "Slice: "},
+            label=f"{i}",
         )
+        steps.append(step)
+
+    # Create slider
+    sliders = [
+        dict(active=0, currentvalue={"prefix": "Slice: "}, pad={"t": 50}, steps=steps)
     ]
 
-    play_button = dict(
-        type="buttons",
-        showactive=False,
-        x=0.05,
-        y=0.02,
-        buttons=[
-            dict(
-                label="▶",
-                method="animate",
-                args=[None, {"frame": {"duration": animation_frame_duration}}],
-            ),
-            dict(
-                label="⏸", method="animate", args=[[None], {"frame": {"duration": 0}}]
-            ),
-        ],
-    )
-
+    # Update layout
     fig.update_layout(
-        title=f"{title} - 3D Tensor Interactive Explorer ({depth}×{rows}×{cols})",
-        width=width,
-        height=height,
+        title=dict(
+            text=f"{title} (Slice 0) 3D Tensor ({depth}×{rows}×{cols}) | Device: {original_device}",
+            x=0.5,
+            xanchor="center",
+        ),
+        xaxis_title="Column",
+        yaxis_title="Row",
+        yaxis=dict(autorange="reversed"),
         sliders=sliders,
-        updatemenus=[play_button],
-        scene=dict(xaxis_title="Column", yaxis_title="Row", zaxis_title="Value"),
     )
 
-    # Update subplot titles and axes
-    fig.update_xaxes(title="Column", row=1, col=1)
-    fig.update_yaxes(title="Row", row=1, col=1, autorange="reversed")
-    fig.update_xaxes(title="Slice", row=2, col=2)
-    fig.update_yaxes(title="Mean Value", row=2, col=2)
+    fig.show(renderer=renderer)
 
-    fig.show(renderer="browser")
+    return fig

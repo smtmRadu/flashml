@@ -15,7 +15,7 @@ python.analysis.extraPath":["path\\to\\flashml"],
 ***
 ### Always-on resource monitor
 ```python
-from flashml.tools import resource_monitor
+from flashml import resource_monitor
 
 resource_monitor()
 ```
@@ -25,7 +25,7 @@ resource_monitor()
 
 ### Model inspection
 ```python
-from flashml.tools import inspect_model, inspect_tokenizer
+from flashml import inspect_model, inspect_tokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("<any-huggingface-tokenizer>")
 model = AutoModelForCausalLM.from_pretrained("<any-pytorch-model>")
@@ -38,21 +38,21 @@ inspect_tokenizer(tokenizer)
 ***
 ### Tensor ploting
 ```python
-from flashml.tools import plot_tensor
+from flashml import plot_tensor
 plot_tensor(torch.randn(42, 121))
 ```
 ![tp](https://github.com/smtmRadu/flashml/blob/main/doc/tensor_plot.jpg?raw=true)
 ***
 ### Fast plot
 ```python
-from flashml.tools import plot_graph
+from flashml import plot_graph
 
 plot_graph(([10, 15, 17, 18, 18.3], [8, 14, 17.1, 18.9, 19.02]))
 ```
 ***
 ### Real-Time plot
 ```python
-from flashml.tools import plot_rt_graph
+from flashml import plot_rt_graph
 
 for i in range(T):
     plot_rt_graph((<priceBTC>, <priceETH>), <timestep>, x_label="Time", y_label="Price", color=["yellow", "purple])
@@ -61,7 +61,7 @@ for i in range(T):
 ***
 ### Parallel For-Loops
 ```python
-from flashml.tools import parallel_for, parallel_foreach
+from flashml import parallel_for, parallel_foreach
 
 def my_func(x):
     ...
@@ -69,14 +69,12 @@ def my_func(x):
 result = parallel_for(0, 1e6, my_func, num_workers=16)
 ```
 ***
-### ML train utilities
+### ML train utilities (MLFlow)
 
 ```python
-from flashml.tools import log_metrics, generate_batches, display_metrics, plot_confusion_matrix
+from flashml import log_metrics, BatchIterator, plot_confusion_matrix
 
-data = ...
-batches = generate_batches(len(data), num_epochs=8, batch_size=32, mode="train")
-for idx, batch_ids in enumerate(batches):
+for step, batch, idcs in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
         batch = data[batch_ids]
         # Compute loss and perform update
         # Compute validation
@@ -84,21 +82,20 @@ for idx, batch_ids in enumerate(batches):
             metrics={ "loss": loss , "acc" : acc},
             step=idx)
 
-display_metrics() # Displays matplot graphs at the end, allowing data export as csv
 plot_confusion_matrix(yHat, y)
 ```
 ```
-Output (rt):
+Output (rt + MLFlow session log):
 
-[Epoch 2/3]:  75%|████████████████████████████████████████████████████████████████████████                        | 225/300 [00:00<00:00, 2059.44it/s, loss=2.25, acc=5.17]
+75%|████████████████████████████████████████████████████████████████████████                        | 225/300 [00:00<00:00, 2059.44it/s, loss=2.25, acc=5.17]
 
 ```
 ***
 
-### RL train plots
+### RL train plots (MLFlow)
 
 ```python
-from flashml.tools.rl import log_episodes, display_episodes
+from flashml.rl import log_episodes
 
  while step < max_steps:
     for i in range(buffer_size):
@@ -109,7 +106,6 @@ from flashml.tools.rl import log_episodes, display_episodes
                 episode_length=episode_len,
                 step = (step, max_steps))
 
-display_episodes() # Displays matplot graphs at the end (rewards vs step/epoch, ep_len vs step/epoch), allowing data export as csv
 ```
 
 ```
@@ -122,7 +118,7 @@ Episode Length   [max: 685] [µ: 87.310] [σ: 73.73z]
 ***
 ### NLP Preprocessing
 ```python
-from flashml.tools.nlp import *
+from flashml.nlp import *
 df = pl.read_csv(...)
 df = lowercase(df, "text_col")
 df = lemmatize(df, "text_col")
@@ -133,11 +129,17 @@ df = remove_double_spacing(df, "text_col")
 ***
 ### t-SNE visualization
 ```python
-from flashml.tools import plot_tsne
-import torch
-data = torch.randn(1024, 40)
-plot_tsne(data, mode='3d')
+from flashml import plot_tsne
+import numpy as np
+
+x1 = np.random.normal(loc=34, scale=3, size=(120, 99))
+x2 = np.random.normal(loc=22, scale=5, size=(120, 99))
+x3 = np.random.normal(loc=-32, scale=2, size=(200, 99))
+
+x = np.concatenate([x1, x2, x3], axis=0)
+plot_tsne(x, labels=["A"] * 120 + ["B"] * 120 + ["C"] * 200)
 ```
+![tp](https://github.com/smtmRadu/flashml/blob/main/doc/plot_tsne.jpg?raw=true)
 ***
 ### Architectures common implementations
 Enumerate **GQA**, **SwiGLU**, **FFN**, **MinGRU** ...

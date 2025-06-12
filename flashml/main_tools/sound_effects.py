@@ -3,12 +3,11 @@ import sys
 
 
 def bell():
+    """
+    Plays a system notification sound (beep) to indicate completion.
+    """
     import platform
 
-    """
-  Plays a system notification sound (beep) to indicate completion.
-  Attempts to be cross-platform.
-  """
     system_platform = platform.system()
 
     try:

@@ -1,14 +1,11 @@
 import time
 import random
 import math
-from datetime import datetime
 import os
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 def test_rl_info():
-    from tools.rl import log_episode, plot_episodes
+    from tools.rl import log_episode
 
     reward_bias = 0
     max_steps = 12000
@@ -27,13 +24,23 @@ def test_rl_info():
                 )
                 ep_len = 0
                 reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
-
-        plot_episodes()
+            time.sleep(0.001)
 
 
 def test_train_info():
-    from tools import plot_metrics, log_metrics
+    from tools import log_metrics
 
+    HYPERPARAMS = {
+        "model": "Qwen/Qwen3-0.6B",  # "tiiuae/Falcon-H1-0.5B-Base",
+        "continue_from_index": -1,
+        "seed": 42,
+        "batch_size": 2,
+        "gradient_accumulation": 8,
+        "epochs": 1,
+        "lr": 2e-5,
+        "betas": (0.9, 0.999),
+        "weight_decay": 0.005,
+    }
     loss = 10.0
     epochs = 3
     batches = 300
@@ -43,16 +50,13 @@ def test_train_info():
             loss_ = math.log2(abs(loss))
             acc = loss + random.random()
             log_metrics(
-                {"loss": loss_, "acc": acc, "time": datetime.now()},
+                {"loss": loss_, "acc": acc},
                 step=(epoch, batches * epochs),
+                hyperparams=HYPERPARAMS,
             )
             loss -= 1e-2
             time.sleep(0.001)
-            if epoch % 100 == 0:
-                plot_metrics(False)
         print("\n\n\n")
-
-    plot_metrics()
 
 
 def test_plotting():
@@ -197,6 +201,7 @@ def test_nlp_preprocesssing():
 
     df = pl.DataFrame(data)
     df = replace_emojis(df, "text")
+    df = lemmatize(df, "text")
     print(df)
 
 
@@ -245,12 +250,18 @@ def plot_tensorx():
 
 
 def test_batch_generation():
-    from tools import generate_batches
+    from tools import BatchIterator
 
-    print(generate_batches(21, 1, 4, "train"))
-    print(generate_batches(21, 1, 4, "test"))
-    print(generate_batches(21, 2, 4, "train"))
-    print(generate_batches(21, 2, 4, "test"))
+    for x in BatchIterator(
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], num_epochs=10, batch_size=3, mode="train"
+    ):
+        print(x)
+
+    import polars as pl
+
+    df = pl.DataFrame({"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})
+    for x in BatchIterator(df, num_epochs=10, batch_size=3, mode="train"):
+        print(x)
 
 
 def test_plot_tsne():
@@ -261,4 +272,27 @@ def test_plot_tsne():
     plot_tsne(data, verbose=1)
 
 
-from flashml.tools import plot_chat
+def log_metrics_test():
+    from tools import log_metrics
+
+    for i in range(100):
+        x = random.random()
+
+        if x < 0.3:
+            log_metrics(
+                {"loss": random.random(), "accuracy": random.random()},
+                step=(i, 100),
+                hyperparams={"lr": 0.001, "batch_size": 32},
+            )
+            i -= 3
+        else:
+            log_metrics(
+                {"loss": random.random(), "f1": random.random()},
+                step=(i, 100),
+            )
+        time.sleep(0.1)
+
+
+from tools import resource_monitor
+
+resource_monitor()

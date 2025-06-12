@@ -1,28 +1,20 @@
-### begin of file
-
-
 def plot_tsne(
     data,
     labels=None,
     mode="3d",
     verbose=1,
     perplexity=30,
-    n_iter=300,
+    max_iter=300,
     title="t-SNE Visualization",
     point_size=5,
+    renderer="vscode",
 ):
-    import plotly.graph_objects as go
-    import plotly.express as px
-    import numpy as np
-    from sklearn.manifold import TSNE
-
     """
     Plot in browser the t-SNE 2D/3D of the given data using Plotly.
 
     Args:
         data (numpy array): A numpy array of shape (n_samples, n_features) containing the data to be plotted.
         labels (array/list of length data.shape[0], optional): Labels of the samples to see if clustering was correct. If None, uses continuous coloring.
-
         mode (str): Either '2d' or '3d' for the type of visualization.
         verbose (int): Verbosity level for t-SNE.
         perplexity (float): The perplexity parameter for t-SNE.
@@ -33,6 +25,11 @@ def plot_tsne(
     Returns:
         tsne_results (numpy array): A numpy array of shape (n_samples, 2|3) containing the t-SNE mapped data.
     """
+    import plotly.graph_objects as go
+    import plotly.express as px
+    import numpy as np
+    from sklearn.manifold import TSNE
+
     mode = mode.lower()
     assert mode in ["2d", "3d"], "Mode should be either '2d' or '3d'!"
 
@@ -41,78 +38,70 @@ def plot_tsne(
         n_components=3 if is_3d else 2,
         verbose=verbose,
         perplexity=perplexity,
-        n_iter=n_iter,
+        max_iter=max_iter,
         random_state=42,
     )
     tsne_results = tsne.fit_transform(data)
 
-    if labels is not None:
-        unique_labels = np.unique(labels)
-        label_to_num = {label: i for i, label in enumerate(unique_labels)}
-        color_data = [label_to_num[label] for label in labels]
-        color_scale = px.colors.qualitative.Set3
-        showscale = True
-        colorbar_title = "Categories"
-        hover_labels = labels
-    else:
-        if is_3d:
-            color_data = tsne_results[:, 2]
-        else:
-            center_x, center_y = (
-                np.mean(tsne_results[:, 0]),
-                np.mean(tsne_results[:, 1]),
-            )
-            color_data = np.sqrt(
-                (tsne_results[:, 0] - center_x) ** 2
-                + (tsne_results[:, 1] - center_y) ** 2
-            )
-        color_scale = "Viridis"
-        showscale = True
-        colorbar_title = "Color Scale"
-        hover_labels = [f"Point {i}" for i in range(len(tsne_results))]
-
     if is_3d:
         # Create 3D scatter plot
-        fig = go.Figure(
-            data=[
-                go.Scatter3d(
-                    x=tsne_results[:, 0],
-                    y=tsne_results[:, 1],
-                    z=tsne_results[:, 2],
+        if labels is not None:
+            traces = []
+            unique_labels = sorted(np.unique(labels))
+            colors = px.colors.qualitative.Plotly  # A good qualitative color palette
+
+            for i, label in enumerate(unique_labels):
+                mask = np.array(labels) == label
+                current_data = tsne_results[mask]
+
+                trace = go.Scatter3d(
+                    x=current_data[:, 0],
+                    y=current_data[:, 1],
+                    z=current_data[:, 2],
                     mode="markers",
+                    name=str(label),  # This will appear in the legend
                     marker=dict(
                         size=point_size,
-                        color=color_data,
-                        colorscale=color_scale,
+                        color=colors[i % len(colors)],  # Assign one discrete color
                         opacity=0.8,
-                        showscale=showscale,
-                        colorbar=dict(
-                            title=colorbar_title,
-                            tickmode="linear",
-                            tickvals=list(range(len(unique_labels)))
-                            if labels is not None
-                            else None,
-                            ticktext=list(unique_labels)
-                            if labels is not None
-                            else None,
-                        )
-                        if showscale
-                        else None,
                         line=dict(width=0.5, color="rgba(255,255,255,0.3)"),
                     ),
-                    text=hover_labels,
-                    hovertemplate="<b>%{text}</b><br>"
+                    text=[str(label)] * current_data.shape[0],
+                    hovertemplate="<b>Category: %{text}</b><br>"
                     + "X: %{x:.2f}<br>"
                     + "Y: %{y:.2f}<br>"
                     + "Z: %{z:.2f}<br>"
                     + "<extra></extra>",
                 )
-            ]
-        )
+                traces.append(trace)
+            fig = go.Figure(data=traces)
+        else:
+            # Original logic for continuous coloring (no labels)
+            fig = go.Figure(
+                data=[
+                    go.Scatter3d(
+                        x=tsne_results[:, 0],
+                        y=tsne_results[:, 1],
+                        z=tsne_results[:, 2],
+                        mode="markers",
+                        marker=dict(
+                            size=point_size,
+                            color=tsne_results[:, 2],
+                            colorscale="Viridis",
+                            opacity=0.8,
+                            showscale=True,
+                            colorbar=dict(title="Color Scale"),
+                        ),
+                        text=[f"Point {i}" for i in range(len(tsne_results))],
+                        hovertemplate="<b>%{text}</b><br><extra></extra>",
+                    )
+                ]
+            )
 
         # Update 3D layout
         fig.update_layout(
             title=dict(text=title, x=0.5, font=dict(size=20, color="white")),
+            legend_title_text="Categories" if labels is not None else "",
             scene=dict(
                 xaxis=dict(
                     title="t-SNE Dimension 1",
@@ -145,45 +134,69 @@ def plot_tsne(
             height=700,
         )
 
-    else:
+    else:  # 2D mode
         # Create 2D scatter plot
-        fig = go.Figure(
-            data=[
-                go.Scatter(
-                    x=tsne_results[:, 0],
-                    y=tsne_results[:, 1],
+        if labels is not None:
+            traces = []
+            unique_labels = sorted(np.unique(labels))
+            colors = px.colors.qualitative.Plotly
+
+            for i, label in enumerate(unique_labels):
+                mask = np.array(labels) == label
+                current_data = tsne_results[mask]
+
+                trace = go.Scatter(
+                    x=current_data[:, 0],
+                    y=current_data[:, 1],
                     mode="markers",
+                    name=str(label),
                     marker=dict(
                         size=point_size,
-                        color=color_data,
-                        colorscale=color_scale,
+                        color=colors[i % len(colors)],
                         opacity=0.8,
-                        showscale=showscale,
-                        colorbar=dict(
-                            title=colorbar_title,
-                            tickvals=list(range(len(unique_labels)))
-                            if labels is not None
-                            else None,
-                            ticktext=list(unique_labels)
-                            if labels is not None
-                            else None,
-                        )
-                        if showscale
-                        else None,
                         line=dict(width=0.5, color="rgba(255,255,255,0.3)"),
                     ),
-                    text=hover_labels,
-                    hovertemplate="<b>%{text}</b><br>"
+                    text=[str(label)] * current_data.shape[0],
+                    hovertemplate="<b>Category: %{text}</b><br>"
                     + "X: %{x:.2f}<br>"
                     + "Y: %{y:.2f}<br>"
                     + "<extra></extra>",
                 )
-            ]
-        )
+                traces.append(trace)
+            fig = go.Figure(data=traces)
+        else:
+            # Original logic for continuous coloring (no labels)
+            center_x, center_y = (
+                np.mean(tsne_results[:, 0]),
+                np.mean(tsne_results[:, 1]),
+            )
+            color_data = np.sqrt(
+                (tsne_results[:, 0] - center_x) ** 2
+                + (tsne_results[:, 1] - center_y) ** 2
+            )
+            fig = go.Figure(
+                data=[
+                    go.Scatter(
+                        x=tsne_results[:, 0],
+                        y=tsne_results[:, 1],
+                        mode="markers",
+                        marker=dict(
+                            size=point_size,
+                            color=color_data,
+                            colorscale="Viridis",
+                            showscale=True,
+                            colorbar=dict(title="Color Scale"),
+                        ),
+                        text=[f"Point {i}" for i in range(len(tsne_results))],
+                        hovertemplate="<b>%{text}</b><br><extra></extra>",
+                    )
+                ]
+            )
 
         # Update 2D layout
         fig.update_layout(
             title=dict(text=title, x=0.5, font=dict(size=20, color="white")),
+            legend_title_text="Categories" if labels is not None else "",
             xaxis=dict(
                 title="t-SNE Dimension 1",
                 gridcolor="rgba(255,255,255,0.2)",
@@ -203,6 +216,6 @@ def plot_tsne(
             height=700,
         )
 
-    fig.show(renderer="browser")
+    fig.show(renderer=renderer)
 
     return tsne_results

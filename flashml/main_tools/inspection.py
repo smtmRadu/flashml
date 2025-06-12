@@ -1,0 +1,969 @@
+# --- Data Visualization Colors ---
+TRAINABLE_COLORS_VIZ = {"Trainable": "#ff6b6b", "Frozen": "#4ecdc4"}
+DTYPE_BASE_COLORS_VIZ = [
+    "#667eea",
+    "#f093fb",
+    "#4facfe",
+    "#43e97b",
+    "#fa709a",
+    "#fee140",
+    "#a8edea",
+    "#ffecd2",
+    "#ff9a9e",
+    "#fecfef",
+]
+DEVICE_COLORS_VIZ_MAP = {
+    "cpu": "#667eea",
+    "cuda:0": "#43e97b",
+    "mps": "#fee140",
+    "rocm": "#fa709a",
+    "other_gpu_shades": ["#4facfe", "#f093fb", "#a8edea", "#ffecd2", "#ff9a9e"],
+    "default": "#95a5a6",
+}
+
+
+def get_parameter_dtype(param, view_uint8_as_int4):
+    original_dtype_str = str(param.dtype)
+    if view_uint8_as_int4 and original_dtype_str == "torch.uint8":
+        return "torch.int4"
+    return original_dtype_str
+
+
+def get_parameter_device(param):
+    return str(param.device)
+
+
+def get_memory_size(num_params, dtype_str):
+    dtype_sizes = {
+        "torch.float32": 4,
+        "torch.float": 4,
+        "torch.float64": 8,
+        "torch.double": 8,
+        "torch.float16": 2,
+        "torch.half": 2,
+        "torch.bfloat16": 2,
+        "torch.int64": 8,
+        "torch.long": 8,
+        "torch.int32": 4,
+        "torch.int": 4,
+        "torch.int16": 2,
+        "torch.short": 2,
+        "torch.int8": 1,
+        "torch.uint8": 1,
+        "torch.int4": 0.5,
+        "torch.bool": 1,
+    }
+    return num_params * dtype_sizes.get(dtype_str.lower(), 4)
+
+
+def format_size(size_bytes):
+    import math
+
+    if size_bytes == 0:
+        return "0 B"
+    size_name = ("B", "KB", "MB", "GB", "TB")
+    i = int(math.floor(math.log(size_bytes, 1024))) if size_bytes > 0 else 0
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
+
+
+def to_bold_digits(text_string):
+    """Converts numeric characters in a string to their Unicode bold equivalents."""
+    bold_map = {
+        "0": "𝟬",
+        "1": "𝟭",
+        "2": "𝟮",
+        "3": "𝟯",
+        "4": "𝟰",
+        "5": "𝟱",
+        "6": "𝟲",
+        "7": "𝟳",
+        "8": "𝟴",
+        "9": "𝟵",
+    }
+    return "".join(bold_map.get(char, char) for char in str(text_string))
+
+
+def create_pie_chart(data_percentages, colors, title, icon_map=None):
+    import plotly.graph_objects as go
+
+    """Create a pie chart with Plotly"""
+    if not data_percentages:
+        # Empty pie chart
+        fig = go.Figure(
+            data=[go.Pie(labels=["No Data"], values=[1], marker_colors=["#444444"])]
+        )
+        fig.update_layout(title=title, showlegend=False)
+        return fig
+
+    labels = []
+    values = []
+    chart_colors = []
+    hover_texts = []
+    text_labels = []
+
+    for name, percentage, val_str in data_percentages:
+        if percentage > 0:
+            icon = icon_map.get(name, "") if icon_map else ""
+            labels.append(f"{icon}{name}")
+            values.append(percentage)
+            chart_colors.append(colors.get(name, "#A9A9A9"))
+            hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{percentage:.1f}%")
+
+            # For small segments, show percentage only; for larger ones, show name + percentage
+            if percentage < 5:
+                text_labels.append(f"{percentage:.1f}%")
+            else:
+                text_labels.append(f"{name}<br>{percentage:.1f}%")
+
+    if not values:
+        return create_pie_chart([], colors, title, icon_map)
+
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                marker_colors=chart_colors,
+                hovertemplate="<b>%{hovertext}</b><extra></extra>",
+                hovertext=hover_texts,
+                text=text_labels,
+                textinfo="text",
+                textposition="auto",
+                textfont=dict(size=11, color="white"),
+                hole=0.3,  # Donut chart for better aesthetics
+                pull=[0.02] * len(values),  # Slight separation between segments
+            )
+        ]
+    )
+
+    fig.update_layout(title=title, showlegend=False)
+
+    return fig
+
+
+def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
+    """
+    Inspect PyTorch model with interactive Plotly visualizations
+
+    Args:
+        model: PyTorch model to inspect
+        renderer: Plotly renderer ('vscode', 'browser', 'notebook', etc.)
+    """
+    import inspect as py_inspect
+    import plotly.io as pio
+
+    pio.templates.default = "plotly_dark"
+
+    # has_uint8_params = any(
+    #    str(param.dtype) == "torch.uint8" for _, param in model.named_parameters()
+    # )
+
+    def analyze_model_data():
+        total_params = 0
+        param_dtypes_counts = {}
+        param_devices_counts = {}
+        param_devices_memory_bytes = {}
+        total_memory_bytes = 0
+        trainable_params = 0
+        module_details = []
+        all_params_list = list(model.named_parameters())
+
+        for _, param in all_params_list:
+            original_num_p = param.numel()
+            original_dtype_str = str(param.dtype)
+            display_dtype_str = get_parameter_dtype(param, view_uint8_as_int4)
+            display_num_p = (
+                original_num_p * 2
+                if view_uint8_as_int4 and original_dtype_str == "torch.uint8"
+                else original_num_p
+            )
+
+            total_params += display_num_p
+            param_dtypes_counts[display_dtype_str] = (
+                param_dtypes_counts.get(display_dtype_str, 0) + display_num_p
+            )
+            device = get_parameter_device(param)
+            param_devices_counts[device] = (
+                param_devices_counts.get(device, 0) + display_num_p
+            )
+            param_mem_size = get_memory_size(display_num_p, display_dtype_str)
+            total_memory_bytes += param_mem_size
+            param_devices_memory_bytes[device] = (
+                param_devices_memory_bytes.get(device, 0) + param_mem_size
+            )
+            if param.requires_grad:
+                trainable_params += display_num_p
+
+        non_trainable_params = total_params - trainable_params
+
+        # Analyze modules
+        for name, module in model.named_modules():
+            module_num_params, module_memory_bytes, module_param_trainable_count = (
+                0,
+                0,
+                0,
+            )
+            module_dtypes, module_devices = {}, {}
+            module_param_shapes = []
+            module_has_params = False
+            current_params_list = list(module.parameters(recurse=False))
+
+            if not current_params_list and not list(module.children()):
+                module_details.append(
+                    {
+                        "name": name if name else model.__class__.__name__,
+                        "num_params": 0,
+                        "params_percentage": 0.0,
+                        "dtypes": "N/A",
+                        "device": "N/A",
+                        "memory": format_size(0),
+                        "trainable_status": "N/A",
+                        "shape_str_internal": "N/A",
+                    }
+                )
+                continue
+
+            for param in current_params_list:
+                module_has_params = True
+                original_num_p_module = param.numel()
+                original_dtype_str_module = str(param.dtype)
+                try:
+                    module_param_shapes.append(str(list(param.shape)))
+                except Exception:
+                    module_param_shapes.append("Error")
+
+                display_dtype_str_module = get_parameter_dtype(
+                    param, view_uint8_as_int4
+                )
+                display_num_p_module = (
+                    original_num_p_module * 2
+                    if view_uint8_as_int4 and original_dtype_str_module == "torch.uint8"
+                    else original_num_p_module
+                )
+
+                module_num_params += display_num_p_module
+                module_dtypes[display_dtype_str_module] = (
+                    module_dtypes.get(display_dtype_str_module, 0)
+                    + display_num_p_module
+                )
+                device = get_parameter_device(param)
+                module_devices[device] = (
+                    module_devices.get(device, 0) + display_num_p_module
+                )
+                module_memory_bytes += get_memory_size(
+                    display_num_p_module, display_dtype_str_module
+                )
+                if param.requires_grad:
+                    module_param_trainable_count += display_num_p_module
+
+            module_shape_str = (
+                ", ".join(module_param_shapes) if module_param_shapes else "N/A"
+            )
+
+            if module_has_params or name == "" or list(module.children()):
+                module_dtype_str = (
+                    ", ".join(
+                        [
+                            f"{d.replace('torch.', '')} ({count * 100 / module_num_params:.0f}%)"
+                            for d, count in module_dtypes.items()
+                        ]
+                    )
+                    if module_num_params > 0
+                    else ("N/A" if module_has_params else "Container")
+                )
+                module_device_str = (
+                    ", ".join(
+                        [
+                            f"{d} ({count * 100 / module_num_params:.0f}%)"
+                            for d, count in module_devices.items()
+                        ]
+                    )
+                    if module_num_params > 0
+                    else ("N/A" if module_has_params else "Container")
+                )
+                trainable_status = "N/A"
+                if module_num_params > 0:
+                    trainable_status = (
+                        "Yes"
+                        if module_param_trainable_count == module_num_params
+                        else ("No" if module_param_trainable_count == 0 else "Partial")
+                    )
+                elif not module_has_params and list(module.children()):
+                    trainable_status = "-"
+                    module_shape_str = "-"
+
+                current_module_percentage = (
+                    (module_num_params / total_params * 100)
+                    if total_params > 0
+                    else 0.0
+                )
+                module_details.append(
+                    {
+                        "name": name if name else model.__class__.__name__,
+                        "num_params": module_num_params,
+                        "params_percentage": current_module_percentage,
+                        "dtypes": module_dtype_str,
+                        "device": module_device_str,
+                        "memory": format_size(module_memory_bytes),
+                        "trainable_status": trainable_status,
+                        "shape_str_internal": module_shape_str,
+                    }
+                )
+
+        return {
+            "total_params": total_params,
+            "total_memory_bytes": total_memory_bytes,
+            "trainable_params": trainable_params,
+            "non_trainable_params": non_trainable_params,
+            "param_dtypes_counts": param_dtypes_counts,
+            "param_devices_counts": param_devices_counts,
+            "param_devices_memory_bytes": param_devices_memory_bytes,
+            "module_details": module_details,
+        }
+
+    def create_dashboard():
+        from plotly.subplots import make_subplots
+        import plotly.graph_objects as go
+        import polars as pl
+
+        data = analyze_model_data()
+
+        # Create subplots - all three pies on the same row
+        fig = make_subplots(
+            rows=2,
+            cols=3,
+            subplot_titles=(
+                "Parameter Status",
+                "Parameter Data Types",
+                "Parameter Devices",
+                "",
+                "",
+                "",  # Empty titles for second row
+            ),
+            specs=[
+                [{"type": "pie"}, {"type": "pie"}, {"type": "pie"}],
+                [{"colspan": 3, "type": "table"}, None, None],
+            ],
+            vertical_spacing=0.08,  # Reduced vertical spacing
+            horizontal_spacing=0.05,
+        )
+
+        # Trainable pie chart
+        trainable_data = []
+        if data["total_params"] > 0:
+            trainable_data = [
+                (
+                    "Trainable",
+                    (data["trainable_params"] / data["total_params"]) * 100,
+                    f"{data['trainable_params']:,}",
+                ),
+                (
+                    "Frozen",
+                    (data["non_trainable_params"] / data["total_params"]) * 100,
+                    f"{data['non_trainable_params']:,}",
+                ),
+            ]
+
+        if trainable_data:
+            labels = []
+            values = []
+            colors_list = []
+            hover_texts = []
+            text_labels = []
+
+            for name, perc, val_str in trainable_data:
+                if perc > 0:
+                    labels.append(name)
+                    values.append(perc)
+                    colors_list.append(TRAINABLE_COLORS_VIZ.get(name, "#95a5a6"))
+                    hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
+
+                    if perc < 5:
+                        text_labels.append(f"{perc:.1f}%")
+                    else:
+                        text_labels.append(f"{name}<br>{perc:.1f}%")
+
+            fig.add_trace(
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    marker_colors=colors_list,
+                    hovertemplate="<b>%{hovertext}</b><extra></extra>",
+                    hovertext=hover_texts,
+                    text=text_labels,
+                    textinfo="text",
+                    textposition="auto",
+                    textfont=dict(size=11, color="white"),
+                    hole=0.3,
+                    pull=[0.02] * len(values),
+                    name="Trainable Status",
+                ),
+                row=1,
+                col=1,
+            )
+
+        # Dtype pie chart
+        dtype_data = []
+        if data["total_params"] > 0:
+            for dt, count in sorted(
+                data["param_dtypes_counts"].items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ):
+                dtype_data.append(
+                    (
+                        dt.replace("torch.", ""),
+                        (count / data["total_params"]) * 100,
+                        f"{count:,}",
+                    )
+                )
+
+        if dtype_data:
+            dtype_colors = {
+                item[0]: color
+                for item, color in zip(
+                    dtype_data,
+                    DTYPE_BASE_COLORS_VIZ
+                    * (len(dtype_data) // len(DTYPE_BASE_COLORS_VIZ) + 1),
+                )
+            }
+
+            labels = []
+            values = []
+            colors_list = []
+            hover_texts = []
+            text_labels = []
+
+            for name, perc, val_str in dtype_data:
+                if perc > 0:
+                    labels.append(name)
+                    values.append(perc)
+                    colors_list.append(dtype_colors.get(name, "#95a5a6"))
+                    hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
+
+                    if perc < 5:
+                        text_labels.append(f"{perc:.1f}%")
+                    else:
+                        text_labels.append(f"{name}<br>{perc:.1f}%")
+
+            fig.add_trace(
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    marker_colors=colors_list,
+                    hovertemplate="<b>%{hovertext}</b><extra></extra>",
+                    hovertext=hover_texts,
+                    text=text_labels,
+                    textinfo="text",
+                    textposition="auto",
+                    textfont=dict(size=11, color="white"),
+                    hole=0.3,
+                    pull=[0.02] * len(values),
+                    name="Data Types",
+                ),
+                row=1,
+                col=2,
+            )
+
+        # Device pie chart
+        device_data = []
+        if data["total_params"] > 0:
+            for dev, count in sorted(
+                data["param_devices_counts"].items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ):
+                device_data.append(
+                    (
+                        dev,
+                        (count / data["total_params"]) * 100,
+                        format_size(data["param_devices_memory_bytes"].get(dev, 0)),
+                    )
+                )
+
+        if device_data:
+            device_colors = {}
+            cuda_idx = 0
+            for dev_name, _, _ in device_data:
+                if dev_name == "cpu":
+                    device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP["cpu"]
+                elif "cuda" in dev_name:
+                    device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP.get(
+                        dev_name,
+                        DEVICE_COLORS_VIZ_MAP["other_gpu_shades"][
+                            cuda_idx % len(DEVICE_COLORS_VIZ_MAP["other_gpu_shades"])
+                        ],
+                    )
+                    if dev_name not in DEVICE_COLORS_VIZ_MAP:
+                        cuda_idx += 1
+                elif "mps" in dev_name:
+                    device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP["mps"]
+                elif "rocm" in dev_name:
+                    device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP["rocm"]
+                else:
+                    device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP["default"]
+
+            labels = []
+            values = []
+            colors_list = []
+            hover_texts = []
+            text_labels = []
+
+            for name, perc, val_str in device_data:
+                if perc > 0:
+                    labels.append(name)
+                    values.append(perc)
+                    colors_list.append(device_colors.get(name, "#95a5a6"))
+                    hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
+
+                    if perc < 5:
+                        text_labels.append(f"{perc:.1f}%")
+                    else:
+                        text_labels.append(f"{name}<br>{perc:.1f}%")
+
+            fig.add_trace(
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    marker_colors=colors_list,
+                    hovertemplate="<b>%{hovertext}</b><extra></extra>",
+                    hovertext=hover_texts,
+                    text=text_labels,
+                    textinfo="text",
+                    textposition="auto",
+                    textfont=dict(size=11, color="white"),
+                    hole=0.3,
+                    pull=[0.02] * len(values),
+                    name="Devices",
+                ),
+                row=1,
+                col=3,
+            )
+
+        # Module details table
+        module_df = pl.DataFrame(data["module_details"])
+        if not module_df.is_empty():
+            # Prepare table data
+            trainable_emojis = {
+                "Yes": "✔️",
+                "No": "❌",
+                "Partial": "◑",
+                "N/A": "",
+                "-": "",
+            }
+
+            table_data = []
+            for row in module_df.iter_rows(named=True):
+                trainable_display = trainable_emojis.get(
+                    row["trainable_status"], row["trainable_status"]
+                )
+
+                if row["trainable_status"] == "-":
+                    params_shape_display = "-"
+                    params_perc_display = "-"
+                elif row["num_params"] > 0:
+                    bold_num_p_str = to_bold_digits(f"{row['num_params']:,}")
+                    shape_s = row["shape_str_internal"]
+                    params_shape_display = (
+                        f"{bold_num_p_str} = {shape_s}"
+                        if shape_s and shape_s != "N/A"
+                        else f"{bold_num_p_str} = (shape N/A)"
+                    )
+                    params_perc_display = (
+                        f"{row['params_percentage']:.2f}%"
+                        if data["total_params"] > 0
+                        else "0.00%"
+                    )
+                else:
+                    params_shape_display = "-"  # Show "-" when parameters are zero
+                    params_perc_display = "----"
+
+                table_data.append(
+                    [
+                        row["name"],
+                        params_shape_display,
+                        params_perc_display,
+                        row["dtypes"],
+                        row["device"],
+                        row["memory"],
+                        trainable_display,
+                    ]
+                )
+
+            fig.add_trace(
+                go.Table(
+                    header=dict(
+                        values=[
+                            "Module Name",
+                            "Params (Shape)",
+                            "% Total",
+                            "Dtypes (% module)",
+                            "Device(s) (% module)",
+                            "Est. Size",
+                            "Train",  # Shortened column name
+                        ],
+                        fill_color="#404040",
+                        font=dict(color="white", size=12, family="Arial, sans-serif"),
+                        align="left",
+                        line=dict(width=0),  # Remove border lines
+                    ),
+                    cells=dict(
+                        values=list(zip(*table_data))
+                        if table_data
+                        else [[] for _ in range(7)],
+                        fill_color="#2d2d2d",
+                        font=dict(color="white", size=10, family="Arial, sans-serif"),
+                        align="left",
+                        height=32,
+                        line=dict(
+                            width=0
+                        ),  # Remove border lines for rounder appearance
+                    ),
+                    columnwidth=[
+                        3,
+                        2.5,
+                        1,
+                        2,
+                        2,
+                        1.5,
+                        0.8,
+                    ],  # Adjust column widths, making Trainable smaller
+                ),
+                row=2,
+                col=1,
+            )
+
+        # Update layout
+        try:
+            model_class_name_str = model.__class__.__name__
+        except:
+            model_class_name_str = "N/A"
+
+        try:
+            model_source_file_str = py_inspect.getfile(model.__class__)
+        except (TypeError, OSError):
+            model_source_file_str = "Source not found"
+
+        title_text = (
+            f"<b>{model_class_name_str}</b><br>"  # Removed "Model Inspector:" as requested
+            f"<sub>Source: {model_source_file_str}</sub><br>"
+            f"<sub>Total Parameters: {data['total_params']:,} | "
+            f"Estimated Size: {format_size(data['total_memory_bytes'])}</sub>"
+        )
+
+        fig.update_layout(
+            title=dict(
+                text=title_text, x=0.5, font=dict(size=16), y=0.98
+            ),  # Position title higher
+            height=1100,  # Increased height to accommodate spacing
+            showlegend=False,  # Remove all legends as requested
+            margin=dict(t=120, b=50, l=50, r=50),
+        )
+
+        # Update subplot titles positioning to avoid overlap
+        fig.update_annotations(
+            font_size=12,
+            yshift=-20,  # Push subplot titles down
+        )
+
+        return fig
+
+    # Create and show dashboard
+    fig = create_dashboard()
+
+    # Only show if not in a context where it might be displayed automatically
+    try:
+        # Check if we're in a Jupyter environment
+        from IPython import get_ipython
+
+        if get_ipython() is None:
+            fig.show(renderer=renderer)
+        else:
+            # In Jupyter, just return the figure - it will display automatically
+            pass
+    except ImportError:
+        # Not in Jupyter, safe to show
+        fig.show(renderer=renderer)
+
+    return fig
+
+
+##############################################################################################
+
+##############################################################################################
+
+##############################################################################################
+
+##############################################################################################
+
+##############################################################################################
+
+
+def inspect_tokenizer(tokenizer, renderer="vscode"):
+    """
+    Analyzes a Hugging Face tokenizer and generates a sleek, comprehensive Plotly dashboard.
+
+    This function creates a compact multi-part visualization showing tokenizer configuration,
+    all special tokens (including model-specific ones), and detailed statistics.
+
+    Args:
+        tokenizer (PreTrainedTokenizerFast): An instance of a Hugging Face tokenizer.
+        renderer (str, optional): The Plotly renderer to use for displaying the figure.
+                                  Defaults to "vscode". Common options include "notebook",
+                                  "browser", or None for default behavior.
+    """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import plotly.io as pio
+    import re
+
+    pio.templates.default = "plotly_dark"
+
+    # --- 1. Extract Core Data ---
+    vocab_size = tokenizer.vocab_size
+    model_name = tokenizer.name_or_path or "Unknown Model"
+    max_len = tokenizer.model_max_length
+
+    # --- 2. Comprehensive Special Token Detection ---
+    def get_all_special_tokens(tokenizer):
+        """Extract ALL special tokens from the tokenizer, including hidden ones."""
+        special_info = []
+
+        # Get the obvious special tokens
+        if hasattr(tokenizer, "special_tokens_map"):
+            for token_type, token_value in tokenizer.special_tokens_map.items():
+                if isinstance(token_value, str):
+                    token_id = tokenizer.convert_tokens_to_ids(token_value)
+                    special_info.append((token_type.upper(), token_value, token_id))
+                elif isinstance(token_value, dict) and "content" in token_value:
+                    token_id = tokenizer.convert_tokens_to_ids(token_value["content"])
+                    special_info.append(
+                        (token_type.upper(), token_value["content"], token_id)
+                    )
+
+        # Get additional special tokens from all_special_tokens
+        if hasattr(tokenizer, "all_special_tokens"):
+            for token in tokenizer.all_special_tokens:
+                token_id = tokenizer.convert_tokens_to_ids(token)
+                # Check if we already have this token
+                if not any(info[1] == token for info in special_info):
+                    special_info.append(("SPECIAL", token, token_id))
+
+        # Look for common special token patterns in the vocabulary
+        if hasattr(tokenizer, "get_vocab"):
+            vocab = tokenizer.get_vocab()
+            special_patterns = [
+                r"<\|.*?\|>",  # <|im_start|>, <|im_end|>, etc.
+                r"<.*?>",  # <think>, <eos>, <bos>, etc.
+                r"\[.*?\]",  # [INST], [/INST], etc.
+                r"<<.*?>>",  # <<SYS>>, <</SYS>>, etc.
+            ]
+
+            for token, token_id in vocab.items():
+                for pattern in special_patterns:
+                    if re.match(pattern, token):
+                        # Check if we already have this token
+                        if not any(info[1] == token for info in special_info):
+                            special_info.append(("PATTERN", token, token_id))
+                        break
+
+        # Sort by token ID for consistent display
+        special_info.sort(key=lambda x: x[2] if x[2] is not None else float("inf"))
+        return special_info
+
+    special_tokens_info = get_all_special_tokens(tokenizer)
+
+    # --- 3. Additional Configuration ---
+    padding_side = getattr(tokenizer, "padding_side", "N/A")
+    truncation_side = getattr(tokenizer, "truncation_side", "N/A")
+
+    # Get tokenizer class name
+    tokenizer_class = tokenizer.__class__.__name__
+
+    # Chat template handling
+    try:
+        chat_template = getattr(tokenizer, "chat_template", None)
+        if chat_template:
+            # Truncate if too long and format for display
+            if len(chat_template) > 200:
+                chat_template = chat_template[:200] + "..."
+            chat_template = chat_template.replace("\n", "<br>").replace(
+                "    ", "&nbsp;&nbsp;"
+            )
+        else:
+            chat_template = "Not defined"
+    except:
+        chat_template = "N/A"
+
+    # --- 4. Create Compact Layout ---
+    fig = make_subplots(
+        rows=2,
+        cols=3,
+        specs=[
+            [{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}],
+            [{"type": "table", "colspan": 3}, None, None],
+        ],
+        vertical_spacing=0.12,
+        row_heights=[0.35, 0.65],
+        subplot_titles=[
+            f"<b style='color:#00d4ff'>Vocabulary Size</b>",
+            f"<b style='color:#ff6b6b'>Max Length</b>",
+            f"<b style='color:#4ecdc4'>Special Tokens</b>",
+        ],
+    )
+
+    # --- 5. Add Indicator Traces ---
+    # Vocab size with gradient effect
+    fig.add_trace(
+        go.Indicator(
+            mode="number+delta",
+            value=vocab_size,
+            number={
+                "font": {"size": 36, "color": "#00d4ff"},
+                "suffix": " tokens",
+                "valueformat": ",",
+            },
+            domain={"row": 0, "column": 0},
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Max length with context
+    max_len_display = max_len if max_len != float("inf") else "∞"
+    fig.add_trace(
+        go.Indicator(
+            mode="number",
+            value=max_len if max_len != float("inf") else None,
+            number={
+                "font": {"size": 36, "color": "#ff6b6b"},
+                "suffix": " tokens",
+                "valueformat": ",",
+            },
+            domain={"row": 0, "column": 1},
+        ),
+        row=1,
+        col=2,
+    )
+
+    # Special tokens count
+    fig.add_trace(
+        go.Indicator(
+            mode="number",
+            value=len(special_tokens_info),
+            number={
+                "font": {"size": 36, "color": "#4ecdc4"},
+                "suffix": " special tokens",
+                "valueformat": ",",
+            },
+            domain={"row": 0, "column": 2},
+        ),
+        row=1,
+        col=3,
+    )
+
+    # --- 6. Enhanced Special Tokens Table ---
+    if special_tokens_info:
+        token_types = [info[0] for info in special_tokens_info]
+        token_values = [f"<code>{info[1]}</code>" for info in special_tokens_info]
+        token_ids = [
+            str(info[2]) if info[2] is not None else "N/A"
+            for info in special_tokens_info
+        ]
+
+        # Color code by type
+        type_colors = {
+            "PAD": "#ff9999",
+            "UNK": "#ffcc99",
+            "CLS": "#99ff99",
+            "SEP": "#99ccff",
+            "MASK": "#cc99ff",
+            "BOS": "#ffff99",
+            "EOS": "#ff99cc",
+            "SPECIAL": "#cccccc",
+            "PATTERN": "#55C96A",
+        }
+
+        cell_colors = []
+        for token_type in token_types:
+            color = type_colors.get(token_type, "#f0f0f0")
+            cell_colors.append(color)
+    else:
+        token_types = ["No special tokens found"]
+        token_values = [""]
+        token_ids = [""]
+        cell_colors = ["#f0f0f0"]
+
+    fig.add_trace(
+        go.Table(
+            header=dict(
+                values=[
+                    "<b>Type</b>",
+                    "<b>Token</b>",
+                    "<b>ID</b>",
+                    "<b>Config Info</b>",
+                ],
+                fill_color="#2c3e50",
+                align="center",
+                font=dict(size=13, color="white"),
+                height=35,
+            ),
+            cells=dict(
+                values=[
+                    token_types,
+                    token_values,
+                    token_ids,
+                    [
+                        f"<b>Class:</b> {tokenizer_class}<br><b>Padding:</b> {padding_side}<br><b>Truncation:</b> {truncation_side}"
+                    ]
+                    + [""] * (len(token_types) - 1),
+                ],
+                fill_color=[cell_colors + ["#ecf0f1"] * len(token_types)],
+                align=["center", "left", "center", "left"],
+                font=dict(size=11, color="#2c3e50"),
+                height=28,
+            ),
+        ),
+        row=2,
+        col=1,
+    )
+
+    # --- 7. Final Layout Styling ---
+    fig.update_layout(
+        title={
+            "text": f"🔍 Tokenizer of: <b>{model_name}</b>",
+            "x": 0.5,
+            "xanchor": "center",
+            "font": {"size": 20, "color": "#d1d4d6"},
+        },
+        height=550,  # Much more compressed!
+        showlegend=False,
+        template="plotly_white",
+        margin=dict(l=15, r=15, t=80, b=15),
+        font=dict(family="SF Pro Display, -apple-system, system-ui, sans-serif"),
+        paper_bgcolor="#1e252c",
+        plot_bgcolor="#333030",
+    )
+
+    # Add subtle styling
+    fig.update_annotations(font_size=12, font_color="#34495e")
+
+    # # Add a subtle footer with chat template info if available
+    # if chat_template and chat_template != "Not defined":
+    #     fig.add_annotation(
+    #         text=f"<i>Chat Template: {chat_template}</i>",
+    #         xref="paper",
+    #         yref="paper",
+    #         x=1,
+    #         y=0,
+    #         showarrow=False,
+    #         font=dict(size=9, color="#7f8c8d"),
+    #         bgcolor="rgba(255,255,255,0.8)",
+    #         bordercolor="#bdc3c7",
+    #         borderwidth=1,
+    #     )
+
+    # Show with style
+    fig.show(renderer=renderer)

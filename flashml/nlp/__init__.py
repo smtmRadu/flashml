@@ -1,10 +1,7 @@
-from .text_preprocessing import (
-    lowercase,
-    remove_stopwords,
+from .text_replacers import (
     replace_numbers,
     replace_urls,
     replace_punctuation,
-    remove_double_spacing,
     replace_pattern,
     replace_emails,
     replace_emojis,
@@ -14,7 +11,20 @@ from .text_preprocessing import (
     replace_measurements,
 )
 
+from .text_removers import (
+    remove_stopwords,
+    remove_double_spacing,
+)
+
+from .text_special_prepreocessing import (
+    expand_contractions,
+    lowercase,
+    lemmatize,
+)
+
 __all__ = [
+    "expand_contractions",
+    "lemmatize",
     "lowercase",
     "remove_double_spacing",
     "remove_stopwords",

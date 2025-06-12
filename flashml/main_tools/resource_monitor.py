@@ -1129,12 +1129,26 @@ def launch_monitor_gui():
         _monitor_active_flag = False
 
 
+def is_notebook():
+    try:
+        from IPython import get_ipython
+
+        return "IPKernelApp" in get_ipython().config
+    except:
+        return False
+
+
 def resource_monitor():
     """
     Launches the resource monitor GUI as a completely detached process.
     Prevents launching if already running (checks lock file).
     The monitor will continue running independently even after the parent process exits.
     """
+    if is_notebook():
+        # Run directly in notebook mode
+        launch_monitor_gui()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "--resource-monitor-standalone":
         launch_monitor_gui()
         return
@@ -1177,3 +1191,7 @@ def resource_monitor():
     except Exception as e:
         print(f"Failed to start resource monitor: {e}")
         return
+
+
+if __name__ == "__main__":
+    resource_monitor()

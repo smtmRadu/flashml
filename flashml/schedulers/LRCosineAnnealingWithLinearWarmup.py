@@ -2,6 +2,12 @@ import math
 
 
 class LRConsineAnnealingWithLinearWarmup:
+    """
+        `step()` called after `optim.step()`\\
+        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** \\
+        `warmup_steps_ratio` = 3%-10% of max_steps (use `warmup_steps_ratio` instead of `warmup_steps` to set it)
+    """
+
     def __init__(
         self,
         optimizer,
@@ -11,11 +17,6 @@ class LRConsineAnnealingWithLinearWarmup:
         *args,
         **kwargs,
     ):
-        """
-        `step()` called after `optim.step()`\\
-        *max_steps* = **EPOCHS x NUM_BATCHES / GRADIENT_ACCUMULATION_STEPS** \\
-        *warmup_steps_ratio* = 3%-10% of max_steps (use *warmup_steps_ratio* instead of `warmup_steps` to set it)
-        """
         warmup_steps_ratio = kwargs.pop("warmup_steps_ratio", None)
         if warmup_steps_ratio is not None:
             assert 0.0 < warmup_steps_ratio < 1.0, (

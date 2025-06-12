@@ -4,9 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashml"
-version = "0.5.1"
+version = "0.6"
 authors = [{ name = "kbradu" }]
 dependencies = [
+    "ipywidgets",
+    "mlflow",
     "matplotlib",
     "plotly",
     "numpy",
@@ -19,7 +21,6 @@ dependencies = [
     "windows-curses",
     "playsound==1.3.0",
     "pillow",
-    "nltk",
     "pynvml",
     "scikit-learn",
     "pynput",
@@ -29,6 +30,7 @@ dependencies = [
     "joblib",
     "polars",
     "pandas",
+    "spacy",
 
     "python-dotenv",
     "ollama",
