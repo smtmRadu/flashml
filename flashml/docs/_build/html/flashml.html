@@ -1,0 +1,976 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>flashml package &mdash; flashml 0.5.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=b9afe91b"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="flashml.legacy package" href="flashml.legacy.html" />
+    <link rel="prev" title="flashml" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            flashml
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">flashml</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">flashml package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.legacy.html">flashml.legacy package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html">flashml.modules package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.nlp.html">flashml.nlp package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.rl.html">flashml.rl package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html">flashml.schedulers package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-flashml.test">flashml.test module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.log_metrics_test"><code class="docutils literal notranslate"><span class="pre">log_metrics_test()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.plot_tensorx"><code class="docutils literal notranslate"><span class="pre">plot_tensorx()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.stress_test"><code class="docutils literal notranslate"><span class="pre">stress_test()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_batch_generation"><code class="docutils literal notranslate"><span class="pre">test_batch_generation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_conf_matrix"><code class="docutils literal notranslate"><span class="pre">test_conf_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_log_session"><code class="docutils literal notranslate"><span class="pre">test_log_session()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_logger"><code class="docutils literal notranslate"><span class="pre">test_logger()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_logging"><code class="docutils literal notranslate"><span class="pre">test_logging()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_nlp_preprocesssing"><code class="docutils literal notranslate"><span class="pre">test_nlp_preprocesssing()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_parallel_for"><code class="docutils literal notranslate"><span class="pre">test_parallel_for()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_plot_dist"><code class="docutils literal notranslate"><span class="pre">test_plot_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_plot_tsne"><code class="docutils literal notranslate"><span class="pre">test_plot_tsne()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_plotting"><code class="docutils literal notranslate"><span class="pre">test_plotting()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_rl_info"><code class="docutils literal notranslate"><span class="pre">test_rl_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_rt_plotting"><code class="docutils literal notranslate"><span class="pre">test_rt_plotting()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_scheduler"><code class="docutils literal notranslate"><span class="pre">test_scheduler()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_simple_for"><code class="docutils literal notranslate"><span class="pre">test_simple_for()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.test.test_train_info"><code class="docutils literal notranslate"><span class="pre">test_train_info()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-flashml">Module contents</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.Baselines"><code class="docutils literal notranslate"><span class="pre">Baselines</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.BatchIterator"><code class="docutils literal notranslate"><span class="pre">BatchIterator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.ansi_of"><code class="docutils literal notranslate"><span class="pre">ansi_of()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.ansi_to_hex"><code class="docutils literal notranslate"><span class="pre">ansi_to_hex()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.bell"><code class="docutils literal notranslate"><span class="pre">bell()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.benchmark"><code class="docutils literal notranslate"><span class="pre">benchmark()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.call_cs_kernel"><code class="docutils literal notranslate"><span class="pre">call_cs_kernel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.hex_of"><code class="docutils literal notranslate"><span class="pre">hex_of()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.hex_to_ansi"><code class="docutils literal notranslate"><span class="pre">hex_to_ansi()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.inspect_model"><code class="docutils literal notranslate"><span class="pre">inspect_model()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.inspect_tokenizer"><code class="docutils literal notranslate"><span class="pre">inspect_tokenizer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.load_checkpoint"><code class="docutils literal notranslate"><span class="pre">load_checkpoint()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.load_records"><code class="docutils literal notranslate"><span class="pre">load_records()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.log_checkpoint"><code class="docutils literal notranslate"><span class="pre">log_checkpoint()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.log_metrics"><code class="docutils literal notranslate"><span class="pre">log_metrics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.log_record"><code class="docutils literal notranslate"><span class="pre">log_record()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.parallel_for"><code class="docutils literal notranslate"><span class="pre">parallel_for()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.parallel_foreach"><code class="docutils literal notranslate"><span class="pre">parallel_foreach()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_chat"><code class="docutils literal notranslate"><span class="pre">plot_chat()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_confusion_matrix"><code class="docutils literal notranslate"><span class="pre">plot_confusion_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_dist"><code class="docutils literal notranslate"><span class="pre">plot_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_graph"><code class="docutils literal notranslate"><span class="pre">plot_graph()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_rt_graph"><code class="docutils literal notranslate"><span class="pre">plot_rt_graph()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_tensor"><code class="docutils literal notranslate"><span class="pre">plot_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.plot_tsne"><code class="docutils literal notranslate"><span class="pre">plot_tsne()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.resource_monitor"><code class="docutils literal notranslate"><span class="pre">resource_monitor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.sample_from"><code class="docutils literal notranslate"><span class="pre">sample_from()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.shuffle_df"><code class="docutils literal notranslate"><span class="pre">shuffle_df()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.shuffle_tensor"><code class="docutils literal notranslate"><span class="pre">shuffle_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.stress_cpu"><code class="docutils literal notranslate"><span class="pre">stress_cpu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flashml.stress_gpu"><code class="docutils literal notranslate"><span class="pre">stress_gpu()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">flashml</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">flashml</a></li>
+      <li class="breadcrumb-item active">flashml package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/flashml.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="flashml-package">
+<h1>flashml package<a class="headerlink" href="#flashml-package" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="flashml.legacy.html">flashml.legacy package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="flashml.legacy.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.legacy.html#module-flashml.legacy.inspector">flashml.legacy.inspector module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.apply_dark_theme"><code class="docutils literal notranslate"><span class="pre">apply_dark_theme()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.draw_partition_bar"><code class="docutils literal notranslate"><span class="pre">draw_partition_bar()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.format_size"><code class="docutils literal notranslate"><span class="pre">format_size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.get_memory_size"><code class="docutils literal notranslate"><span class="pre">get_memory_size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.get_parameter_device"><code class="docutils literal notranslate"><span class="pre">get_parameter_device()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.get_parameter_dtype"><code class="docutils literal notranslate"><span class="pre">get_parameter_dtype()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.inspect_model"><code class="docutils literal notranslate"><span class="pre">inspect_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.inspect_tokenizer"><code class="docutils literal notranslate"><span class="pre">inspect_tokenizer()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.legacy.html#flashml.legacy.inspector.to_bold_digits"><code class="docutils literal notranslate"><span class="pre">to_bold_digits()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.legacy.html#module-flashml.legacy">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="flashml.modules.html">flashml.modules package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#flashml-modules-deepseekmoe-module">flashml.modules.DeepSeekMoE module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.FFN">flashml.modules.FFN module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.FFN.FFN"><code class="docutils literal notranslate"><span class="pre">FFN</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.FFN.FFN.forward"><code class="docutils literal notranslate"><span class="pre">FFN.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#flashml-modules-gqa-module">flashml.modules.GQA module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.MHA">flashml.modules.MHA module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MHA.MHA"><code class="docutils literal notranslate"><span class="pre">MHA</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MHA.MHA.forward"><code class="docutils literal notranslate"><span class="pre">MHA.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.MLA">flashml.modules.MLA module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MLA.MLA"><code class="docutils literal notranslate"><span class="pre">MLA</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MLA.MLA.forward"><code class="docutils literal notranslate"><span class="pre">MLA.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.MinGRU">flashml.modules.MinGRU module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.MinGRU"><code class="docutils literal notranslate"><span class="pre">MinGRU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.MinGRU.forward"><code class="docutils literal notranslate"><span class="pre">MinGRU.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.g"><code class="docutils literal notranslate"><span class="pre">g()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.log_g"><code class="docutils literal notranslate"><span class="pre">log_g()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.parallel_scan_log"><code class="docutils literal notranslate"><span class="pre">parallel_scan_log()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.MinLSTM">flashml.modules.MinLSTM module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.MinLSTM"><code class="docutils literal notranslate"><span class="pre">MinLSTM</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.MinLSTM.forward"><code class="docutils literal notranslate"><span class="pre">MinLSTM.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.g"><code class="docutils literal notranslate"><span class="pre">g()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.log_g"><code class="docutils literal notranslate"><span class="pre">log_g()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.parallel_scan_log"><code class="docutils literal notranslate"><span class="pre">parallel_scan_log()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.OrnsteinUhlenbeckProcess">flashml.modules.OrnsteinUhlenbeckProcess module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.reset"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess.reset()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.sample"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess.sample()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.PolyakAveraging">flashml.modules.PolyakAveraging module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging.PolyakAveraging"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging.PolyakAveraging.EMA_Model"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging.EMA_Model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging.PolyakAveraging.step"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.RMSNorm">flashml.modules.RMSNorm module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.RMSNorm.RMSNorm"><code class="docutils literal notranslate"><span class="pre">RMSNorm</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.RMSNorm.RMSNorm.forward"><code class="docutils literal notranslate"><span class="pre">RMSNorm.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.Rish">flashml.modules.Rish module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.Rish.Rish"><code class="docutils literal notranslate"><span class="pre">Rish</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.Rish.Rish.forward"><code class="docutils literal notranslate"><span class="pre">Rish.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.SwiGLU">flashml.modules.SwiGLU module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.SwiGLU.SwiGLU"><code class="docutils literal notranslate"><span class="pre">SwiGLU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.SwiGLU.SwiGLU.forward"><code class="docutils literal notranslate"><span class="pre">SwiGLU.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.VAE">flashml.modules.VAE module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE"><code class="docutils literal notranslate"><span class="pre">VAE</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE.decode"><code class="docutils literal notranslate"><span class="pre">VAE.decode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE.encode"><code class="docutils literal notranslate"><span class="pre">VAE.encode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE.forward"><code class="docutils literal notranslate"><span class="pre">VAE.forward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE.loss_function"><code class="docutils literal notranslate"><span class="pre">VAE.loss_function()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.VAE.reparametrize"><code class="docutils literal notranslate"><span class="pre">VAE.reparametrize()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules.pRoPE">flashml.modules.pRoPE module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.pRoPE.pRoPE"><code class="docutils literal notranslate"><span class="pre">pRoPE</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.pRoPE.pRoPE.forward"><code class="docutils literal notranslate"><span class="pre">pRoPE.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.modules.html#module-flashml.modules">Module contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.FFN"><code class="docutils literal notranslate"><span class="pre">FFN</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.FFN.forward"><code class="docutils literal notranslate"><span class="pre">FFN.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MHA"><code class="docutils literal notranslate"><span class="pre">MHA</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MHA.forward"><code class="docutils literal notranslate"><span class="pre">MHA.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU"><code class="docutils literal notranslate"><span class="pre">MinGRU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinGRU.forward"><code class="docutils literal notranslate"><span class="pre">MinGRU.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM"><code class="docutils literal notranslate"><span class="pre">MinLSTM</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.MinLSTM.forward"><code class="docutils literal notranslate"><span class="pre">MinLSTM.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess.reset"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess.reset()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.OrnsteinUhlenbeckProcess.sample"><code class="docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcess.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging.EMA_Model"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging.EMA_Model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.PolyakAveraging.step"><code class="docutils literal notranslate"><span class="pre">PolyakAveraging.step()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.RMSNorm"><code class="docutils literal notranslate"><span class="pre">RMSNorm</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.RMSNorm.forward"><code class="docutils literal notranslate"><span class="pre">RMSNorm.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.Rish"><code class="docutils literal notranslate"><span class="pre">Rish</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.Rish.forward"><code class="docutils literal notranslate"><span class="pre">Rish.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.SwiGLU"><code class="docutils literal notranslate"><span class="pre">SwiGLU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.SwiGLU.forward"><code class="docutils literal notranslate"><span class="pre">SwiGLU.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE"><code class="docutils literal notranslate"><span class="pre">VAE</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.decode"><code class="docutils literal notranslate"><span class="pre">VAE.decode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.encode"><code class="docutils literal notranslate"><span class="pre">VAE.encode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.forward"><code class="docutils literal notranslate"><span class="pre">VAE.forward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.loss_function"><code class="docutils literal notranslate"><span class="pre">VAE.loss_function()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.VAE.reparametrize"><code class="docutils literal notranslate"><span class="pre">VAE.reparametrize()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.modules.html#flashml.modules.pRoPE"><code class="docutils literal notranslate"><span class="pre">pRoPE</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html#flashml.modules.pRoPE.forward"><code class="docutils literal notranslate"><span class="pre">pRoPE.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="flashml.nlp.html">flashml.nlp package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="flashml.nlp.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.nlp.html#module-flashml.nlp.text_removers">flashml.nlp.text_removers module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_removers.remove_double_spacing"><code class="docutils literal notranslate"><span class="pre">remove_double_spacing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_removers.remove_stopwords"><code class="docutils literal notranslate"><span class="pre">remove_stopwords()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.nlp.html#module-flashml.nlp.text_replacers">flashml.nlp.text_replacers module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_currency"><code class="docutils literal notranslate"><span class="pre">replace_currency()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_emails"><code class="docutils literal notranslate"><span class="pre">replace_emails()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_emojis"><code class="docutils literal notranslate"><span class="pre">replace_emojis()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_hashtags"><code class="docutils literal notranslate"><span class="pre">replace_hashtags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_measurements"><code class="docutils literal notranslate"><span class="pre">replace_measurements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_numbers"><code class="docutils literal notranslate"><span class="pre">replace_numbers()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_pattern"><code class="docutils literal notranslate"><span class="pre">replace_pattern()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_punctuation"><code class="docutils literal notranslate"><span class="pre">replace_punctuation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_smileys"><code class="docutils literal notranslate"><span class="pre">replace_smileys()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_replacers.replace_urls"><code class="docutils literal notranslate"><span class="pre">replace_urls()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.nlp.html#module-flashml.nlp.text_special_prepreocessing">flashml.nlp.text_special_prepreocessing module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_special_prepreocessing.expand_contractions"><code class="docutils literal notranslate"><span class="pre">expand_contractions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_special_prepreocessing.lemmatize"><code class="docutils literal notranslate"><span class="pre">lemmatize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.text_special_prepreocessing.lowercase"><code class="docutils literal notranslate"><span class="pre">lowercase()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.nlp.html#module-flashml.nlp">Module contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.expand_contractions"><code class="docutils literal notranslate"><span class="pre">expand_contractions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.lemmatize"><code class="docutils literal notranslate"><span class="pre">lemmatize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.lowercase"><code class="docutils literal notranslate"><span class="pre">lowercase()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.remove_double_spacing"><code class="docutils literal notranslate"><span class="pre">remove_double_spacing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.remove_stopwords"><code class="docutils literal notranslate"><span class="pre">remove_stopwords()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_currency"><code class="docutils literal notranslate"><span class="pre">replace_currency()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_emails"><code class="docutils literal notranslate"><span class="pre">replace_emails()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_emojis"><code class="docutils literal notranslate"><span class="pre">replace_emojis()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_hashtags"><code class="docutils literal notranslate"><span class="pre">replace_hashtags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_measurements"><code class="docutils literal notranslate"><span class="pre">replace_measurements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_numbers"><code class="docutils literal notranslate"><span class="pre">replace_numbers()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_pattern"><code class="docutils literal notranslate"><span class="pre">replace_pattern()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_punctuation"><code class="docutils literal notranslate"><span class="pre">replace_punctuation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_smileys"><code class="docutils literal notranslate"><span class="pre">replace_smileys()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.nlp.html#flashml.nlp.replace_urls"><code class="docutils literal notranslate"><span class="pre">replace_urls()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="flashml.rl.html">flashml.rl package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="flashml.rl.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.rl.html#module-flashml.rl.log_episode">flashml.rl.log_episode module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.rl.html#flashml.rl.log_episode.log_episode"><code class="docutils literal notranslate"><span class="pre">log_episode()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.rl.html#module-flashml.rl">Module contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.rl.html#flashml.rl.log_episode"><code class="docutils literal notranslate"><span class="pre">log_episode()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="flashml.schedulers.html">flashml.schedulers package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="flashml.schedulers.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.schedulers.html#module-flashml.schedulers.LRCosineAnnealingWithLinearWarmup">flashml.schedulers.LRCosineAnnealingWithLinearWarmup module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.current_lr"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.current_lr</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.load_state_dict"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.load_state_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.state_dict"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.state_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.step"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="flashml.schedulers.html#module-flashml.schedulers">Module contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRConsineAnnealingWithLinearWarmup"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRConsineAnnealingWithLinearWarmup.current_lr"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.current_lr</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRConsineAnnealingWithLinearWarmup.load_state_dict"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.load_state_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRConsineAnnealingWithLinearWarmup.state_dict"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.state_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html#flashml.schedulers.LRConsineAnnealingWithLinearWarmup.step"><code class="docutils literal notranslate"><span class="pre">LRConsineAnnealingWithLinearWarmup.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-flashml.test">
+<span id="flashml-test-module"></span><h2>flashml.test module<a class="headerlink" href="#module-flashml.test" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.log_metrics_test">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">log_metrics_test</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#log_metrics_test"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.log_metrics_test" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.plot_tensorx">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">plot_tensorx</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#plot_tensorx"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.plot_tensorx" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.stress_test">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">stress_test</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#stress_test"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.stress_test" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_batch_generation">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_batch_generation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_batch_generation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_batch_generation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_conf_matrix">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_conf_matrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_conf_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_conf_matrix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_log_session">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_log_session</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_log_session"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_log_session" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_logger">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_logger</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_logging">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_logging</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_logging"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_logging" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_nlp_preprocesssing">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_nlp_preprocesssing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_nlp_preprocesssing"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_nlp_preprocesssing" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_parallel_for">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_parallel_for</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_parallel_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_parallel_for" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_plot_dist">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_plot_dist</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_plot_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_plot_dist" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_plot_tsne">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_plot_tsne</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_plot_tsne"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_plot_tsne" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_plotting">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_plotting</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_plotting"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_plotting" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_rl_info">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_rl_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_rl_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_rl_info" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_rt_plotting">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_rt_plotting</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_rt_plotting"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_rt_plotting" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_scheduler">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_scheduler</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_scheduler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_scheduler" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_simple_for">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_simple_for</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_simple_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_simple_for" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.test.test_train_info">
+<span class="sig-prename descclassname"><span class="pre">flashml.test.</span></span><span class="sig-name descname"><span class="pre">test_train_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/test.html#test_train_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.test.test_train_info" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-flashml">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-flashml" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.Baselines">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">Baselines</span></span><a class="reference internal" href="_modules/flashml/main_tools/baselines.html#Baselines"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.Baselines" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.Baselines.run_dummy">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_dummy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'macro'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Baselines'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/baselines.html#Baselines.run_dummy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.Baselines.run_dummy" title="Link to this definition"></a></dt>
+<dd><p>Compute baseline metrics using all dummy strategies for classifier or regressor.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>X_train (ndarray, torch.tensor): Training features
+Y_train (ndarray, torch.tensor): Training targets
+X_test (ndarray, torch.tensor): Test features
+Y_test (ndarray, torch.tensor): Test targets
+experiment_name: Optional name for the experiment</p>
+</dd>
+<dt>Returns:</dt><dd><p>list: List of dictionaries containing baseline metrics for each strategy</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.Baselines.run_linear_model">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_linear_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regularization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'l1'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'l2'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'macro'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Baselines'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/baselines.html#Baselines.run_linear_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.Baselines.run_linear_model" title="Link to this definition"></a></dt>
+<dd><p>Train and evaluate a linear model (regression or classification) with optional regularization.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>X_train: Training features
+Y_train: Training targets
+X_test: Test features
+Y_test: Test targets
+regularization: Type of regularization (“l1” or “l2”)
+average: Scoring average method for classification
+run_name: MLflow run name
+experiment_name: Optional MLflow experiment name</p>
+</dd>
+<dt>Returns:</dt><dd><p>list: List of dictionaries containing metrics for the linear model</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.BatchIterator">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">BatchIterator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'train'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'test'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'train'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#BatchIterator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.BatchIterator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Automatically build batch elements from a dataframe for training or testing. Note you can access len(B: BatchIterator) to get the number of steps/batches
+Examples:
+&gt;&gt;&gt; for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode=”train”):
+…     # or you can just unpack (for step, batch in BatchIterator(…))
+…     # batch.id is the batch index (int)
+…     # batch.step is the batch index out of num batches (tuple(current_step, total_steps))
+…     # batch.value is a df (batch_size,) (or a list with batch_size elements)
+…     # batch.ids are the indices of the rows in the batch (batch_size,)</p>
+<p>Note you can save the state dict (a.k.a. current step of it)
+Args:</p>
+<blockquote>
+<div><p>df: DataFrame (Polars or Pandas) or list/tuple of elements
+num_epochs: int, number of epochs to iterate over the dataset
+batch_size: int, size of each batch
+mode: Literal[“train”, “test”], mode of operation. If “train”, batches are shuffled and partial batches are skipped; if “test”, batches are sequential and can be partial.</p>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.BatchIterator.generate_batches">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">generate_batches</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'train'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'test'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'eval'</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#BatchIterator.generate_batches"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.BatchIterator.generate_batches" title="Link to this definition"></a></dt>
+<dd><p>This script computes the indices of the batches for a given dataset, with respect to the number of epochs and batch size.
+You can directly pass through the return as from a dataloader for all epochs.
+Args:</p>
+<blockquote>
+<div><p>data_size: int, the length of the dataset.
+num_epochs: int, the number of epochs to iterate over the dataset.
+batch_size: int, the size of each batch.
+mode: str, “train”, “test” or “eval”, whether to generate batches for training, testing or evaluation. If “train”, partial batches are skipped and everything is shuffled.</p>
+</div></blockquote>
+<dl>
+<dt>Example:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">generate_batches</span><span class="p">(</span><span class="mi">21</span><span class="p">,</span> <span class="n">num_epochs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">))</span>
+<span class="go">    [(14, 13, 8, 15), (10, 11, 9, 2), (17, 4, 20, 6), (19, 3, 5, 0), (16, 18, 12, 1), (7, 15, 13, 7), (6, 2, 10, 19), (17, 5, 0, 9), (16, 18, 14, 20), (3, 11, 12, 4), (1, 8, 14, 13)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">generate_batches</span><span class="p">(</span><span class="mi">21</span><span class="p">,</span> <span class="n">num_epochs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">))</span>
+<span class="go">    [(0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15), (16, 17, 18, 19), (20, 0, 1, 2), (3, 4, 5, 6), (7, 8, 9, 10), (11, 12, 13, 14), (15, 16, 17, 18), (19, 20)]</span>
+</pre></div>
+</div>
+</dd>
+<dt>Returns:</dt><dd><p>List[Tuple[int,]]: a list of tuples containing the indices of each element in the batches.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.BatchIterator.load_state_dict">
+<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#BatchIterator.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.BatchIterator.load_state_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.BatchIterator.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#BatchIterator.state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.BatchIterator.state_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.ansi_of">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">ansi_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color_name</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/colors.html#ansi_of"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.ansi_of" title="Link to this definition"></a></dt>
+<dd><p>Returns the ANSI escape sequence for the given color name. Note that if printed, the console color will change.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.ansi_to_hex">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">ansi_to_hex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ansi_str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/colors.html#ansi_to_hex"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.ansi_to_hex" title="Link to this definition"></a></dt>
+<dd><p>Converts an ANSI escape sequence to a hexadecimal color string (e.g., ‘#FF0000’).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.bell">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">bell</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/sound_effects.html#bell"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.bell" title="Link to this definition"></a></dt>
+<dd><p>Plays a system notification sound (beep) to indicate completion.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.benchmark">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">benchmark</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">callable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/benchmark.html#benchmark"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.benchmark" title="Link to this definition"></a></dt>
+<dd><p>Computed time elapsed to run <cite>func</cite> arg. Returns the time elapsed in seconds</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.call_cs_kernel">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">call_cs_kernel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cs_file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/extern.html#call_cs_kernel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.call_cs_kernel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.hex_of">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">hex_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color_name</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/colors.html#hex_of"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.hex_of" title="Link to this definition"></a></dt>
+<dd><p>Returns the hexadecimal representation of the given color name (e.g., ‘#FF0000’).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.hex_to_ansi">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">hex_to_ansi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hex_str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/colors.html#hex_to_ansi"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.hex_to_ansi" title="Link to this definition"></a></dt>
+<dd><p>Converts a hexadecimal color string (e.g., ‘#FF0000’) to an ANSI escape sequence.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.inspect_model">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">inspect_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'vscode'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_uint8_as_int4</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/inspection.html#inspect_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.inspect_model" title="Link to this definition"></a></dt>
+<dd><p>Inspect PyTorch model with interactive Plotly visualizations</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: PyTorch model to inspect
+input_data: the input tensor/dict or object the model receives as arg
+renderer: Plotly renderer (‘vscode’, ‘browser’, ‘notebook’, etc.)
+view_uint8_as_int4: Whether to interpret uint8 parameters as packed int4</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.inspect_tokenizer">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">inspect_tokenizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'vscode'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/inspection.html#inspect_tokenizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.inspect_tokenizer" title="Link to this definition"></a></dt>
+<dd><p>Analyzes a Hugging Face tokenizer and generates a sleek, comprehensive Plotly dashboard.</p>
+<p>This function creates a compact multi-part visualization showing tokenizer configuration,
+all special tokens (including model-specific ones), and detailed statistics.</p>
+<dl>
+<dt>Args:</dt><dd><p>tokenizer (PreTrainedTokenizerFast): An instance of a Hugging Face tokenizer.
+renderer (str, optional): The Plotly renderer to use for displaying the figure.</p>
+<blockquote>
+<div><p>Defaults to “vscode”. Common options include “notebook”,
+“browser”, or None for default behavior.</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.load_checkpoint">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/log_metrics.html#load_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.load_checkpoint" title="Link to this definition"></a></dt>
+<dd><p>Loads a checkpoint dict/state_dict from a given run in MLFlow.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>run_id (str): click on the run and copy to clipboard the run ID
+version (int): the version of the checkpoint artifact
+experiment_name (str, optional): Of which experiment the run belongs to. Defaults to “Default”.</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: _description_</p>
+</dd>
+<dt>Returns:</dt><dd><p>Any: the state_dict logged</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.load_records">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">load_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'flashml_logger.jsonl'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'pd'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'pl'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'list_of_dicts'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">utf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'utf-8'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/flashml/main_tools/logging_jsonl.html#load_records"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.load_records" title="Link to this definition"></a></dt>
+<dd><p>Loads the jsonl file and returns a polars/pandas dataframe.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>list[dict] | polars/pandas df | <strong>None</strong> if file is empty.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.log_checkpoint">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">log_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/log_metrics.html#log_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.log_checkpoint" title="Link to this definition"></a></dt>
+<dd><p>Makes a checkpoint of the model+optim+scheduler and logs it in the MLFlow session.
+Example:
+&gt;&gt;&gt; log_checkpoint({“model”:model.state_dict(), “optim”: optimizer.state_dict()})
+Args:</p>
+<blockquote>
+<div><p>state_dict (str): _description_
+ckpt (dict | Any): the checkpoint that is a state_dict or dicts of state_dicts)</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.log_metrics">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">log_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metrics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyperparams</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/log_metrics.html#log_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.log_metrics" title="Link to this definition"></a></dt>
+<dd><p>At first call, initializes a new MLFlow run. It is not required to be consistent (different metrics, different step etc.)</p>
+<p>If you want to start MLFlow without logging, use the following code in a .ipynb cell:
+&gt;&gt;&gt; import subprocess
+&gt;&gt;&gt; p = subprocess.Popen([“mlflow”, “ui”, “–host”, “127.0.0.1”, “–port”, “5000”])
+Example:
+&gt;&gt;&gt; for idx, batch in enumerate(batch_indices):
+…    stuff
+…    log_metrics({“loss” : loss}, step=(idx, len(batch_indices)))</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>metrics (dict[str, Any]): metrics dict
+step (Tuple[int, int]): the current step and total steps. It is incremented automatically if none
+hyperparams (dict[str, Any]): hyperparameters dict (can contain even objects as values). Only the first pass will be considered.
+experiment_name (str): The tab where to log the experiment (even with that, you can merge them inside mlflow when comparing results)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.log_record">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">log_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'flashml_logger.jsonl'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment_log</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'a'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">utf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'utf-8'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/logging_jsonl.html#log_record"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.log_record" title="Link to this definition"></a></dt>
+<dd><p>Records a dictionary as a json object in a jsonl file.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>record (dict | str): A message or a dictionary
+path (flashml_logger.jsonl): _description_
+mode (str, optional): _description_. Defaults to “a”.
+utf (str, optional): _description_. Defaults to “utf-8”.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.parallel_for">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">parallel_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fromInclusive</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toExclusive</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">callable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/parallel.html#parallel_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.parallel_for" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.parallel_foreach">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">parallel_foreach</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lst</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">callable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/parallel.html#parallel_foreach"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.parallel_foreach" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_chat">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_chat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'notebook'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Chat</span> <span class="pre">Conversation</span> <span class="pre">(click</span> <span class="pre">and</span> <span class="pre">drag</span> <span class="pre">to</span> <span class="pre">scroll)'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">900</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">600</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Figure</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/plot_chat.html#plot_chat"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_chat" title="Link to this definition"></a></dt>
+<dd><p>Create and display a scrollable (with click and drag) chat conversation plot using Plotly.</p>
+<dl>
+<dt>Args:</dt><dd><p>conversation: List of dictionaries with ‘role’ and ‘content’ keys
+renderer: Plotly renderer to use (default: “notebook”)
+title: Plot title
+width: Plot width in pixels
+height: Plot height in pixels</p>
+</dd>
+<dt>Returns:</dt><dd><p>Plotly Figure object</p>
+</dd>
+<dt>Example:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">example_conversation</span> <span class="o">=</span> <span class="p">[</span>
+<span class="go">      {&#39;role&#39;: &#39;system&#39;, &#39;content&#39;: &#39;You are a helpful assistant designed to provide detailed explanations.&#39;},</span>
+<span class="go">      {&#39;role&#39;: &#39;user&#39;, &#39;content&#39;: &#39;What is the capital of France?&#39;},</span>
+<span class="go">      {&#39;role&#39;: &#39;assistant&#39;, &#39;content&#39;: &#39;The capital and largest city of France is Paris. It is known for its art, fashion, gastronomy and culture. Its 19th-century cityscape is crisscrossed by wide boulevards and the River Seine.&#39;},</span>
+<span class="go">      {&#39;role&#39;: &#39;user&#39;, &#39;content&#39;: &#39;What is the tallest mountain in the world and where is it located?&#39;},</span>
+<span class="go">      {&#39;role&#39;: &#39;assistant&#39;, &#39;content&#39;: &#39;The tallest mountain in the world is Mount Everest (also known as Sagarmatha in Nepali and Chomolungma in Tibetan). It is located in the Mahalangur Himalayas sub-range of the Himalayas, straddling the border between Nepal and the Tibet Autonomous Region of China.&#39;}</span>
+<span class="go">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># To run the example, uncomment the following line:</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># plot_chat(example_conversation)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_confusion_matrix">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_confusion_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predicted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'macro'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Blues'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'vscode'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/plot_confusion_matrix.html#plot_confusion_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_confusion_matrix" title="Link to this definition"></a></dt>
+<dd><p>Computes metrics and plots a square, auto-adjusting confusion matrix using Plotly.
+Each cell displays both the unnormalized (bold) and normalized count.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>predicted (list | np.ndarray): The predicted values.
+target (list | np.ndarray): The target values.
+classes (list, optional): List of class names for display. If None, inferred from data.
+average (str, optional): Averaging method for metrics. Defaults to “macro”.
+title (str, optional): Title for the plot.
+cmap (str, optional): Plotly colorscale for the heatmap. Defaults to “Blues”.
+renderer (str, optional): Plotly renderer to use. Defaults to “vscode”.</p>
+</dd>
+<dt>Returns:</dt><dd><p>tuple: A tuple containing (accuracy, precision, recall, f1_score).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_dist">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">freq_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'ascending'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'descending'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Distribution'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Item'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Frequency'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bar_color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'skyblue'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rotation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">90</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_values_on_top_of_the_bar</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'vscode'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/flashml/main_tools/plot_distribution.html#plot_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_dist" title="Link to this definition"></a></dt>
+<dd><p>Plots a bar chart distribution from a frequency dictionary using Plotly.</p>
+<dl>
+<dt>Args:</dt><dd><p>freq_dict: Dictionary with items as keys and frequencies as values. (e.g. dict = {‘apple’: 5, ‘banana’: 3})
+sort_values: How to sort the items. Can be ‘ascending’, ‘descending’, or None (default).
+top_n: Display only the top N items.
+title: Title of the plot.
+x_label: Label for the x-axis.
+y_label: Label for the y-axis.
+bar_color: Color of the bars.
+rotation: Rotation angle for x-axis tick labels.
+max_xticks: Maximum number of x-axis ticks to display labels for.</p>
+<blockquote>
+<div><p>If exceeded, labels are hidden.</p>
+</div></blockquote>
+<p>show_values_on_top_of_the_bar: If True, displays the frequency value on top of each bar.
+grid: If True, adds a grid to the plot.
+renderer: Renderer for displaying the plot (default: “vscode”).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_graph">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Y'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linestyle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'-'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/plot_graph.html#plot_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_graph" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_rt_graph">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_rt_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Y'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linestyle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'-'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/plot_rt_graph.html#plot_rt_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_rt_graph" title="Link to this definition"></a></dt>
+<dd><p>Plot or update a real-time graph.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name (str): The name of window to plot in. You can run multiple graph windows in the same time, specifying different names.
+value (Union[int, float] | list | tuple): The value(s) to plot.
+step (int | list | tuple, optional): The step(s) to plot. Defaults to None.
+x_label, y_label, color, linestyle, marker: Plot styling parameters.
+x_margin_factor (float): Factor for x-axis margin (default 0.05 = 5%).</p>
+</dd>
+<dt>Returns:</dt><dd><p>dict: All created/updated graphs.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_tensor">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colorscale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Viridis'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'vscode'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/plot_tensor.html#plot_tensor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_tensor" title="Link to this definition"></a></dt>
+<dd><p>Creates interactive Plotly visualizations for 0D, 1D, 2D, and 3D tensors.</p>
+<p>Features:
+- 0D: Single value display with gauge
+- 1D: Interactive bar chart and heatmap
+- 2D: Interactive heatmap with hover details
+- 3D: Animated slice navigation + 3D surface plots + interactive slice selector</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>tensor: Input tensor (numpy array, torch tensor, or list)
+title: Plot title
+colorscale: Plotly colorscale (‘Viridis’, ‘Plasma’, ‘Turbo’, ‘RdBu’, etc.)
+show_values: Whether to show values on heatmaps (for small tensors)
+animation_frame_duration: Animation speed for 3D tensor slices (ms)
+width/height: Figure dimensions (auto-calculated if None)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Plotly figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.plot_tsne">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">plot_tsne</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'3d'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perplexity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'t-SNE</span> <span class="pre">Visualization'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'vscode'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/plot_tsne.html#plot_tsne"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.plot_tsne" title="Link to this definition"></a></dt>
+<dd><p>Plot in browser the t-SNE 2D/3D of the given data using Plotly.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data (numpy array): A numpy array of shape (n_samples, n_features) containing the data to be plotted.
+labels (array/list of length data.shape[0], optional): Labels of the samples to see if clustering was correct. If None, uses continuous coloring.
+mode (str): Either ‘2d’ or ‘3d’ for the type of visualization.
+verbose (int): Verbosity level for t-SNE.
+perplexity (float): The perplexity parameter for t-SNE.
+n_iter (int): Maximum number of iterations for t-SNE.
+title (str): Title for the plot.
+point_size (int): Size of the scatter points.</p>
+</dd>
+<dt>Returns:</dt><dd><p>tsne_results (numpy array): A numpy array of shape (n_samples, 2|3) containing the t-SNE mapped data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.resource_monitor">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">resource_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/resource_monitor.html#resource_monitor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.resource_monitor" title="Link to this definition"></a></dt>
+<dd><p>Launches the resource monitor GUI as a completely detached process.
+Prevents launching if already running (checks lock file).
+The monitor will continue running independently even after the parent process exits.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.sample_from">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">sample_from</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_samples</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#sample_from"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.sample_from" title="Link to this definition"></a></dt>
+<dd><p>Sample n elements from a list with or without replacement.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>items (list | zip): The input list to sample from
+n_samples (int): Number of samples to draw
+with_replacement (bool): If True, sample with replacement; if False, sample without replacement</p>
+</dd>
+<dt>Returns:</dt><dd><p>list: A list containing the sampled elements</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If n_samples is greater than list length when sampling without replacement</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.shuffle_df">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">shuffle_df</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#shuffle_df"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.shuffle_df" title="Link to this definition"></a></dt>
+<dd><p>Shuffles dataframe elements (or element-wise shuffling of multiple dataframes of similar length)
+Args:</p>
+<blockquote>
+<div><p>df: DataFrame (Polars or Pandas) or list of DataFrames</p>
+</div></blockquote>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Shuffled DataFrame(s)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.shuffle_tensor">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">shuffle_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">torch_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/manipulation.html#shuffle_tensor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.shuffle_tensor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.stress_cpu">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">stress_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">duration_seconds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrix_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2048</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/benchmark.html#stress_cpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.stress_cpu" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.stress_gpu">
+<span class="sig-prename descclassname"><span class="pre">flashml.</span></span><span class="sig-name descname"><span class="pre">stress_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">duration_seconds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrix_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8192</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/main_tools/benchmark.html#stress_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.stress_gpu" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modules.html" class="btn btn-neutral float-left" title="flashml" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="flashml.legacy.html" class="btn btn-neutral float-right" title="flashml.legacy package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, kbradu.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

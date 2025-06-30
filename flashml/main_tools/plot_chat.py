@@ -1,207 +1,297 @@
-### begin of file
+import html
+import textwrap
+from typing import Dict, List
+
+import plotly.graph_objects as go
+import plotly.io as pio
 
 
-class _ConversationViewer:
+class ChatPlotter:
     """
-    Internal class to manage the conversation display window.
-    Configuration constants are defined within this class.
+    A chat conversation plotter using Plotly with VS Code-style theming.
+    Displays actual messages in a scrollable chat-like interface.
     """
 
-    # --- Configuration ---
-    BG_COLOR = "#F5F5F5"
-    ASSISTANT_BG = "#e6eeff"
-    USER_BG = "#D1E7DD"
-    SYSTEM_BG = "#FFF9C4"
-    ASSISTANT_FG = "#000000"
-    USER_FG = "#000000"
-    SYSTEM_FG = "#120AE8"
-    FONT_FAMILY = "Segoe UI"
-    FONT_SIZE = 10
-    BUBBLE_PAD_X = 8
-    BUBBLE_PAD_Y = 4
-    MESSAGE_PAD_Y = 6
-    BORDER_WIDTH = 1
-    INITIAL_WIDTH = 600
-    INITIAL_HEIGHT = 500
-    WRAP_PADDING = 40  # Pixels subtracted from canvas width for wraplength
+    # VS Code-inspired color scheme
+    THEME_CONFIG = {
+        "bg_color": "#1c1c1f",  # VS Code dark background
+        "paper_color": "#2C2C2E",  # Slightly lighter for paper
+        "text_color": "#cccccc",  # VS Code light text
+        "grid_color": "#3e3e3e",  # Subtle grid lines
+        # Message bubble colors
+        "user_bg": "#0e639c",  # VS Code blue
+        "user_text": "#ffffff",
+        "user_border": "#264f78",
+        "assistant_bg": "#107c10",  # VS Code green
+        "assistant_text": "#ffffff",
+        "assistant_border": "#14432a",
+        "system_bg": "#ca5010",  # VS Code orange
+        "system_text": "#ffffff",
+        "system_border": "#5d2e0a",
+    }
 
-    def __init__(self, root, conversation):
-        import tkinter as tk
-        from tkinter import ttk
+    def __init__(self, renderer: str = "vscode"):
+        """
+        Initialize the chat plotter.
 
-        self.root = root
-        self.conversation = conversation
-        self.message_labels = []  # Keep track of labels to update wraplength
+        Args:
+            renderer: Plotly renderer to use (default: "vscode")
+        """
+        self.renderer = renderer
+        self._setup_theme()
 
-        self.root.title("flashml")
-        self.root.geometry(
-            f"{_ConversationViewer.INITIAL_WIDTH}x{_ConversationViewer.INITIAL_HEIGHT}"
-        )
-        self.root.configure(bg=_ConversationViewer.BG_COLOR)
-
-        # --- Main Frame ---
-        main_frame = ttk.Frame(root, padding=10)
-        main_frame.pack(fill="both", expand=True)
-        main_frame.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=1)
-
-        # --- Canvas for Scrolling ---
-        self.canvas = tk.Canvas(
-            main_frame, bg=_ConversationViewer.BG_COLOR, highlightthickness=0
-        )
-
-        # --- Scrollbar ---
-        scrollbar = ttk.Scrollbar(
-            main_frame, orient="vertical", command=self.canvas.yview
-        )
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Grid layout for canvas and scrollbar
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-
-        # --- Frame inside Canvas to Hold Messages ---
-        self.conversation_frame = tk.Frame(self.canvas, bg=_ConversationViewer.BG_COLOR)
-        self.canvas_window = self.canvas.create_window(
-            (0, 0), window=self.conversation_frame, anchor="nw"
+    def _setup_theme(self):
+        """Setup the VS Code-inspired theme for Plotly."""
+        # Create custom template
+        vscode_template = go.layout.Template(
+            layout=go.Layout(
+                paper_bgcolor=self.THEME_CONFIG["paper_color"],
+                plot_bgcolor=self.THEME_CONFIG["bg_color"],
+                font=dict(
+                    color=self.THEME_CONFIG["text_color"],
+                    family="'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+                    size=12,
+                ),
+                margin=dict(l=10, r=10, t=50, b=10),
+            )
         )
 
-        # --- Bind Events ---
-        self.conversation_frame.bind("<Configure>", self._on_frame_configure)
-        self.canvas.bind("<Configure>", self._on_canvas_configure)
-        # Bind mouse wheel scrolling universally within the root window
-        self.root.bind_all("<MouseWheel>", self._on_mousewheel)  # Windows/macOS
-        self.root.bind_all("<Button-4>", self._on_mousewheel)  # Linux scroll up
-        self.root.bind_all("<Button-5>", self._on_mousewheel)  # Linux scroll down
+        # Register the template
+        pio.templates["vscode"] = vscode_template
+        pio.templates.default = "vscode"
 
-        # --- Add Messages ---
-        self._populate_messages()
+    def _wrap_text(self, text: str, width: int = 80) -> str:
+        """Wrap text to specified width and escape HTML."""
+        # Escape HTML characters
+        text = html.escape(text)
+        # Wrap text
+        wrapped_lines = textwrap.wrap(text, width=width)
+        return "<br>".join(wrapped_lines)
 
-        # Update geometry and scroll region after initial population
-        # Need to call update_idletasks to ensure winfo_width is accurate initially
-        self.root.update_idletasks()
-        self._on_canvas_configure()  # Call explicitly to set initial wraplength and scroll region
+    def _get_role_config(self, role: str) -> Dict:
+        """Get styling configuration for a specific role."""
+        role_configs = {
+            "user": {
+                "bg_color": self.THEME_CONFIG["user_bg"],
+                "text_color": self.THEME_CONFIG["user_text"],
+                "border_color": self.THEME_CONFIG["user_border"],
+                "align": "right",
+                "x_pos": 0.95,
+                "x_anchor": "right",
+            },
+            "assistant": {
+                "bg_color": self.THEME_CONFIG["assistant_bg"],
+                "text_color": self.THEME_CONFIG["assistant_text"],
+                "border_color": self.THEME_CONFIG["assistant_border"],
+                "align": "left",
+                "x_pos": 0.05,
+                "x_anchor": "left",
+            },
+            "system": {
+                "bg_color": self.THEME_CONFIG["system_bg"],
+                "text_color": self.THEME_CONFIG["system_text"],
+                "border_color": self.THEME_CONFIG["system_border"],
+                "align": "center",
+                "x_pos": 0.5,
+                "x_anchor": "center",
+            },
+        }
+        return role_configs.get(role, role_configs["system"])
 
-    def _populate_messages(self):
-        """Adds all messages from the conversation."""
-        for message in self.conversation:
-            role = message.get("role", "unknown")
-            content = message.get("content", "")
-            self._add_message(role, content)
+    def _create_message_annotation(self, message: Dict, y_position: float) -> Dict:
+        """Create a Plotly annotation for a single message."""
+        role = message.get("role", "system")
+        content = message.get("content", "")
+        config = self._get_role_config(role)
 
-    def _add_message(self, role, message_text):
-        import tkinter as tk
+        # Wrap the content
+        wrapped_content = self._wrap_text(content, width=60)
 
-        """Adds a single message bubble to the conversation frame."""
-        # Determine styling based on role using class constants
-        if role == "user":
-            bg_color = _ConversationViewer.USER_BG
-            fg_color = _ConversationViewer.USER_FG
-            justify = "right"
-            anchor = "e"
-        elif role == "assistant":
-            bg_color = _ConversationViewer.ASSISTANT_BG
-            fg_color = _ConversationViewer.ASSISTANT_FG
-            justify = "left"
-            anchor = "w"
-        else:  # system or other
-            bg_color = _ConversationViewer.SYSTEM_BG
-            fg_color = _ConversationViewer.SYSTEM_FG
-            justify = "left"
-            anchor = "w"
+        # Create the message text with role header
+        message_text = f"<b>{role.upper()}</b><br>{wrapped_content}"
 
-        # Outer frame for alignment and vertical padding
-        bubble_outer_frame = tk.Frame(
-            self.conversation_frame, bg=_ConversationViewer.BG_COLOR
+        # Create annotation
+        annotation = dict(
+            x=config["x_pos"],
+            y=y_position,
+            text=message_text,
+            showarrow=False,
+            xref="paper",
+            yref="y",
+            xanchor=config["x_anchor"],
+            yanchor="top",  # Anchor annotation to its top edge
+            align=config["align"],
+            font=dict(
+                size=11,
+                color=config["text_color"],
+                family="'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+            ),
+            bgcolor=config["bg_color"],
+            bordercolor=config["border_color"],
+            borderwidth=1,
+            borderpad=8,
+            opacity=0.9,
         )
-        bubble_outer_frame.pack(
-            fill="x", pady=(0, _ConversationViewer.MESSAGE_PAD_Y), anchor=anchor
+
+        return annotation
+
+    def plot_chat(
+        self,
+        conversation: List[Dict],
+        title: str = "Chat Conversation",
+        width: int = 900,
+        height: int = 600,
+    ) -> go.Figure:
+        """
+        Create and display a scrollable chat conversation plot.
+        This version dynamically calculates message positions to prevent overlap on scroll.
+
+        Args:
+            conversation: List of message dictionaries with 'role' and 'content'
+            title: Plot title
+            width: Plot width in pixels
+            height: Plot height in pixels
+
+        Returns:
+            Plotly Figure object
+        """
+
+        if not conversation:
+            raise ValueError("Conversation cannot be empty")
+
+        fig = go.Figure()
+
+        annotations = []
+        y_scatter_positions = []
+        current_y = 0.0
+
+        # Define arbitrary units for layout. These control the scale of the y-axis.
+        LINE_HEIGHT_UNIT = (
+            1.0  # The vertical space each line of text occupies in y-axis units.
+        )
+        PADDING_UNIT = 2.5  # The vertical padding between messages in y-axis units.
+
+        # Estimate the height of each message and position it accordingly, from top to bottom.
+        for message in conversation:
+            # Determine the number of lines in the message for height calculation
+            wrapped_content = self._wrap_text(message.get("content", ""), width=60)
+            num_lines = wrapped_content.count("<br>") + 1
+
+            # Calculate the total height of the message box in data units
+            message_height = num_lines * LINE_HEIGHT_UNIT
+
+            # Position the top of the current message bubble at current_y
+            y_pos = current_y
+            y_scatter_positions.append(y_pos)
+
+            # Create and store the annotation for the current message
+            annotation = self._create_message_annotation(message, y_pos)
+            annotations.append(annotation)
+
+            # Update current_y for the *next* message, moving downwards on the y-axis
+            current_y -= message_height + PADDING_UNIT
+
+        # The total y-range now spans from the bottom-most point to the top
+        y_range_bottom = current_y
+        y_range_top = PADDING_UNIT  # Add a little padding at the top
+
+        # Add invisible scatter points to establish the y-axis coordinate system
+        # This is crucial for making the y-axis exist and be scrollable.
+        fig.add_trace(
+            go.Scatter(
+                x=[0.5] * len(conversation),
+                y=y_scatter_positions,
+                mode="markers",
+                marker=dict(size=0.1, color="rgba(0,0,0,0)"),  # Invisible markers
+                showlegend=False,
+                hoverinfo="skip",
+            )
         )
 
-        # Inner bubble frame with background and border
-        bubble_frame = tk.Frame(
-            bubble_outer_frame,
-            bg=bg_color,
-            borderwidth=_ConversationViewer.BORDER_WIDTH,
-            relief="solid",
-            padx=0,
-            pady=0,
+        # Update layout with all annotations and correct axis configuration
+        fig.update_layout(
+            title=dict(
+                text=title,
+                font=dict(size=16, color=self.THEME_CONFIG["text_color"]),
+                x=0.5,
+            ),
+            width=width,
+            height=height,
+            annotations=annotations,
+            xaxis=dict(
+                range=[0, 1],
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+                visible=False,
+                fixedrange=True,  # Prevent horizontal scrolling
+            ),
+            yaxis=dict(
+                # The range encompasses the entire conversation.
+                range=[y_range_bottom, y_range_top],
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+                visible=False,
+                # IMPORTANT: This allows panning/scrolling on the y-axis
+                fixedrange=False,
+            ),
+            margin=dict(l=20, r=20, t=60, b=20),
+            dragmode="pan",  # Set default interaction to 'pan' for scrolling
+            paper_bgcolor=self.THEME_CONFIG["paper_color"],
+            plot_bgcolor=self.THEME_CONFIG["bg_color"],
         )
-        bubble_frame.pack(anchor=anchor, padx=5, pady=0)
 
-        # Label for the text
-        display_text = f"{role.capitalize()}:\n{message_text}"
-        label = tk.Label(
-            bubble_frame,
-            text=display_text,
-            font=(_ConversationViewer.FONT_FAMILY, _ConversationViewer.FONT_SIZE),
-            fg=fg_color,
-            bg=bg_color,
-            justify=justify,
-            anchor="nw",
-            padx=_ConversationViewer.BUBBLE_PAD_X,
-            pady=_ConversationViewer.BUBBLE_PAD_Y,
-            # wraplength is set dynamically
-        )
-        label.pack(fill="x", expand=True)
-        self.message_labels.append(label)
+        # Configure the mode bar and interactions
+        config = {
+            "displayModeBar": True,
+            "displaylogo": False,
+            "modeBarButtonsToRemove": [
+                "select2d",
+                "lasso2d",
+                "autoScale2d",
+                "zoomIn2d",
+                "zoomOut2d",
+            ],
+            "scrollZoom": True,  # Enable zooming/scrolling with the mouse wheel
+            "doubleClick": "reset",
+        }
 
-    def _on_frame_configure(self, event=None):
-        """Update scroll region when the conversation frame's size changes."""
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_canvas_configure(self, event=None):
-        """Update wraplength and scroll region when canvas width changes."""
-        canvas_width = self.canvas.winfo_width()
-        if canvas_width <= 0:
-            return  # Avoid calculation if width isn't determined yet
-
-        new_wraplength = max(1, canvas_width - _ConversationViewer.WRAP_PADDING)
-
-        for label in self.message_labels:
-            if label.winfo_exists():  # Check if widget still exists
-                label.configure(wraplength=new_wraplength)
-
-        # Ensure the frame width matches the canvas width for proper wrapping
-        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-        # Update scroll region after potential height changes due to wrapping
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_mousewheel(self, event):
-        """Handle mouse wheel scrolling."""
-        # Determine scroll direction based on platform specifics
-        if event.num == 5 or event.delta < 0:
-            delta = 1  # Scroll down
-        elif event.num == 4 or event.delta > 0:
-            delta = -1  # Scroll up
-        else:
-            delta = 0
-
-        # Check if the canvas is scrollable vertically
-        scroll_info = self.canvas.yview()
-        if scroll_info[0] > 0.0 or scroll_info[1] < 1.0:
-            self.canvas.yview_scroll(delta, "units")
+        # Show the plot
+        fig.show(renderer=self.renderer, config=config)
+        return fig
 
 
-def plot_chat(conversation: list[dict]):
+def plot_chat(
+    conversation: List[Dict],
+    renderer: str = "notebook",
+    title: str = "Chat Conversation",
+    width: int = 900,
+    height: int = 600,
+) -> go.Figure:
     """
-    Creates and displays a window showing the provided conversation.
+    Create and display a scrollable (with click and drag) chat conversation plot using Plotly.
 
     Args:
-        conversation (list): A list of dictionaries, where each dictionary
-                             has 'role' (str) and 'content' (str) keys.
+        conversation: List of dictionaries with 'role' and 'content' keys
+        renderer: Plotly renderer to use (default: "notebook")
+        title: Plot title
+        width: Plot width in pixels
+        height: Plot height in pixels
+
+    Returns:
+        Plotly Figure object
 
     Example:
         >>> example_conversation = [
-             {'role': 'system', 'content': 'You are a helpful assistant designed to provide detailed explanations.'},
-             {'role': 'user', 'content': 'What is the capital of France?'},
-             {'role': 'assistant', 'content': 'The capital and largest city of France is Paris. It is known for its art, fashion, gastronomy and culture. Its 19th-century cityscape is crisscrossed by wide boulevards and the River Seine.'},
-             {'role': 'user', 'content': 'What is the tallest mountain in the world and where is it located?'},
-             {'role': 'assistant', 'content': 'The tallest mountain in the world is Mount Everest (also known as Sagarmatha in Nepali and Chomolungma in Tibetan). It is located in the Mahalangur Himalayas sub-range of the Himalayas, straddling the border between Nepal and the Tibet Autonomous Region of China.'}]
-        >>> plot_chat(example_conversation)
+              {'role': 'system', 'content': 'You are a helpful assistant designed to provide detailed explanations.'},
+              {'role': 'user', 'content': 'What is the capital of France?'},
+              {'role': 'assistant', 'content': 'The capital and largest city of France is Paris. It is known for its art, fashion, gastronomy and culture. Its 19th-century cityscape is crisscrossed by wide boulevards and the River Seine.'},
+              {'role': 'user', 'content': 'What is the tallest mountain in the world and where is it located?'},
+              {'role': 'assistant', 'content': 'The tallest mountain in the world is Mount Everest (also known as Sagarmatha in Nepali and Chomolungma in Tibetan). It is located in the Mahalangur Himalayas sub-range of the Himalayas, straddling the border between Nepal and the Tibet Autonomous Region of China.'}
+        ]
+        >>> # To run the example, uncomment the following line:
+        >>> # plot_chat(example_conversation)
     """
-    import tkinter as tk
-
-    root = tk.Tk()
-    app = _ConversationViewer(root, conversation)
-    root.mainloop()
+    plotter = ChatPlotter(renderer=renderer)
+    plotter.plot_chat(conversation, title, width, height)

@@ -18,14 +18,14 @@ def bell():
             # Play the default asterisk sound, common for notifications
             # Other options: winsound.MB_OK, winsound.MB_ICONEXCLAMATION, etc.
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
-            print("Process finished (Windows sound played).")
+            # print("Process finished (Windows sound played).")
 
         elif system_platform == "Darwin":  # macOS
             # On macOS, printing the BEL character often works in the terminal
             # Alternatively, use afplay for a specific sound file
             print("\a")
             sys.stdout.flush()  # Ensure the character is printed immediately
-            print("Process finished (macOS alert attempted).")
+            # print("Process finished (macOS alert attempted).")
             # Uncomment below to play a specific system sound (if \a doesn't work)
             # os.system('afplay /System/Library/Sounds/Sosumi.aiff')
 
@@ -34,7 +34,7 @@ def bell():
             # if the terminal supports it and system sounds are configured.
             print("\a")
             sys.stdout.flush()  # Ensure the character is printed immediately
-            print("Process finished (Linux alert attempted).")
+            # print("Process finished (Linux alert attempted).")
             # Alternative for systems using PulseAudio (might need paplay installed)
             # os.system('paplay /usr/share/sounds/freedesktop/stereo/dialog-information.oga')
             # Alternative for systems using ALSA (might need aplay installed)
@@ -47,11 +47,11 @@ def bell():
             print(f"Process finished (Generic alert attempted on {system_platform}).")
 
     except Exception as e:
-        print(f"Could not play sound due to an error: {e}")
+        # print(f"Could not play sound due to an error: {e}")
         # Still print the BEL character as a last resort
         print("\a")
         sys.stdout.flush()
-        print("Process finished (sound failed, fallback alert attempted).")
+        # print("Process finished (sound failed, fallback alert attempted).")
 
 
 def play_waiting_sound():

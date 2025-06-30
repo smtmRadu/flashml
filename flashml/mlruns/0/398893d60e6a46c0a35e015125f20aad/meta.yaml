@@ -1,0 +1,15 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/398893d60e6a46c0a35e015125f20aad/artifacts
+end_time: 1750587120712
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 398893d60e6a46c0a35e015125f20aad
+run_name: dummy_quantile
+run_uuid: 398893d60e6a46c0a35e015125f20aad
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750587120675
+status: 3
+tags: []
+user_id: radup

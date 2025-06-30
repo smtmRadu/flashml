@@ -1,0 +1,15 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/7e26a0047d7a4a1281dbf3e1676d4ec1/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 7e26a0047d7a4a1281dbf3e1676d4ec1
+run_name: omniscient-dog-51
+run_uuid: 7e26a0047d7a4a1281dbf3e1676d4ec1
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1751093091424
+status: 1
+tags: []
+user_id: radup

@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/43c252a465964279847282b34bb3b1ea/artifacts
+deleted_time: 1750586511473
+end_time: 1750582877641
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: 43c252a465964279847282b34bb3b1ea
+run_name: dummy_median
+run_uuid: 43c252a465964279847282b34bb3b1ea
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750582877619
+status: 3
+tags: []
+user_id: radup

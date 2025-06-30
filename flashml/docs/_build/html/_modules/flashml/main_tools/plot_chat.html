@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.main_tools.plot_chat &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.main_tools.plot_chat</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">plotly.graph_objects</span> <span class="k">as</span> <span class="nn">go</span>
+<span class="kn">import</span> <span class="nn">plotly.io</span> <span class="k">as</span> <span class="nn">pio</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Dict</span>
+<span class="kn">import</span> <span class="nn">textwrap</span>
+<span class="kn">import</span> <span class="nn">html</span>
+
+
+<span class="k">class</span> <span class="nc">ChatPlotter</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A chat conversation plotter using Plotly with VS Code-style theming.</span>
+<span class="sd">    Displays actual messages in a scrollable chat-like interface.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># VS Code-inspired color scheme</span>
+    <span class="n">THEME_CONFIG</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;bg_color&quot;</span><span class="p">:</span> <span class="s2">&quot;#1c1c1f&quot;</span><span class="p">,</span>  <span class="c1"># VS Code dark background</span>
+        <span class="s2">&quot;paper_color&quot;</span><span class="p">:</span> <span class="s2">&quot;#2C2C2E&quot;</span><span class="p">,</span>  <span class="c1"># Slightly lighter for paper</span>
+        <span class="s2">&quot;text_color&quot;</span><span class="p">:</span> <span class="s2">&quot;#cccccc&quot;</span><span class="p">,</span>  <span class="c1"># VS Code light text</span>
+        <span class="s2">&quot;grid_color&quot;</span><span class="p">:</span> <span class="s2">&quot;#3e3e3e&quot;</span><span class="p">,</span>  <span class="c1"># Subtle grid lines</span>
+        <span class="c1"># Message bubble colors</span>
+        <span class="s2">&quot;user_bg&quot;</span><span class="p">:</span> <span class="s2">&quot;#0e639c&quot;</span><span class="p">,</span>  <span class="c1"># VS Code blue</span>
+        <span class="s2">&quot;user_text&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;user_border&quot;</span><span class="p">:</span> <span class="s2">&quot;#264f78&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;assistant_bg&quot;</span><span class="p">:</span> <span class="s2">&quot;#107c10&quot;</span><span class="p">,</span>  <span class="c1"># VS Code green</span>
+        <span class="s2">&quot;assistant_text&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;assistant_border&quot;</span><span class="p">:</span> <span class="s2">&quot;#14432a&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;system_bg&quot;</span><span class="p">:</span> <span class="s2">&quot;#ca5010&quot;</span><span class="p">,</span>  <span class="c1"># VS Code orange</span>
+        <span class="s2">&quot;system_text&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;system_border&quot;</span><span class="p">:</span> <span class="s2">&quot;#5d2e0a&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">renderer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;vscode&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the chat plotter.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            renderer: Plotly renderer to use (default: &quot;vscode&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">renderer</span> <span class="o">=</span> <span class="n">renderer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_theme</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_setup_theme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setup the VS Code-inspired theme for Plotly.&quot;&quot;&quot;</span>
+        <span class="c1"># Create custom template</span>
+        <span class="n">vscode_template</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">Template</span><span class="p">(</span>
+            <span class="n">layout</span><span class="o">=</span><span class="n">go</span><span class="o">.</span><span class="n">Layout</span><span class="p">(</span>
+                <span class="n">paper_bgcolor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;paper_color&quot;</span><span class="p">],</span>
+                <span class="n">plot_bgcolor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;bg_color&quot;</span><span class="p">],</span>
+                <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">color</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;text_color&quot;</span><span class="p">],</span>
+                    <span class="n">family</span><span class="o">=</span><span class="s2">&quot;&#39;Cascadia Code&#39;, &#39;Fira Code&#39;, &#39;Consolas&#39;, monospace&quot;</span><span class="p">,</span>
+                    <span class="n">size</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">l</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Register the template</span>
+        <span class="n">pio</span><span class="o">.</span><span class="n">templates</span><span class="p">[</span><span class="s2">&quot;vscode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vscode_template</span>
+        <span class="n">pio</span><span class="o">.</span><span class="n">templates</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="s2">&quot;vscode&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_wrap_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">80</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrap text to specified width and escape HTML.&quot;&quot;&quot;</span>
+        <span class="c1"># Escape HTML characters</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">html</span><span class="o">.</span><span class="n">escape</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+        <span class="c1"># Wrap text</span>
+        <span class="n">wrapped_lines</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">width</span><span class="p">)</span>
+        <span class="k">return</span> <span class="s2">&quot;&lt;br&gt;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">wrapped_lines</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_role_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">role</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get styling configuration for a specific role.&quot;&quot;&quot;</span>
+        <span class="n">role_configs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;bg_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;user_bg&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;text_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;user_text&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;border_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;user_border&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;x_pos&quot;</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">,</span>
+                <span class="s2">&quot;x_anchor&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;assistant&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;bg_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;assistant_bg&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;text_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;assistant_text&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;border_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;assistant_border&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;x_pos&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span>
+                <span class="s2">&quot;x_anchor&quot;</span><span class="p">:</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;bg_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;system_bg&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;text_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;system_text&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;border_color&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;system_border&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;x_pos&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+                <span class="s2">&quot;x_anchor&quot;</span><span class="p">:</span> <span class="s2">&quot;center&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">role_configs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">role</span><span class="p">,</span> <span class="n">role_configs</span><span class="p">[</span><span class="s2">&quot;system&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_create_message_annotation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">y_position</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Plotly annotation for a single message.&quot;&quot;&quot;</span>
+        <span class="n">role</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_role_config</span><span class="p">(</span><span class="n">role</span><span class="p">)</span>
+
+        <span class="c1"># Wrap the content</span>
+        <span class="n">wrapped_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_text</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+
+        <span class="c1"># Create the message text with role header</span>
+        <span class="n">message_text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">role</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;</span><span class="si">{</span><span class="n">wrapped_content</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Create annotation</span>
+        <span class="n">annotation</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;x_pos&quot;</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">y_position</span><span class="p">,</span>
+            <span class="n">text</span><span class="o">=</span><span class="n">message_text</span><span class="p">,</span>
+            <span class="n">showarrow</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">xref</span><span class="o">=</span><span class="s2">&quot;paper&quot;</span><span class="p">,</span>
+            <span class="n">yref</span><span class="o">=</span><span class="s2">&quot;y&quot;</span><span class="p">,</span>
+            <span class="n">xanchor</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;x_anchor&quot;</span><span class="p">],</span>
+            <span class="n">yanchor</span><span class="o">=</span><span class="s2">&quot;top&quot;</span><span class="p">,</span>  <span class="c1"># Anchor annotation to its top edge</span>
+            <span class="n">align</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;align&quot;</span><span class="p">],</span>
+            <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;text_color&quot;</span><span class="p">],</span>
+                <span class="n">family</span><span class="o">=</span><span class="s2">&quot;&#39;Cascadia Code&#39;, &#39;Fira Code&#39;, &#39;Consolas&#39;, monospace&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">bgcolor</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;bg_color&quot;</span><span class="p">],</span>
+            <span class="n">bordercolor</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;border_color&quot;</span><span class="p">],</span>
+            <span class="n">borderwidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">borderpad</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+            <span class="n">opacity</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">annotation</span>
+
+    <span class="k">def</span> <span class="nf">plot_chat</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">conversation</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span>
+        <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Chat Conversation&quot;</span><span class="p">,</span>
+        <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">900</span><span class="p">,</span>
+        <span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">600</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create and display a scrollable chat conversation plot.</span>
+<span class="sd">        This version dynamically calculates message positions to prevent overlap on scroll.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            conversation: List of message dictionaries with &#39;role&#39; and &#39;content&#39;</span>
+<span class="sd">            title: Plot title</span>
+<span class="sd">            width: Plot width in pixels</span>
+<span class="sd">            height: Plot height in pixels</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Plotly Figure object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">conversation</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Conversation cannot be empty&quot;</span><span class="p">)</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">()</span>
+
+        <span class="n">annotations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">y_scatter_positions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">current_y</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="c1"># Define arbitrary units for layout. These control the scale of the y-axis.</span>
+        <span class="n">LINE_HEIGHT_UNIT</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="mf">1.0</span>  <span class="c1"># The vertical space each line of text occupies in y-axis units.</span>
+        <span class="p">)</span>
+        <span class="n">PADDING_UNIT</span> <span class="o">=</span> <span class="mf">2.5</span>  <span class="c1"># The vertical padding between messages in y-axis units.</span>
+
+        <span class="c1"># Estimate the height of each message and position it accordingly, from top to bottom.</span>
+        <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">conversation</span><span class="p">:</span>
+            <span class="c1"># Determine the number of lines in the message for height calculation</span>
+            <span class="n">wrapped_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_text</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">width</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+            <span class="n">num_lines</span> <span class="o">=</span> <span class="n">wrapped_content</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;&lt;br&gt;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="c1"># Calculate the total height of the message box in data units</span>
+            <span class="n">message_height</span> <span class="o">=</span> <span class="n">num_lines</span> <span class="o">*</span> <span class="n">LINE_HEIGHT_UNIT</span>
+
+            <span class="c1"># Position the top of the current message bubble at current_y</span>
+            <span class="n">y_pos</span> <span class="o">=</span> <span class="n">current_y</span>
+            <span class="n">y_scatter_positions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_pos</span><span class="p">)</span>
+
+            <span class="c1"># Create and store the annotation for the current message</span>
+            <span class="n">annotation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_message_annotation</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">y_pos</span><span class="p">)</span>
+            <span class="n">annotations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span>
+
+            <span class="c1"># Update current_y for the *next* message, moving downwards on the y-axis</span>
+            <span class="n">current_y</span> <span class="o">-=</span> <span class="n">message_height</span> <span class="o">+</span> <span class="n">PADDING_UNIT</span>
+
+        <span class="c1"># The total y-range now spans from the bottom-most point to the top</span>
+        <span class="n">y_range_bottom</span> <span class="o">=</span> <span class="n">current_y</span>
+        <span class="n">y_range_top</span> <span class="o">=</span> <span class="n">PADDING_UNIT</span>  <span class="c1"># Add a little padding at the top</span>
+
+        <span class="c1"># Add invisible scatter points to establish the y-axis coordinate system</span>
+        <span class="c1"># This is crucial for making the y-axis exist and be scrollable.</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+            <span class="n">go</span><span class="o">.</span><span class="n">Scatter</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="p">[</span><span class="mf">0.5</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">conversation</span><span class="p">),</span>
+                <span class="n">y</span><span class="o">=</span><span class="n">y_scatter_positions</span><span class="p">,</span>
+                <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;markers&quot;</span><span class="p">,</span>
+                <span class="n">marker</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0)&quot;</span><span class="p">),</span>  <span class="c1"># Invisible markers</span>
+                <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">hoverinfo</span><span class="o">=</span><span class="s2">&quot;skip&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Update layout with all annotations and correct axis configuration</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+            <span class="n">title</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">text</span><span class="o">=</span><span class="n">title</span><span class="p">,</span>
+                <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;text_color&quot;</span><span class="p">]),</span>
+                <span class="n">x</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">width</span><span class="o">=</span><span class="n">width</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="n">height</span><span class="p">,</span>
+            <span class="n">annotations</span><span class="o">=</span><span class="n">annotations</span><span class="p">,</span>
+            <span class="n">xaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="nb">range</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+                <span class="n">showgrid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">showticklabels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">zeroline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">fixedrange</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Prevent horizontal scrolling</span>
+            <span class="p">),</span>
+            <span class="n">yaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="c1"># The range encompasses the entire conversation.</span>
+                <span class="nb">range</span><span class="o">=</span><span class="p">[</span><span class="n">y_range_bottom</span><span class="p">,</span> <span class="n">y_range_top</span><span class="p">],</span>
+                <span class="n">showgrid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">showticklabels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">zeroline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="c1"># IMPORTANT: This allows panning/scrolling on the y-axis</span>
+                <span class="n">fixedrange</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">l</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">20</span><span class="p">),</span>
+            <span class="n">dragmode</span><span class="o">=</span><span class="s2">&quot;pan&quot;</span><span class="p">,</span>  <span class="c1"># Set default interaction to &#39;pan&#39; for scrolling</span>
+            <span class="n">paper_bgcolor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;paper_color&quot;</span><span class="p">],</span>
+            <span class="n">plot_bgcolor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">THEME_CONFIG</span><span class="p">[</span><span class="s2">&quot;bg_color&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Configure the mode bar and interactions</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;displayModeBar&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;displaylogo&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;modeBarButtonsToRemove&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="s2">&quot;select2d&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;lasso2d&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;autoScale2d&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;zoomIn2d&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;zoomOut2d&quot;</span><span class="p">,</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;scrollZoom&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Enable zooming/scrolling with the mouse wheel</span>
+            <span class="s2">&quot;doubleClick&quot;</span><span class="p">:</span> <span class="s2">&quot;reset&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Show the plot</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">renderer</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fig</span>
+
+
+<div class="viewcode-block" id="plot_chat">
+<a class="viewcode-back" href="../../../flashml.html#flashml.plot_chat">[docs]</a>
+<span class="k">def</span> <span class="nf">plot_chat</span><span class="p">(</span>
+    <span class="n">conversation</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span>
+    <span class="n">renderer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;notebook&quot;</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Chat Conversation (click and drag to scroll)&quot;</span><span class="p">,</span>
+    <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">900</span><span class="p">,</span>
+    <span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">600</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create and display a scrollable (with click and drag) chat conversation plot using Plotly.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        conversation: List of dictionaries with &#39;role&#39; and &#39;content&#39; keys</span>
+<span class="sd">        renderer: Plotly renderer to use (default: &quot;notebook&quot;)</span>
+<span class="sd">        title: Plot title</span>
+<span class="sd">        width: Plot width in pixels</span>
+<span class="sd">        height: Plot height in pixels</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Plotly Figure object</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; example_conversation = [</span>
+<span class="sd">              {&#39;role&#39;: &#39;system&#39;, &#39;content&#39;: &#39;You are a helpful assistant designed to provide detailed explanations.&#39;},</span>
+<span class="sd">              {&#39;role&#39;: &#39;user&#39;, &#39;content&#39;: &#39;What is the capital of France?&#39;},</span>
+<span class="sd">              {&#39;role&#39;: &#39;assistant&#39;, &#39;content&#39;: &#39;The capital and largest city of France is Paris. It is known for its art, fashion, gastronomy and culture. Its 19th-century cityscape is crisscrossed by wide boulevards and the River Seine.&#39;},</span>
+<span class="sd">              {&#39;role&#39;: &#39;user&#39;, &#39;content&#39;: &#39;What is the tallest mountain in the world and where is it located?&#39;},</span>
+<span class="sd">              {&#39;role&#39;: &#39;assistant&#39;, &#39;content&#39;: &#39;The tallest mountain in the world is Mount Everest (also known as Sagarmatha in Nepali and Chomolungma in Tibetan). It is located in the Mahalangur Himalayas sub-range of the Himalayas, straddling the border between Nepal and the Tibet Autonomous Region of China.&#39;}</span>
+<span class="sd">        ]</span>
+<span class="sd">        &gt;&gt;&gt; # To run the example, uncomment the following line:</span>
+<span class="sd">        &gt;&gt;&gt; # plot_chat(example_conversation)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">plotter</span> <span class="o">=</span> <span class="n">ChatPlotter</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span>
+    <span class="n">plotter</span><span class="o">.</span><span class="n">plot_chat</span><span class="p">(</span><span class="n">conversation</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">height</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

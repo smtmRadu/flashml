@@ -1,39 +1,42 @@
 from typing import Literal
 
 
-def plot_distribution(
+def plot_dist(
     freq_dict: dict,
     sort_values: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     title: str = "Distribution",
     x_label: str = "Item",
     y_label: str = "Frequency",
-    figsize: tuple = (12, 6),
     bar_color: str = "skyblue",
     rotation: int = 90,
-    max_xticks: int = 100,
-    show_values: bool = False,
+    show_values_on_top_of_the_bar: bool = False,
     grid: bool = False,
 ) -> None:
     """
-    Plots a bar chart distribution from a frequency dictionary.
+    Plots a bar chart distribution from a frequency dictionary using Plotly.
 
     Args:
-        freq_dict: Dictionary with items as keys and frequencies as values.
+        freq_dict: Dictionary with items as keys and frequencies as values. (e.g. dict = {'apple': 5, 'banana': 3})
         sort_values: How to sort the items. Can be 'ascending', 'descending', or None (default).
         top_n: Display only the top N items.
         title: Title of the plot.
         x_label: Label for the x-axis.
         y_label: Label for the y-axis.
-        figsize: Tuple specifying the figure size.
         bar_color: Color of the bars.
         rotation: Rotation angle for x-axis tick labels.
         max_xticks: Maximum number of x-axis ticks to display labels for.
                      If exceeded, labels are hidden.
-        show_values: If True, displays the frequency value on top of each bar.
+        show_values_on_top_of_the_bar: If True, displays the frequency value on top of each bar.
         grid: If True, adds a grid to the plot.
+        renderer: Renderer for displaying the plot (default: "vscode").
     """
-    import matplotlib.pyplot as plt
+
+    import plotly.graph_objects as go
+    import plotly.io as pio
+
+    MAX_XTICKS: int = 100
+    pio.templates.default = "plotly_dark"
 
     if not isinstance(freq_dict, dict):
         raise TypeError("freq_dict must be a dictionary.")
@@ -65,39 +68,51 @@ def plot_distribution(
     keys, values = zip(*items)
     str_keys = [str(k) for k in keys]  # Ensure keys are strings for plotting
 
-    plt.figure(figsize=figsize)
-    bars = plt.bar(range(len(str_keys)), values, color=bar_color)
-
-    if len(str_keys) <= max_xticks:
-        plt.xticks(
-            range(len(str_keys)),
-            str_keys,
-            rotation=rotation,
-            ha="right" if rotation > 0 else "center",
+    # Create the bar chart
+    fig = go.Figure(
+        data=go.Bar(
+            x=str_keys,
+            y=values,
+            marker_color=bar_color,
+            text=values if show_values_on_top_of_the_bar else None,
+            textposition="outside" if show_values_on_top_of_the_bar else None,
+            texttemplate="%{text:.2f}"
+            if show_values_on_top_of_the_bar
+            and any(isinstance(v, float) for v in values)
+            else "%{text}"
+            if show_values_on_top_of_the_bar
+            else None,
         )
-    else:
-        plt.xticks([])  # Hide x-axis ticks if too many
+    )
 
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.title(title)
+    # Auto-adjust figure size based on number of items
+    num_items = len(str_keys)
+    width = max(1100, min(1200, num_items * 40))  # Scale width with number of items
+    height = max(500, min(800, 300 + num_items * 5))  # Scale height modestly
 
-    if grid:
-        plt.grid(axis="y", linestyle="--")
-
-    if show_values:
-        for bar in bars:
-            yval = bar.get_height()
-            plt.text(
-                bar.get_x() + bar.get_width() / 2.0,
-                yval + 0.05 * max(values),  # Adjust offset based on max value
-                f"{yval:.2f}"
-                if isinstance(yval, float)
-                else str(yval),  # Format float values
-                ha="center",
-                va="bottom",
-                fontsize=9,
-            )
-
-    plt.tight_layout()
-    plt.show()
+    # Update layout
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+        width=width,
+        height=height,
+        showlegend=False,
+        xaxis=dict(
+            tickangle=-rotation if rotation > 0 else 0,
+            showticklabels=len(str_keys) <= MAX_XTICKS,
+            showgrid=grid,
+        ),
+        yaxis=dict(
+            showgrid=grid,
+        ),
+        margin=dict(
+            l=50,
+            r=50,
+            t=80,
+            b=10
+            if len(str_keys) <= MAX_XTICKS
+            else 50,  # Adjust bottom margin for rotated labels
+        ),
+    )
+    return fig

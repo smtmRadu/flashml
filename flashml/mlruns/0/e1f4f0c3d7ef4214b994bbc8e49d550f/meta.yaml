@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/e1f4f0c3d7ef4214b994bbc8e49d550f/artifacts
+deleted_time: 1750073943428
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: e1f4f0c3d7ef4214b994bbc8e49d550f
+run_name: thundering-roo-63
+run_uuid: e1f4f0c3d7ef4214b994bbc8e49d550f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750067970145
+status: 1
+tags: []
+user_id: radup

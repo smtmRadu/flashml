@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.main_tools.plot_tsne &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.main_tools.plot_tsne</h1><div class="highlight"><pre>
+<div class="viewcode-block" id="plot_tsne">
+<a class="viewcode-back" href="../../../flashml.html#flashml.plot_tsne">[docs]</a>
+<span></span><span class="k">def</span> <span class="nf">plot_tsne</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">,</span>
+    <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;3d&quot;</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">perplexity</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">max_iter</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Visualization&quot;</span><span class="p">,</span>
+    <span class="n">point_size</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">renderer</span><span class="o">=</span><span class="s2">&quot;vscode&quot;</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot in browser the t-SNE 2D/3D of the given data using Plotly.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data (numpy array): A numpy array of shape (n_samples, n_features) containing the data to be plotted.</span>
+<span class="sd">        labels (array/list of length data.shape[0], optional): Labels of the samples to see if clustering was correct. If None, uses continuous coloring.</span>
+<span class="sd">        mode (str): Either &#39;2d&#39; or &#39;3d&#39; for the type of visualization.</span>
+<span class="sd">        verbose (int): Verbosity level for t-SNE.</span>
+<span class="sd">        perplexity (float): The perplexity parameter for t-SNE.</span>
+<span class="sd">        n_iter (int): Maximum number of iterations for t-SNE.</span>
+<span class="sd">        title (str): Title for the plot.</span>
+<span class="sd">        point_size (int): Size of the scatter points.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tsne_results (numpy array): A numpy array of shape (n_samples, 2|3) containing the t-SNE mapped data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">plotly.graph_objects</span> <span class="k">as</span> <span class="nn">go</span>
+    <span class="kn">import</span> <span class="nn">plotly.express</span> <span class="k">as</span> <span class="nn">px</span>
+    <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+    <span class="kn">from</span> <span class="nn">sklearn.manifold</span> <span class="kn">import</span> <span class="n">TSNE</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;2d&quot;</span><span class="p">,</span> <span class="s2">&quot;3d&quot;</span><span class="p">],</span> <span class="s2">&quot;Mode should be either &#39;2d&#39; or &#39;3d&#39;!&quot;</span>
+
+    <span class="n">is_3d</span> <span class="o">=</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;3d&quot;</span>
+    <span class="n">tsne</span> <span class="o">=</span> <span class="n">TSNE</span><span class="p">(</span>
+        <span class="n">n_components</span><span class="o">=</span><span class="mi">3</span> <span class="k">if</span> <span class="n">is_3d</span> <span class="k">else</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
+        <span class="n">perplexity</span><span class="o">=</span><span class="n">perplexity</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
+        <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">tsne_results</span> <span class="o">=</span> <span class="n">tsne</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">is_3d</span><span class="p">:</span>
+        <span class="c1"># Create 3D scatter plot</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">traces</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">unique_labels</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
+            <span class="n">colors</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">colors</span><span class="o">.</span><span class="n">qualitative</span><span class="o">.</span><span class="n">Plotly</span>  <span class="c1"># A good qualitative color palette</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">unique_labels</span><span class="p">):</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="n">label</span>
+                <span class="n">current_data</span> <span class="o">=</span> <span class="n">tsne_results</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+                <span class="n">trace</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Scatter3d</span><span class="p">(</span>
+                    <span class="n">x</span><span class="o">=</span><span class="n">current_data</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                    <span class="n">y</span><span class="o">=</span><span class="n">current_data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                    <span class="n">z</span><span class="o">=</span><span class="n">current_data</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+                    <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;markers&quot;</span><span class="p">,</span>
+                    <span class="n">name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">),</span>  <span class="c1"># This will appear in the legend</span>
+                    <span class="n">marker</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                        <span class="n">size</span><span class="o">=</span><span class="n">point_size</span><span class="p">,</span>
+                        <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">colors</span><span class="p">)],</span>  <span class="c1"># Assign one discrete color</span>
+                        <span class="n">opacity</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                        <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.3)&quot;</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">)]</span> <span class="o">*</span> <span class="n">current_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;Category: %</span><span class="si">{text}</span><span class="s2">&lt;/b&gt;&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;X: %</span><span class="si">{x:.2f}</span><span class="s2">&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;Y: %</span><span class="si">{y:.2f}</span><span class="s2">&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;Z: %</span><span class="si">{z:.2f}</span><span class="s2">&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">traces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">traces</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Original logic for continuous coloring (no labels)</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+                    <span class="n">go</span><span class="o">.</span><span class="n">Scatter3d</span><span class="p">(</span>
+                        <span class="n">x</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                        <span class="n">y</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                        <span class="n">z</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+                        <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;markers&quot;</span><span class="p">,</span>
+                        <span class="n">marker</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                            <span class="n">size</span><span class="o">=</span><span class="n">point_size</span><span class="p">,</span>
+                            <span class="n">color</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+                            <span class="n">colorscale</span><span class="o">=</span><span class="s2">&quot;Viridis&quot;</span><span class="p">,</span>
+                            <span class="n">opacity</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                            <span class="n">showscale</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                            <span class="n">colorbar</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Color Scale&quot;</span><span class="p">),</span>
+                        <span class="p">),</span>
+                        <span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Point </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tsne_results</span><span class="p">))],</span>
+                        <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{text}</span><span class="s2">&lt;/b&gt;&lt;br&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Update 3D layout</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+            <span class="n">title</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">)),</span>
+            <span class="n">legend_title_text</span><span class="o">=</span><span class="s2">&quot;Categories&quot;</span> <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">scene</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">xaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Dimension 1&quot;</span><span class="p">,</span>
+                    <span class="n">backgroundcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0)&quot;</span><span class="p">,</span>
+                    <span class="n">gridcolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.2)&quot;</span><span class="p">,</span>
+                    <span class="n">showbackground</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">zerolinecolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.4)&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">yaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Dimension 2&quot;</span><span class="p">,</span>
+                    <span class="n">backgroundcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0)&quot;</span><span class="p">,</span>
+                    <span class="n">gridcolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.2)&quot;</span><span class="p">,</span>
+                    <span class="n">showbackground</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">zerolinecolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.4)&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">zaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Dimension 3&quot;</span><span class="p">,</span>
+                    <span class="n">backgroundcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0)&quot;</span><span class="p">,</span>
+                    <span class="n">gridcolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.2)&quot;</span><span class="p">,</span>
+                    <span class="n">showbackground</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">zerolinecolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.4)&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">bgcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0.9)&quot;</span><span class="p">,</span>
+                <span class="n">camera</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">eye</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)),</span>
+            <span class="p">),</span>
+            <span class="n">paper_bgcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0.95)&quot;</span><span class="p">,</span>
+            <span class="n">plot_bgcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0.95)&quot;</span><span class="p">,</span>
+            <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">),</span>
+            <span class="n">width</span><span class="o">=</span><span class="mi">900</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="mi">700</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># 2D mode</span>
+        <span class="c1"># Create 2D scatter plot</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">traces</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">unique_labels</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
+            <span class="n">colors</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">colors</span><span class="o">.</span><span class="n">qualitative</span><span class="o">.</span><span class="n">Plotly</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">unique_labels</span><span class="p">):</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="n">label</span>
+                <span class="n">current_data</span> <span class="o">=</span> <span class="n">tsne_results</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+                <span class="n">trace</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Scatter</span><span class="p">(</span>
+                    <span class="n">x</span><span class="o">=</span><span class="n">current_data</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                    <span class="n">y</span><span class="o">=</span><span class="n">current_data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                    <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;markers&quot;</span><span class="p">,</span>
+                    <span class="n">name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">),</span>
+                    <span class="n">marker</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                        <span class="n">size</span><span class="o">=</span><span class="n">point_size</span><span class="p">,</span>
+                        <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">colors</span><span class="p">)],</span>
+                        <span class="n">opacity</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                        <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.3)&quot;</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">)]</span> <span class="o">*</span> <span class="n">current_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;Category: %</span><span class="si">{text}</span><span class="s2">&lt;/b&gt;&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;X: %</span><span class="si">{x:.2f}</span><span class="s2">&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;Y: %</span><span class="si">{y:.2f}</span><span class="s2">&lt;br&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">traces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">traces</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Original logic for continuous coloring (no labels)</span>
+            <span class="n">center_x</span><span class="p">,</span> <span class="n">center_y</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]),</span>
+            <span class="p">)</span>
+            <span class="n">color_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">center_x</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+                <span class="o">+</span> <span class="p">(</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">center_y</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="p">)</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+                    <span class="n">go</span><span class="o">.</span><span class="n">Scatter</span><span class="p">(</span>
+                        <span class="n">x</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                        <span class="n">y</span><span class="o">=</span><span class="n">tsne_results</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                        <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;markers&quot;</span><span class="p">,</span>
+                        <span class="n">marker</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                            <span class="n">size</span><span class="o">=</span><span class="n">point_size</span><span class="p">,</span>
+                            <span class="n">color</span><span class="o">=</span><span class="n">color_data</span><span class="p">,</span>
+                            <span class="n">colorscale</span><span class="o">=</span><span class="s2">&quot;Viridis&quot;</span><span class="p">,</span>
+                            <span class="n">showscale</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                            <span class="n">colorbar</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Color Scale&quot;</span><span class="p">),</span>
+                        <span class="p">),</span>
+                        <span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Point </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tsne_results</span><span class="p">))],</span>
+                        <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{text}</span><span class="s2">&lt;/b&gt;&lt;br&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Update 2D layout</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+            <span class="n">title</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">)),</span>
+            <span class="n">legend_title_text</span><span class="o">=</span><span class="s2">&quot;Categories&quot;</span> <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">xaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Dimension 1&quot;</span><span class="p">,</span>
+                <span class="n">gridcolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.2)&quot;</span><span class="p">,</span>
+                <span class="n">zerolinecolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.4)&quot;</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">yaxis</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">title</span><span class="o">=</span><span class="s2">&quot;t-SNE Dimension 2&quot;</span><span class="p">,</span>
+                <span class="n">gridcolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.2)&quot;</span><span class="p">,</span>
+                <span class="n">zerolinecolor</span><span class="o">=</span><span class="s2">&quot;rgba(255,255,255,0.4)&quot;</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">paper_bgcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0.95)&quot;</span><span class="p">,</span>
+            <span class="n">plot_bgcolor</span><span class="o">=</span><span class="s2">&quot;rgba(0,0,0,0.95)&quot;</span><span class="p">,</span>
+            <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">),</span>
+            <span class="n">width</span><span class="o">=</span><span class="mi">900</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="mi">700</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">tsne_results</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

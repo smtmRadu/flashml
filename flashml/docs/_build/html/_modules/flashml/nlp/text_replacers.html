@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.nlp.text_replacers &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.nlp.text_replacers</h1><div class="highlight"><pre>
+<div class="viewcode-block" id="replace_numbers">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_numbers">[docs]</a>
+<span></span><span class="k">def</span> <span class="nf">replace_numbers</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;NUM&quot;</span><span class="p">,</span> <span class="n">including_floats</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces numbers in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace numbers with (default: &#39;NUM&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with numbers replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex to find one or more digits</span>
+    <span class="n">number_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;\d+&quot;</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">including_floats</span> <span class="k">else</span> <span class="sa">r</span><span class="s2">&quot;-?\b\d+(?:[\.,]\d+)?\b&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">number_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">number_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_urls">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_urls">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_urls</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;URL&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces URLs in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace URLs with (default: &#39;URL&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with URLs replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex to find URLs</span>
+    <span class="n">url_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;http\S+|www\S+|https\S+&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">url_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">url_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_emails">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_emails">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_emails</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;EMAIL&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces email addresses in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace emails with (default: &#39;EMAIL&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with email addresses replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex to match email addresses</span>
+    <span class="n">email_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">email_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">email_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_punctuation">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_punctuation">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_punctuation</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;PUNC&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces punctuation in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+<span class="sd">    Replaces sequences of one or more punctuation characters with a single replacement token.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace punctuation with (default: &#39;PUNC&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with punctuation replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">re</span>
+    <span class="kn">import</span> <span class="nn">string</span>
+
+    <span class="c1"># Create a regex pattern that matches one or more punctuation characters</span>
+    <span class="c1"># Use re.escape to handle special characters in string.punctuation correctly</span>
+    <span class="n">punct_pattern</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">re</span><span class="o">.</span><span class="n">escape</span><span class="p">(</span><span class="n">string</span><span class="o">.</span><span class="n">punctuation</span><span class="p">)</span><span class="si">}</span><span class="s2">]+&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">punct_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">punct_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_pattern">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_pattern">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_pattern</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">regex_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;MATCH&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    GENERAL - Replaces text matching a regex pattern in a text column of a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        pattern: str - regex pattern to match</span>
+<span class="sd">        replacement: str - the string to replace matches with (default: &#39;MATCH&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with the matched patterns replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">regex_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">regex_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_hashtags">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_hashtags">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_hashtags</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;HASH&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces hashtags (e.g. #ab4_23a) in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace hashtags with (default: &#39;HASH&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with hashtags replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex to match hashtags: # followed by letters, numbers, or underscores</span>
+    <span class="n">hashtag_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;#[\w]+&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">hashtag_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">hashtag_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_emojis">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_emojis">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_emojis</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;EMOJI&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces emojis in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace emojis with (default: &#39;EMOJI&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with emojis replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex pattern to match common emojis (covers most Unicode emoji ranges)</span>
+    <span class="n">emoji_pattern</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">r</span><span class="s2">&quot;[\U0001F600-\U0001F64F&quot;</span>  <span class="c1"># Emoticons</span>
+        <span class="sa">r</span><span class="s2">&quot;\U0001F300-\U0001F5FF&quot;</span>  <span class="c1"># Misc Symbols and Pictographs</span>
+        <span class="sa">r</span><span class="s2">&quot;\U0001F680-\U0001F6FF&quot;</span>  <span class="c1"># Transport and Map Symbols</span>
+        <span class="sa">r</span><span class="s2">&quot;\U0001F700-\U0001F77F&quot;</span>  <span class="c1"># Alchemical Symbols</span>
+        <span class="sa">r</span><span class="s2">&quot;\U0001F900-\U0001F9FF&quot;</span>  <span class="c1"># Supplemental Symbols and Pictographs</span>
+        <span class="sa">r</span><span class="s2">&quot;\U00002600-\U000026FF&quot;</span>  <span class="c1"># Miscellaneous Symbols (e.g., ☀️)</span>
+        <span class="sa">r</span><span class="s2">&quot;\U00002700-\U000027BF]&quot;</span>  <span class="c1"># Dingbats (e.g., ✂️)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">emoji_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">emoji_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;Unsupported 不过另外一邊是什麼意思 Unsupported DataFrame type. Must be pandas or polars.&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_smileys">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_smileys">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_smileys</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;SMILEY&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces text-based smiley faces (e.g., :), :-), =)))))) in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace smileys with (default: &#39;SMILEY&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with smiley faces replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex pattern for smiley faces like :), :-), =))))</span>
+    <span class="n">smiley_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;[:=]-?\)+&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">smiley_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">smiley_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_currency">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_currency">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_currency</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;CURRENCY&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces currencies ($100, €50, ¥1000) in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace emails with (default: &#39;EMAIL&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with email addresses replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">currency_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;[$€£¥₹]\s?-?\d+(?:[\.,]\d+)?|-?\d+(?:[\.,]\d+)?\s?[$€£¥₹]&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">currency_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">currency_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="replace_measurements">
+<a class="viewcode-back" href="../../../flashml.nlp.html#flashml.nlp.text_replacers.replace_measurements">[docs]</a>
+<span class="k">def</span> <span class="nf">replace_measurements</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column_name</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;SIZE&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Replaces measurements (8oz, 13kg etc.) in a text column with a placeholder in a Pandas or Polars DataFrame.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        df: A pandas.DataFrame or polars.DataFrame</span>
+<span class="sd">        column_name: str - name of the column to process</span>
+<span class="sd">        replacement: str - the string to replace smileys with (default: &#39;SMILEY&#39;)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A DataFrame with smiley faces replaced in the specified column</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex pattern for smiley faces like :), :-), =))))</span>
+    <span class="n">m_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;\b\d+(\.\d+)?\s?(oz|kg|g|lb|lbs|m|cm|mm|in|ft|yd|L|ml|gallon|pound)\b&quot;</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">m_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">elif</span> <span class="n">df</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;polars&quot;</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">with_columns</span><span class="p">(</span>
+            <span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">Utf8</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace_all</span><span class="p">(</span><span class="n">m_pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">column_name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported DataFrame type. Must be pandas or polars.&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

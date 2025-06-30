@@ -1,3 +1,6 @@
+from sqlalchemy import column
+
+
 def expand_contractions(df, column_name):
     import contractions
 
@@ -52,50 +55,85 @@ def lowercase(df, column_name):
         raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
 
 
-def lemmatize(df, column_name, spacy_model="en_core_web_sm"):
+def lemmatize(
+    df,
+    column_name: str,
+    multiprocess: int = 1,
+    batch_size: int = 32,
+    spacy_model: str = "en_core_web_sm",
+):
     """
-    Applies lemmatization to a text column in a DataFrame using spaCy.
+    Applies parallel lemmatization to a text column in a DataFrame using spaCy.
+    This works only in .py files, when called within if __name__ == "__main__":
 
     Args:
         df: A pandas.DataFrame or polars.DataFrame.
-        column_name: str - The name of the column to process.
-        model: A loaded spaCy language model.
+        column_name: The name of the column to process.
+        spacy_model: The name of the spaCy model to use.
+        batch_size: The number of texts to buffer during processing.
 
     Returns:
-        A DataFrame with lemmatized text in the specified column.
+        A new DataFrame with the lemmatized text in the specified column.
     """
+
     import spacy
+    import sys
+    import subprocess
+
+    assert multiprocess > 0
 
     try:
-        nlp_lemma = spacy.load(spacy_model)
-    except:
-        import subprocess
-        import sys
-
+        nlp = spacy.load(spacy_model, disable=["parser", "ner"])
+    except OSError:
+        print(f"Spacy model '{spacy_model}' not found. Downloading...")
         subprocess.run(
-            [sys.executable, "-m", "spacy", "download", f"{spacy_model}"], check=True
+            [sys.executable, "-m", "spacy", "download", spacy_model], check=True
         )
-        nlp_lemma = spacy.load(spacy_model)
-
-    if nlp_lemma is None:
-        raise ValueError("A loaded spaCy model must be provided for lemmatization.")
-
-    def _lemmatize_text(text):
-        if text is None:
-            return None
-        doc = nlp_lemma(str(text))
-        return " ".join([token.lemma_ for token in doc])
+        nlp = spacy.load(spacy_model, disable=["parser", "ner"])
 
     if df.__class__.__module__.startswith("pandas"):
-        df[column_name] = df[column_name].apply(_lemmatize_text)
-        return df
+        texts = df[column_name].tolist()
     if df.__class__.__module__.startswith("polars"):
-        import polars as pl
+        texts = df[column_name].to_list()
 
-        return df.with_columns(
-            pl.col(column_name)
-            .map_elements(_lemmatize_text, return_dtype=pl.Utf8)
-            .alias(column_name)
-        )
+    if multiprocess == 1:
+
+        def _lemmatize_text(text):
+            if text is None:
+                return None
+            doc = nlp(str(text))
+            return " ".join([token.lemma_ for token in doc])
+
+        if df.__class__.__module__.startswith("pandas"):
+            df[column_name] = df[column_name].apply(_lemmatize_text)
+            return df
+        if df.__class__.__module__.startswith("polars"):
+            import polars as pl
+
+            return df.with_columns(
+                pl.col(column_name)
+                .map_elements(
+                    _lemmatize_text, return_dtype=pl.Utf8, strategy="thread_local"
+                )
+                .alias(column_name)
+            )
+        else:
+            raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
     else:
-        raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")
+        docs = nlp.pipe(
+            [str(text) if text is not None else "" for text in texts],
+            batch_size=batch_size,
+            n_process=multiprocess,
+            disable=["parser", "ner"],
+        )
+        lemmatized_texts = [" ".join([token.lemma_ for token in doc]) for doc in docs]
+
+        # 3. Return a new DataFrame of the original type with the updated column.
+        if df.__class__.__module__.startswith("pandas"):
+            return df.assign(**{column_name: lemmatized_texts})
+        if df.__class__.__module__.startswith("polars"):
+            import polars as pl
+
+            return df.with_columns(pl.Series(name=column_name, values=lemmatized_texts))
+        else:
+            raise TypeError("Unsupported DataFrame type. Must be pandas or polars.")

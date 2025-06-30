@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/57cd83b87e8f4b8ebaf9c57206e91019/artifacts
+deleted_time: 1750586511565
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: 57cd83b87e8f4b8ebaf9c57206e91019
+run_name: angry-smelt-489
+run_uuid: 57cd83b87e8f4b8ebaf9c57206e91019
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750075179194
+status: 1
+tags: []
+user_id: radup

@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/8431a998cbf748b3a8cdc4fb2b504c01/artifacts
+deleted_time: 1750586511565
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: 8431a998cbf748b3a8cdc4fb2b504c01
+run_name: bald-kite-585
+run_uuid: 8431a998cbf748b3a8cdc4fb2b504c01
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750075445020
+status: 1
+tags: []
+user_id: radup

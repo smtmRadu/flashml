@@ -72,7 +72,8 @@ result = parallel_for(0, 1e6, my_func, num_workers=16)
 ### ML train utilities (MLFlow)
 
 ```python
-from flashml import log_metrics, BatchIterator, plot_confusion_matrix
+from flashml import log_metrics, BatchIterator,log_checkpoint, load_checkpoint
+from flashml.classification import plot_confusion_matrix
 
 for step, batch, idcs in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
         batch = data[batch_ids]
@@ -83,6 +84,9 @@ for step, batch, idcs in BatchIterator(df=train_df, num_epochs=10, batch_size=32
             step=idx)
 
 plot_confusion_matrix(yHat, y)
+log_checkpoint({"model":model.state_dict(), "optim":optim.state_dict()}) # this will be logged in MLFlow
+
+# later load with load_checkpoint(run_name="charming-seal-738", version=1)
 ```
 ```
 Output (rt + MLFlow session log):
@@ -90,6 +94,18 @@ Output (rt + MLFlow session log):
 75%|████████████████████████████████████████████████████████████████████████                        | 225/300 [00:00<00:00, 2059.44it/s, loss=2.25, acc=5.17]
 
 ```
+***
+### Instant Baselines (MLFlow)
+```python
+from flashml.classification import make_dummy_classification_dataset, run_dummy_classifiers, run_linear_classifier
+
+x, y, a, b = make_dummy_classification_dataset(num_samples=2048, num_features=10, num_classes=2, weights=[0.25, 0.75])
+
+run_dummy_classifiers(x, y, a, b) # dummy classifications (uniform, prior, full zeros/ones, stratified)
+run_linear_classifier(x, y, a, b, regularization="l1")
+```
+
+
 ***
 
 ### RL train plots (MLFlow)

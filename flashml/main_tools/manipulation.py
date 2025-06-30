@@ -1,4 +1,4 @@
-from typing import List, Tuple, Sequence, Literal
+from typing import List, Literal, Sequence, Tuple
 
 
 def sample_from(items: Sequence, num_samples, with_replacement=False):
@@ -45,10 +45,10 @@ def shuffle_tensor(torch_tensor, axis):
     return torch_tensor.index_select(axis, perm_tensor)
 
 
-def shuffle_df(df, seed: int | None = None):
+def shuffle_df(df):
     """
-    Shuffles dataframe elements (or element-wise shuffling of multiple dataframes of similar length)
-
+    Shuffles dataframe elements (or element-wise shuffling of multiple dataframes of similar length).
+    The seed is sampled from random class. (so it remains static if you set random.seed())
     Args:
         df: DataFrame (Polars or Pandas) or list of DataFrames
     Returns:
@@ -70,22 +70,45 @@ def shuffle_df(df, seed: int | None = None):
 
     if hasattr(df, "sample"):
         if "shuffle" in df.sample.__code__.co_varnames:
-            return df.sample(fraction=1.0, shuffle=True, seed=seed)
+            return df.sample(
+                fraction=1.0, shuffle=True, seed=random.randint(0, 100_000_000)
+            )
         else:
-            return df.sample(frac=1.0, random_state=seed)
+            return df.sample(frac=1.0, random_state=random.randint(0, 100_000_000))
 
     raise TypeError("Input must be a Pandas or Polars DataFrame, or a list of them.")
+
+
+class Batch:
+    """
+    sacgaskb
+
+
+    :ivar id: The id of the batch
+    """
+
+    def __init__(self, batch_id, num_batches, batch_value, batch_idcs):
+        self.id: int = batch_id
+        self.step = (batch_id, num_batches)
+        self.value = batch_value
+        self.ids = batch_idcs
+
+    def __iter__(self):
+        return iter((self.step, self.value))
 
 
 class BatchIterator:
     """
     Automatically build batch elements from a dataframe for training or testing. Note you can access len(B: BatchIterator) to get the number of steps/batches
-    Example of use:
-    >>> for step, batch, idcs in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
-    ...     # step is the current batch index (tuple(current_step, total_steps))
-    ...     # batch is a df (batch_size,) (or a list with batch_size elements)
-    ...     # idcs are the indices of the rows in the batch (batch_size,)
+    Examples:
+    >>> for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
+    ...     # or you can just unpack (for step, batch in BatchIterator(...))
+    ...     # batch.id is the batch index (int)
+    ...     # batch.step is the batch index out of num batches (tuple(current_step, total_steps))
+    ...     # batch.value is a df (batch_size,) (or a list with batch_size elements)
+    ...     # batch.ids are the indices of the rows in the batch (batch_size,)
 
+    Note you can save the state dict (a.k.a. current step of it)
     Args:
         df: DataFrame (Polars or Pandas) or list/tuple of elements
         num_epochs: int, number of epochs to iterate over the dataset
@@ -206,13 +229,21 @@ class BatchIterator:
         else:
             selected_data = [self.df[i] for i in batch_indices]
 
-        elem = (
-            (self.current_step, len(self.batch_idcs)),
-            selected_data,
-            batch_indices,
+        batch_elem = Batch(
+            batch_id=self.current_step,
+            num_batches=len(self.batch_idcs),
+            batch_value=selected_data,
+            batch_idcs=batch_indices,
         )
+
         self.current_step += 1
-        return elem
+        return batch_elem
 
     def __len__(self):
         return len(self.batch_idcs)
+
+    def state_dict(self):
+        return {"current_step": self.current_step}
+
+    def load_state_dict(self, state_dict):
+        self.current_step = state_dict["current_step"]

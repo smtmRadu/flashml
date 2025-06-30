@@ -1,0 +1,15 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/64edf6a6ea3c428ba0feb42da7f56d55/artifacts
+end_time: 1750586589947
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 64edf6a6ea3c428ba0feb42da7f56d55
+run_name: linear_regression
+run_uuid: 64edf6a6ea3c428ba0feb42da7f56d55
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750586589919
+status: 3
+tags: []
+user_id: radup

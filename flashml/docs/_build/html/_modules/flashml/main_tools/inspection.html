@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.main_tools.inspection &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.main_tools.inspection</h1><div class="highlight"><pre>
+<span></span><span class="c1"># --- Data Visualization Colors ---</span>
+<span class="n">TRAINABLE_COLORS_VIZ</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Trainable&quot;</span><span class="p">:</span> <span class="s2">&quot;#ff6b6b&quot;</span><span class="p">,</span> <span class="s2">&quot;Frozen&quot;</span><span class="p">:</span> <span class="s2">&quot;#57b7e0&quot;</span><span class="p">}</span>
+<span class="n">DTYPE_BASE_COLORS_VIZ</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;#667eea&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#f093fb&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#4facfe&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#43e97b&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#fa709a&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#fee140&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#a8edea&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#ffecd2&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#ff9a9e&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;#fecfef&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="n">DEVICE_COLORS_VIZ_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="s2">&quot;#667eea&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;cuda:0&quot;</span><span class="p">:</span> <span class="s2">&quot;#43e97b&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;mps&quot;</span><span class="p">:</span> <span class="s2">&quot;#fee140&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rocm&quot;</span><span class="p">:</span> <span class="s2">&quot;#fa709a&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;other_gpu_shades&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;#4facfe&quot;</span><span class="p">,</span> <span class="s2">&quot;#f093fb&quot;</span><span class="p">,</span> <span class="s2">&quot;#a8edea&quot;</span><span class="p">,</span> <span class="s2">&quot;#ffecd2&quot;</span><span class="p">,</span> <span class="s2">&quot;#ff9a9e&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="s2">&quot;#95a5a6&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">get_parameter_dtype</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">view_uint8_as_int4</span><span class="p">):</span>
+    <span class="n">original_dtype_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">view_uint8_as_int4</span> <span class="ow">and</span> <span class="n">original_dtype_str</span> <span class="o">==</span> <span class="s2">&quot;torch.uint8&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;torch.int4&quot;</span>
+    <span class="k">return</span> <span class="n">original_dtype_str</span>
+
+
+<span class="k">def</span> <span class="nf">get_parameter_device</span><span class="p">(</span><span class="n">param</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_memory_size</span><span class="p">(</span><span class="n">num_params</span><span class="p">,</span> <span class="n">dtype_str</span><span class="p">):</span>
+    <span class="n">dtype_sizes</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;torch.float32&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="s2">&quot;torch.float&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="s2">&quot;torch.float64&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;torch.double&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;torch.float16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;torch.half&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;torch.bfloat16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int64&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;torch.long&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int32&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;torch.short&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int8&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;torch.uint8&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;torch.int4&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="s2">&quot;torch.bool&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">num_params</span> <span class="o">*</span> <span class="n">dtype_sizes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dtype_str</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="mi">4</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">format_size</span><span class="p">(</span><span class="n">size_bytes</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">math</span>
+
+    <span class="k">if</span> <span class="n">size_bytes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;0 B&quot;</span>
+    <span class="n">size_name</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;KB&quot;</span><span class="p">,</span> <span class="s2">&quot;MB&quot;</span><span class="p">,</span> <span class="s2">&quot;GB&quot;</span><span class="p">,</span> <span class="s2">&quot;TB&quot;</span><span class="p">)</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">size_bytes</span><span class="p">,</span> <span class="mi">1024</span><span class="p">)))</span> <span class="k">if</span> <span class="n">size_bytes</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">size_bytes</span> <span class="o">/</span> <span class="n">p</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">size_name</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">to_bold_digits</span><span class="p">(</span><span class="n">text_string</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts numeric characters in a string to their Unicode bold equivalents.&quot;&quot;&quot;</span>
+    <span class="n">bold_map</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;0&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟬&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;1&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟭&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;2&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟮&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;3&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟯&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;4&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟰&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;5&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟱&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;6&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟲&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;7&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟳&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;8&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟴&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;9&quot;</span><span class="p">:</span> <span class="s2">&quot;𝟵&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bold_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">char</span><span class="p">,</span> <span class="n">char</span><span class="p">)</span> <span class="k">for</span> <span class="n">char</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">text_string</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">create_pie_chart</span><span class="p">(</span><span class="n">data_percentages</span><span class="p">,</span> <span class="n">colors</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">icon_map</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">plotly.graph_objects</span> <span class="k">as</span> <span class="nn">go</span>
+
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pie chart with Plotly&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">data_percentages</span><span class="p">:</span>
+        <span class="c1"># Empty pie chart</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">[</span><span class="n">go</span><span class="o">.</span><span class="n">Pie</span><span class="p">(</span><span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;No Data&quot;</span><span class="p">],</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">marker_colors</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;#444444&quot;</span><span class="p">])]</span>
+        <span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fig</span>
+
+    <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">chart_colors</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">hover_texts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">text_labels</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">percentage</span><span class="p">,</span> <span class="n">val_str</span> <span class="ow">in</span> <span class="n">data_percentages</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">percentage</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">icon</span> <span class="o">=</span> <span class="n">icon_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">icon_map</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">icon</span><span class="si">}{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">percentage</span><span class="p">)</span>
+            <span class="n">chart_colors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">colors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;#A9A9A9&quot;</span><span class="p">))</span>
+            <span class="n">hover_texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;</span><span class="si">{</span><span class="n">val_str</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">percentage</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+
+            <span class="c1"># For small segments, show percentage only; for larger ones, show name + percentage</span>
+            <span class="k">if</span> <span class="n">percentage</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="n">text_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">percentage</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">text_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">percentage</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">create_pie_chart</span><span class="p">([],</span> <span class="n">colors</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">icon_map</span><span class="p">)</span>
+
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">go</span><span class="o">.</span><span class="n">Pie</span><span class="p">(</span>
+                <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span>
+                <span class="n">marker_colors</span><span class="o">=</span><span class="n">chart_colors</span><span class="p">,</span>
+                <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{hovertext}</span><span class="s2">&lt;/b&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                <span class="n">hovertext</span><span class="o">=</span><span class="n">hover_texts</span><span class="p">,</span>
+                <span class="n">text</span><span class="o">=</span><span class="n">text_labels</span><span class="p">,</span>
+                <span class="n">textinfo</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                <span class="n">textposition</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+                <span class="n">textfont</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">),</span>
+                <span class="n">hole</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>  <span class="c1"># Donut chart for better aesthetics</span>
+                <span class="n">pull</span><span class="o">=</span><span class="p">[</span><span class="mf">0.02</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>  <span class="c1"># Slight separation between segments</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fig</span>
+
+
+<div class="viewcode-block" id="inspect_model">
+<a class="viewcode-back" href="../../../flashml.html#flashml.inspect_model">[docs]</a>
+<span class="k">def</span> <span class="nf">inspect_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">input_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">renderer</span><span class="o">=</span><span class="s2">&quot;vscode&quot;</span><span class="p">,</span> <span class="n">view_uint8_as_int4</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Inspect PyTorch model with interactive Plotly visualizations</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model: PyTorch model to inspect</span>
+<span class="sd">        input_data: the input tensor/dict or object the model receives as arg</span>
+<span class="sd">        renderer: Plotly renderer (&#39;vscode&#39;, &#39;browser&#39;, &#39;notebook&#39;, etc.)</span>
+<span class="sd">        view_uint8_as_int4: Whether to interpret uint8 parameters as packed int4</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">inspect</span> <span class="k">as</span> <span class="nn">py_inspect</span>
+    <span class="kn">import</span> <span class="nn">math</span>
+
+    <span class="kn">import</span> <span class="nn">plotly.io</span> <span class="k">as</span> <span class="nn">pio</span>
+
+    <span class="n">TRAINABLE_COLORS_VIZ</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Trainable&quot;</span><span class="p">:</span> <span class="s2">&quot;#2ecc71&quot;</span><span class="p">,</span> <span class="s2">&quot;Frozen&quot;</span><span class="p">:</span> <span class="s2">&quot;#3498db&quot;</span><span class="p">}</span>
+    <span class="n">DTYPE_BASE_COLORS_VIZ</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;#9b59b6&quot;</span><span class="p">,</span> <span class="s2">&quot;#e74c3c&quot;</span><span class="p">,</span> <span class="s2">&quot;#f1c40f&quot;</span><span class="p">,</span> <span class="s2">&quot;#34495e&quot;</span><span class="p">,</span> <span class="s2">&quot;#1abc9c&quot;</span><span class="p">]</span>
+    <span class="n">DEVICE_COLORS_VIZ_MAP</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="s2">&quot;#f39c12&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;cuda:0&quot;</span><span class="p">:</span> <span class="s2">&quot;#16a085&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;mps&quot;</span><span class="p">:</span> <span class="s2">&quot;#8e44ad&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;rocm&quot;</span><span class="p">:</span> <span class="s2">&quot;#c0392b&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;other_gpu_shades&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;#1abc9c&quot;</span><span class="p">,</span> <span class="s2">&quot;#27ae60&quot;</span><span class="p">,</span> <span class="s2">&quot;#2980b9&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="s2">&quot;#7f8c8d&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="c1"># --- End Helper Functions ---</span>
+
+    <span class="n">pio</span><span class="o">.</span><span class="n">templates</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="s2">&quot;plotly_dark&quot;</span>
+
+    <span class="c1"># --- Helper Functions (assuming these are defined elsewhere) ---</span>
+    <span class="k">def</span> <span class="nf">format_size</span><span class="p">(</span><span class="n">size_bytes</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">size_bytes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;0 B&quot;</span>
+        <span class="n">size_name</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;KB&quot;</span><span class="p">,</span> <span class="s2">&quot;MB&quot;</span><span class="p">,</span> <span class="s2">&quot;GB&quot;</span><span class="p">,</span> <span class="s2">&quot;TB&quot;</span><span class="p">,</span> <span class="s2">&quot;PB&quot;</span><span class="p">,</span> <span class="s2">&quot;EB&quot;</span><span class="p">,</span> <span class="s2">&quot;ZB&quot;</span><span class="p">,</span> <span class="s2">&quot;YB&quot;</span><span class="p">)</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">size_bytes</span><span class="p">,</span> <span class="mi">1024</span><span class="p">)))</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">size_bytes</span> <span class="o">/</span> <span class="n">p</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">size_name</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">def</span> <span class="nf">get_parameter_dtype</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">view_uint8_as_int4_flag</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">view_uint8_as_int4_flag</span> <span class="ow">and</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;torch.uint8&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;torch.int4&quot;</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_parameter_device</span><span class="p">(</span><span class="n">param</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;N/A&quot;</span>
+
+    <span class="k">def</span> <span class="nf">get_memory_size</span><span class="p">(</span><span class="n">num_params</span><span class="p">,</span> <span class="n">dtype_str</span><span class="p">):</span>
+        <span class="n">dtype_to_bytes</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;torch.float32&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+            <span class="s2">&quot;torch.float&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+            <span class="s2">&quot;torch.float64&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">&quot;torch.double&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">&quot;torch.float16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;torch.half&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;torch.bfloat16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int64&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">&quot;torch.long&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int32&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int16&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;torch.short&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int8&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">&quot;torch.uint8&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">&quot;torch.int4&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># Custom handling</span>
+            <span class="s2">&quot;torch.bool&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># Often stored as a byte</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">num_params</span> <span class="o">*</span> <span class="n">dtype_to_bytes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dtype_str</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">to_bold_digits</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="c1"># Placeholder for unicode bolding if needed, otherwise just return string</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+    <span class="k">def</span> <span class="nf">analyze_model_data</span><span class="p">():</span>
+        <span class="n">total_params</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">param_dtypes_counts</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">param_devices_counts</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">param_devices_memory_bytes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">total_memory_bytes</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">trainable_params</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">module_details</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_params_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">all_params_list</span><span class="p">:</span>
+            <span class="n">original_num_p</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">original_dtype_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">display_dtype_str</span> <span class="o">=</span> <span class="n">get_parameter_dtype</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">view_uint8_as_int4</span><span class="p">)</span>
+            <span class="n">display_num_p</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">original_num_p</span> <span class="o">*</span> <span class="mi">2</span>
+                <span class="k">if</span> <span class="n">view_uint8_as_int4</span> <span class="ow">and</span> <span class="n">original_dtype_str</span> <span class="o">==</span> <span class="s2">&quot;torch.uint8&quot;</span>
+                <span class="k">else</span> <span class="n">original_num_p</span>
+            <span class="p">)</span>
+
+            <span class="n">total_params</span> <span class="o">+=</span> <span class="n">display_num_p</span>
+            <span class="n">param_dtypes_counts</span><span class="p">[</span><span class="n">display_dtype_str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">param_dtypes_counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">display_dtype_str</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">display_num_p</span>
+            <span class="p">)</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">get_parameter_device</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+            <span class="n">param_devices_counts</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">param_devices_counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">display_num_p</span>
+            <span class="p">)</span>
+            <span class="n">param_mem_size</span> <span class="o">=</span> <span class="n">get_memory_size</span><span class="p">(</span><span class="n">display_num_p</span><span class="p">,</span> <span class="n">display_dtype_str</span><span class="p">)</span>
+            <span class="n">total_memory_bytes</span> <span class="o">+=</span> <span class="n">param_mem_size</span>
+            <span class="n">param_devices_memory_bytes</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">param_devices_memory_bytes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">param_mem_size</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="n">trainable_params</span> <span class="o">+=</span> <span class="n">display_num_p</span>
+
+        <span class="n">non_trainable_params</span> <span class="o">=</span> <span class="n">total_params</span> <span class="o">-</span> <span class="n">trainable_params</span>
+
+        <span class="c1"># Analyze modules</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+            <span class="n">module_num_params</span><span class="p">,</span> <span class="n">module_memory_bytes</span><span class="p">,</span> <span class="n">module_param_trainable_count</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="mi">0</span><span class="p">,</span>
+                <span class="mi">0</span><span class="p">,</span>
+                <span class="mi">0</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">module_dtypes</span><span class="p">,</span> <span class="n">module_devices</span> <span class="o">=</span> <span class="p">{},</span> <span class="p">{}</span>
+            <span class="n">module_param_shapes</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">module_has_params</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">current_params_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+            <span class="n">module_type</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">current_params_list</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">list</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">children</span><span class="p">()):</span>
+                <span class="n">module_details</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="k">else</span> <span class="n">model</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">module_type</span><span class="p">,</span>
+                        <span class="s2">&quot;num_params&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                        <span class="s2">&quot;params_percentage&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+                        <span class="s2">&quot;dtypes&quot;</span><span class="p">:</span> <span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;memory&quot;</span><span class="p">:</span> <span class="n">format_size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                        <span class="s2">&quot;trainable_status&quot;</span><span class="p">:</span> <span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;shape_str_internal&quot;</span><span class="p">:</span> <span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">current_params_list</span><span class="p">:</span>
+                <span class="n">module_has_params</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">original_num_p_module</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="n">original_dtype_str_module</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">module_param_shapes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">shape</span><span class="p">)))</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="n">module_param_shapes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Error&quot;</span><span class="p">)</span>
+
+                <span class="n">display_dtype_str_module</span> <span class="o">=</span> <span class="n">get_parameter_dtype</span><span class="p">(</span>
+                    <span class="n">param</span><span class="p">,</span> <span class="n">view_uint8_as_int4</span>
+                <span class="p">)</span>
+                <span class="n">display_num_p_module</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">original_num_p_module</span> <span class="o">*</span> <span class="mi">2</span>
+                    <span class="k">if</span> <span class="n">view_uint8_as_int4</span> <span class="ow">and</span> <span class="n">original_dtype_str_module</span> <span class="o">==</span> <span class="s2">&quot;torch.uint8&quot;</span>
+                    <span class="k">else</span> <span class="n">original_num_p_module</span>
+                <span class="p">)</span>
+
+                <span class="n">module_num_params</span> <span class="o">+=</span> <span class="n">display_num_p_module</span>
+                <span class="n">module_dtypes</span><span class="p">[</span><span class="n">display_dtype_str_module</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">module_dtypes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">display_dtype_str_module</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="o">+</span> <span class="n">display_num_p_module</span>
+                <span class="p">)</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">get_parameter_device</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+                <span class="n">module_devices</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">module_devices</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">display_num_p_module</span>
+                <span class="p">)</span>
+                <span class="n">module_memory_bytes</span> <span class="o">+=</span> <span class="n">get_memory_size</span><span class="p">(</span>
+                    <span class="n">display_num_p_module</span><span class="p">,</span> <span class="n">display_dtype_str_module</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                    <span class="n">module_param_trainable_count</span> <span class="o">+=</span> <span class="n">display_num_p_module</span>
+
+            <span class="n">module_shape_str</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">module_param_shapes</span><span class="p">)</span> <span class="k">if</span> <span class="n">module_param_shapes</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">module_has_params</span> <span class="ow">or</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span> <span class="ow">or</span> <span class="nb">list</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">children</span><span class="p">()):</span>
+                <span class="n">module_dtype_str</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;torch.&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">module_num_params</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">%)&quot;</span>
+                            <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">module_dtypes</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">module_num_params</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                    <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;N/A&quot;</span> <span class="k">if</span> <span class="n">module_has_params</span> <span class="k">else</span> <span class="s2">&quot;Container&quot;</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">module_device_str</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">module_num_params</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">%)&quot;</span>
+                            <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">module_devices</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">module_num_params</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                    <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;N/A&quot;</span> <span class="k">if</span> <span class="n">module_has_params</span> <span class="k">else</span> <span class="s2">&quot;Container&quot;</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">trainable_status</span> <span class="o">=</span> <span class="s2">&quot;N/A&quot;</span>
+                <span class="k">if</span> <span class="n">module_num_params</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">trainable_status</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="s2">&quot;Yes&quot;</span>
+                        <span class="k">if</span> <span class="n">module_param_trainable_count</span> <span class="o">==</span> <span class="n">module_num_params</span>
+                        <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;No&quot;</span> <span class="k">if</span> <span class="n">module_param_trainable_count</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;Partial&quot;</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">module_has_params</span> <span class="ow">and</span> <span class="nb">list</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">children</span><span class="p">()):</span>
+                    <span class="n">trainable_status</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+                    <span class="n">module_shape_str</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+
+                <span class="n">current_module_percentage</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="n">module_num_params</span> <span class="o">/</span> <span class="n">total_params</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">total_params</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                    <span class="k">else</span> <span class="mf">0.0</span>
+                <span class="p">)</span>
+                <span class="n">module_details</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="k">else</span> <span class="n">model</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">module_type</span><span class="p">,</span>
+                        <span class="s2">&quot;num_params&quot;</span><span class="p">:</span> <span class="n">module_num_params</span><span class="p">,</span>
+                        <span class="s2">&quot;params_percentage&quot;</span><span class="p">:</span> <span class="n">current_module_percentage</span><span class="p">,</span>
+                        <span class="s2">&quot;dtypes&quot;</span><span class="p">:</span> <span class="n">module_dtype_str</span><span class="p">,</span>
+                        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">module_device_str</span><span class="p">,</span>
+                        <span class="s2">&quot;memory&quot;</span><span class="p">:</span> <span class="n">format_size</span><span class="p">(</span><span class="n">module_memory_bytes</span><span class="p">),</span>
+                        <span class="s2">&quot;trainable_status&quot;</span><span class="p">:</span> <span class="n">trainable_status</span><span class="p">,</span>
+                        <span class="s2">&quot;shape_str_internal&quot;</span><span class="p">:</span> <span class="n">module_shape_str</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;total_params&quot;</span><span class="p">:</span> <span class="n">total_params</span><span class="p">,</span>
+            <span class="s2">&quot;total_memory_bytes&quot;</span><span class="p">:</span> <span class="n">total_memory_bytes</span><span class="p">,</span>
+            <span class="s2">&quot;trainable_params&quot;</span><span class="p">:</span> <span class="n">trainable_params</span><span class="p">,</span>
+            <span class="s2">&quot;non_trainable_params&quot;</span><span class="p">:</span> <span class="n">non_trainable_params</span><span class="p">,</span>
+            <span class="s2">&quot;param_dtypes_counts&quot;</span><span class="p">:</span> <span class="n">param_dtypes_counts</span><span class="p">,</span>
+            <span class="s2">&quot;param_devices_counts&quot;</span><span class="p">:</span> <span class="n">param_devices_counts</span><span class="p">,</span>
+            <span class="s2">&quot;param_devices_memory_bytes&quot;</span><span class="p">:</span> <span class="n">param_devices_memory_bytes</span><span class="p">,</span>
+            <span class="s2">&quot;module_details&quot;</span><span class="p">:</span> <span class="n">module_details</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">create_dashboard</span><span class="p">():</span>
+        <span class="kn">import</span> <span class="nn">plotly.graph_objects</span> <span class="k">as</span> <span class="nn">go</span>
+        <span class="kn">import</span> <span class="nn">polars</span> <span class="k">as</span> <span class="nn">pl</span>
+        <span class="kn">from</span> <span class="nn">plotly.subplots</span> <span class="kn">import</span> <span class="n">make_subplots</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">analyze_model_data</span><span class="p">()</span>
+
+        <span class="c1"># Create subplots - all three pies on the same row</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">make_subplots</span><span class="p">(</span>
+            <span class="n">rows</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">cols</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="n">subplot_titles</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Parameter Status&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Parameter Data Types&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Parameter Devices&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;&quot;</span><span class="p">,</span>  <span class="c1"># Empty titles for second row</span>
+            <span class="p">),</span>
+            <span class="n">specs</span><span class="o">=</span><span class="p">[</span>
+                <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pie&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pie&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pie&quot;</span><span class="p">}],</span>
+                <span class="p">[{</span><span class="s2">&quot;colspan&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;table&quot;</span><span class="p">},</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="p">],</span>
+            <span class="n">vertical_spacing</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>  <span class="c1"># Reduced vertical spacing</span>
+            <span class="n">horizontal_spacing</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>  <span class="c1"># GAP between the pies</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Trainable pie chart</span>
+        <span class="n">trainable_data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">trainable_data</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;Trainable&quot;</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;trainable_params&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;trainable_params&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;Frozen&quot;</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;non_trainable_params&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;non_trainable_params&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">trainable_data</span><span class="p">:</span>
+            <span class="n">labels</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">colors_list</span><span class="p">,</span> <span class="n">hover_texts</span><span class="p">,</span> <span class="n">text_labels</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">perc</span><span class="p">,</span> <span class="n">val_str</span> <span class="ow">in</span> <span class="n">trainable_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                    <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">perc</span><span class="p">)</span>
+                    <span class="n">colors_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">TRAINABLE_COLORS_VIZ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;#95a5a6&quot;</span><span class="p">))</span>
+                    <span class="n">hover_texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;</span><span class="si">{</span><span class="n">val_str</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+                    <span class="n">text_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span> <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;=</span> <span class="mi">5</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+                <span class="n">go</span><span class="o">.</span><span class="n">Pie</span><span class="p">(</span>
+                    <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                    <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span>
+                    <span class="n">marker_colors</span><span class="o">=</span><span class="n">colors_list</span><span class="p">,</span>
+                    <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{hovertext}</span><span class="s2">&lt;/b&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                    <span class="n">hovertext</span><span class="o">=</span><span class="n">hover_texts</span><span class="p">,</span>
+                    <span class="n">text</span><span class="o">=</span><span class="n">text_labels</span><span class="p">,</span>
+                    <span class="n">textinfo</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                    <span class="n">textposition</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+                    <span class="n">textfont</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">),</span>
+                    <span class="n">hole</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                    <span class="n">pull</span><span class="o">=</span><span class="p">[</span><span class="mf">0.02</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Trainable Status&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">col</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Dtype pie chart</span>
+        <span class="n">dtype_data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">dt</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">[</span><span class="s2">&quot;param_dtypes_counts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="n">dtype_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="n">dt</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;torch.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+                        <span class="p">(</span><span class="n">count</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">count</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype_data</span><span class="p">:</span>
+            <span class="n">dtype_colors</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">color</span>
+                <span class="k">for</span> <span class="n">item</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="n">dtype_data</span><span class="p">,</span>
+                    <span class="n">DTYPE_BASE_COLORS_VIZ</span>
+                    <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">dtype_data</span><span class="p">)</span> <span class="o">//</span> <span class="nb">len</span><span class="p">(</span><span class="n">DTYPE_BASE_COLORS_VIZ</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">}</span>
+            <span class="n">labels</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">colors_list</span><span class="p">,</span> <span class="n">hover_texts</span><span class="p">,</span> <span class="n">text_labels</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">perc</span><span class="p">,</span> <span class="n">val_str</span> <span class="ow">in</span> <span class="n">dtype_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                    <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">perc</span><span class="p">)</span>
+                    <span class="n">colors_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dtype_colors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;#95a5a6&quot;</span><span class="p">))</span>
+                    <span class="n">hover_texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;</span><span class="si">{</span><span class="n">val_str</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+                    <span class="n">text_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span> <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;=</span> <span class="mi">5</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+                <span class="n">go</span><span class="o">.</span><span class="n">Pie</span><span class="p">(</span>
+                    <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                    <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span>
+                    <span class="n">marker_colors</span><span class="o">=</span><span class="n">colors_list</span><span class="p">,</span>
+                    <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{hovertext}</span><span class="s2">&lt;/b&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                    <span class="n">hovertext</span><span class="o">=</span><span class="n">hover_texts</span><span class="p">,</span>
+                    <span class="n">text</span><span class="o">=</span><span class="n">text_labels</span><span class="p">,</span>
+                    <span class="n">textinfo</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                    <span class="n">textposition</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+                    <span class="n">textfont</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">),</span>
+                    <span class="n">hole</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                    <span class="n">pull</span><span class="o">=</span><span class="p">[</span><span class="mf">0.02</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Data Types&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">col</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Device pie chart</span>
+        <span class="n">device_data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">dev</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">[</span><span class="s2">&quot;param_devices_counts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="n">device_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="n">dev</span><span class="p">,</span>
+                        <span class="p">(</span><span class="n">count</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span>
+                        <span class="n">format_size</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;param_devices_memory_bytes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">device_data</span><span class="p">:</span>
+            <span class="n">device_colors</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">cuda_idx</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">dev_name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">device_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">dev_name</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+                    <span class="n">device_colors</span><span class="p">[</span><span class="n">dev_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">]</span>
+                <span class="k">elif</span> <span class="s2">&quot;cuda&quot;</span> <span class="ow">in</span> <span class="n">dev_name</span><span class="p">:</span>
+                    <span class="n">device_colors</span><span class="p">[</span><span class="n">dev_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="n">dev_name</span><span class="p">,</span>
+                        <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;other_gpu_shades&quot;</span><span class="p">][</span>
+                            <span class="n">cuda_idx</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;other_gpu_shades&quot;</span><span class="p">])</span>
+                        <span class="p">],</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">dev_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">:</span>
+                        <span class="n">cuda_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">elif</span> <span class="s2">&quot;mps&quot;</span> <span class="ow">in</span> <span class="n">dev_name</span><span class="p">:</span>
+                    <span class="n">device_colors</span><span class="p">[</span><span class="n">dev_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;mps&quot;</span><span class="p">]</span>
+                <span class="k">elif</span> <span class="s2">&quot;rocm&quot;</span> <span class="ow">in</span> <span class="n">dev_name</span><span class="p">:</span>
+                    <span class="n">device_colors</span><span class="p">[</span><span class="n">dev_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;rocm&quot;</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">device_colors</span><span class="p">[</span><span class="n">dev_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEVICE_COLORS_VIZ_MAP</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span>
+
+            <span class="n">labels</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">colors_list</span><span class="p">,</span> <span class="n">hover_texts</span><span class="p">,</span> <span class="n">text_labels</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">perc</span><span class="p">,</span> <span class="n">val_str</span> <span class="ow">in</span> <span class="n">device_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                    <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">perc</span><span class="p">)</span>
+                    <span class="n">colors_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">device_colors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;#95a5a6&quot;</span><span class="p">))</span>
+                    <span class="n">hover_texts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;</span><span class="si">{</span><span class="n">val_str</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+                    <span class="n">text_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;br&gt;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span> <span class="k">if</span> <span class="n">perc</span> <span class="o">&gt;=</span> <span class="mi">5</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+                <span class="n">go</span><span class="o">.</span><span class="n">Pie</span><span class="p">(</span>
+                    <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                    <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span>
+                    <span class="n">marker_colors</span><span class="o">=</span><span class="n">colors_list</span><span class="p">,</span>
+                    <span class="n">hovertemplate</span><span class="o">=</span><span class="s2">&quot;&lt;b&gt;%</span><span class="si">{hovertext}</span><span class="s2">&lt;/b&gt;&lt;extra&gt;&lt;/extra&gt;&quot;</span><span class="p">,</span>
+                    <span class="n">hovertext</span><span class="o">=</span><span class="n">hover_texts</span><span class="p">,</span>
+                    <span class="n">text</span><span class="o">=</span><span class="n">text_labels</span><span class="p">,</span>
+                    <span class="n">textinfo</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                    <span class="n">textposition</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+                    <span class="n">textfont</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">),</span>
+                    <span class="n">hole</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                    <span class="n">pull</span><span class="o">=</span><span class="p">[</span><span class="mf">0.02</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Devices&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">col</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Module details table</span>
+        <span class="n">module_df</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;module_details&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">module_df</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
+            <span class="n">trainable_emojis</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;Yes&quot;</span><span class="p">:</span> <span class="s2">&quot;✔️&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;No&quot;</span><span class="p">:</span> <span class="s2">&quot;❌&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Partial&quot;</span><span class="p">:</span> <span class="s2">&quot;◑&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;N/A&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;-&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">table_data</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">module_df</span><span class="o">.</span><span class="n">iter_rows</span><span class="p">(</span><span class="n">named</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">trainable_display</span> <span class="o">=</span> <span class="n">trainable_emojis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="n">row</span><span class="p">[</span><span class="s2">&quot;trainable_status&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;trainable_status&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;trainable_status&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;-&quot;</span><span class="p">:</span>
+                    <span class="n">params_shape_display</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+                    <span class="n">params_perc_display</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+                <span class="k">elif</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;num_params&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">bold_num_p_str</span> <span class="o">=</span> <span class="n">to_bold_digits</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;num_params&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">shape_s</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;shape_str_internal&quot;</span><span class="p">]</span>
+                    <span class="n">params_shape_display</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bold_num_p_str</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">shape_s</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="k">if</span> <span class="n">shape_s</span> <span class="ow">and</span> <span class="n">shape_s</span> <span class="o">!=</span> <span class="s2">&quot;N/A&quot;</span>
+                        <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bold_num_p_str</span><span class="si">}</span><span class="s2"> = (shape N/A)&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">params_perc_display</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;params_percentage&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">%&quot;</span>
+                        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;total_params&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                        <span class="k">else</span> <span class="s2">&quot;0.00%&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">params_shape_display</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+                    <span class="n">params_perc_display</span> <span class="o">=</span> <span class="s2">&quot;----&quot;</span>
+
+                <span class="n">table_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">],</span>
+                        <span class="n">params_shape_display</span><span class="p">,</span>
+                        <span class="n">params_perc_display</span><span class="p">,</span>
+                        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;dtypes&quot;</span><span class="p">],</span>
+                        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">],</span>
+                        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;memory&quot;</span><span class="p">],</span>
+                        <span class="n">trainable_display</span><span class="p">,</span>
+                    <span class="p">]</span>
+                <span class="p">)</span>
+
+            <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+                <span class="n">go</span><span class="o">.</span><span class="n">Table</span><span class="p">(</span>
+                    <span class="n">header</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                        <span class="n">values</span><span class="o">=</span><span class="p">[</span>
+                            <span class="s2">&quot;Module Name&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Type&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Params (Shape)&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;% Total&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Dtypes (% module)&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Device(s) (% module)&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Est. Size&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;Trainable&quot;</span><span class="p">,</span>
+                        <span class="p">],</span>
+                        <span class="n">fill_color</span><span class="o">=</span><span class="s2">&quot;#404040&quot;</span><span class="p">,</span>
+                        <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">12</span><span class="p">),</span>
+                        <span class="n">align</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                        <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="n">cells</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                        <span class="n">values</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">table_data</span><span class="p">))</span>
+                        <span class="k">if</span> <span class="n">table_data</span>
+                        <span class="k">else</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">)],</span>
+                        <span class="n">fill_color</span><span class="o">=</span><span class="s2">&quot;#2d2d2d&quot;</span><span class="p">,</span>
+                        <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+                        <span class="n">align</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                        <span class="n">height</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+                        <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="n">columnwidth</span><span class="o">=</span><span class="p">[</span>
+                        <span class="mf">2.5</span><span class="p">,</span>
+                        <span class="mf">1.5</span><span class="p">,</span>
+                        <span class="mf">2.25</span><span class="p">,</span>
+                        <span class="mi">1</span><span class="p">,</span>
+                        <span class="mf">1.75</span><span class="p">,</span>
+                        <span class="mf">1.25</span><span class="p">,</span>
+                        <span class="mi">1</span><span class="p">,</span>
+                        <span class="mi">1</span><span class="p">,</span>
+                    <span class="p">],</span>  <span class="c1"># Adjusted widths</span>
+                <span class="p">),</span>
+                <span class="n">row</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="n">col</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Update layout</span>
+        <span class="n">model_class_name_str</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">model_source_file_str</span> <span class="o">=</span> <span class="n">py_inspect</span><span class="o">.</span><span class="n">getfile</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="vm">__class__</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">):</span>
+            <span class="n">model_source_file_str</span> <span class="o">=</span> <span class="s2">&quot;Source not found&quot;</span>
+
+        <span class="n">title_text</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">model_class_name_str</span><span class="si">}</span><span class="s2">&lt;/b&gt;&lt;br&gt;&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;sub&gt;Source: </span><span class="si">{</span><span class="n">model_source_file_str</span><span class="si">}</span><span class="s2">&lt;/sub&gt;&lt;br&gt;&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;sub&gt;Total Parameters: </span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;total_params&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> | &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Estimated Size: </span><span class="si">{</span><span class="n">format_size</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;total_memory_bytes&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">&lt;/sub&gt;&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+            <span class="n">title</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">title_text</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">16</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.98</span><span class="p">),</span>
+            <span class="n">height</span><span class="o">=</span><span class="mi">1100</span><span class="p">,</span>
+            <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">t</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">l</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">25</span><span class="p">),</span>  <span class="c1"># pad (let it like this)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Update subplot titles positioning</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">update_annotations</span><span class="p">(</span><span class="n">font_size</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">yshift</span><span class="o">=-</span><span class="mi">80</span><span class="p">)</span>  <span class="c1"># Reduced yshift</span>
+
+        <span class="k">return</span> <span class="n">fig</span>
+
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">create_dashboard</span><span class="p">()</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">get_ipython</span>
+
+        <span class="k">if</span> <span class="n">get_ipython</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">input_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">torchinfo</span> <span class="kn">import</span> <span class="n">summary</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">summary</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">input_data</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">fig</span><span class="p">,</span> <span class="n">s</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fig</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fig</span>  <span class="c1"># let this here</span></div>
+
+
+
+<span class="c1">##############################################################################################</span>
+
+<span class="c1">##############################################################################################</span>
+
+<span class="c1">##############################################################################################</span>
+
+<span class="c1">##############################################################################################</span>
+
+<span class="c1">##############################################################################################</span>
+
+
+<div class="viewcode-block" id="inspect_tokenizer">
+<a class="viewcode-back" href="../../../flashml.html#flashml.inspect_tokenizer">[docs]</a>
+<span class="k">def</span> <span class="nf">inspect_tokenizer</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">renderer</span><span class="o">=</span><span class="s2">&quot;vscode&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Analyzes a Hugging Face tokenizer and generates a sleek, comprehensive Plotly dashboard.</span>
+
+<span class="sd">    This function creates a compact multi-part visualization showing tokenizer configuration,</span>
+<span class="sd">    all special tokens (including model-specific ones), and detailed statistics.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tokenizer (PreTrainedTokenizerFast): An instance of a Hugging Face tokenizer.</span>
+<span class="sd">        renderer (str, optional): The Plotly renderer to use for displaying the figure.</span>
+<span class="sd">                                  Defaults to &quot;vscode&quot;. Common options include &quot;notebook&quot;,</span>
+<span class="sd">                                  &quot;browser&quot;, or None for default behavior.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">re</span>
+
+    <span class="kn">import</span> <span class="nn">plotly.graph_objects</span> <span class="k">as</span> <span class="nn">go</span>
+    <span class="kn">import</span> <span class="nn">plotly.io</span> <span class="k">as</span> <span class="nn">pio</span>
+    <span class="kn">from</span> <span class="nn">plotly.subplots</span> <span class="kn">import</span> <span class="n">make_subplots</span>
+
+    <span class="n">pio</span><span class="o">.</span><span class="n">templates</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="s2">&quot;plotly_dark&quot;</span>
+
+    <span class="c1"># --- 1. Extract Core Data ---</span>
+    <span class="n">vocab_size</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span>
+    <span class="n">model_name</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">name_or_path</span> <span class="ow">or</span> <span class="s2">&quot;Unknown Model&quot;</span>
+    <span class="n">max_len</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">model_max_length</span>
+
+    <span class="c1"># --- 2. Comprehensive Special Token Detection ---</span>
+    <span class="k">def</span> <span class="nf">get_all_special_tokens</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract ALL special tokens from the tokenizer, including hidden ones.&quot;&quot;&quot;</span>
+        <span class="n">special_info</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Get the obvious special tokens</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;special_tokens_map&quot;</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">token_type</span><span class="p">,</span> <span class="n">token_value</span> <span class="ow">in</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">special_tokens_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">token_id</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">convert_tokens_to_ids</span><span class="p">(</span><span class="n">token_value</span><span class="p">)</span>
+                    <span class="n">special_info</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">token_type</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">token_value</span><span class="p">,</span> <span class="n">token_id</span><span class="p">))</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;content&quot;</span> <span class="ow">in</span> <span class="n">token_value</span><span class="p">:</span>
+                    <span class="n">token_id</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">convert_tokens_to_ids</span><span class="p">(</span><span class="n">token_value</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">])</span>
+                    <span class="n">special_info</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span><span class="n">token_type</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">token_value</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">],</span> <span class="n">token_id</span><span class="p">)</span>
+                    <span class="p">)</span>
+
+        <span class="c1"># Get additional special tokens from all_special_tokens</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;all_special_tokens&quot;</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">all_special_tokens</span><span class="p">:</span>
+                <span class="n">token_id</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">convert_tokens_to_ids</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+                <span class="c1"># Check if we already have this token</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">token</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">special_info</span><span class="p">):</span>
+                    <span class="n">special_info</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;SPECIAL&quot;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">token_id</span><span class="p">))</span>
+
+        <span class="c1"># Look for common special token patterns in the vocabulary</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;get_vocab&quot;</span><span class="p">):</span>
+            <span class="n">vocab</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">get_vocab</span><span class="p">()</span>
+            <span class="n">special_patterns</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="sa">r</span><span class="s2">&quot;&lt;\|.*?\|&gt;&quot;</span><span class="p">,</span>  <span class="c1"># &lt;|im_start|&gt;, &lt;|im_end|&gt;, etc.</span>
+                <span class="sa">r</span><span class="s2">&quot;&lt;.*?&gt;&quot;</span><span class="p">,</span>  <span class="c1"># &lt;think&gt;, &lt;eos&gt;, &lt;bos&gt;, etc.</span>
+                <span class="sa">r</span><span class="s2">&quot;\[.*?\]&quot;</span><span class="p">,</span>  <span class="c1"># [INST], [/INST], etc.</span>
+                <span class="sa">r</span><span class="s2">&quot;&lt;&lt;.*?&gt;&gt;&quot;</span><span class="p">,</span>  <span class="c1"># &lt;&lt;SYS&gt;&gt;, &lt;&lt;/SYS&gt;&gt;, etc.</span>
+            <span class="p">]</span>
+
+            <span class="k">for</span> <span class="n">token</span><span class="p">,</span> <span class="n">token_id</span> <span class="ow">in</span> <span class="n">vocab</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">special_patterns</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">token</span><span class="p">):</span>
+                        <span class="c1"># Check if we already have this token</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">token</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">special_info</span><span class="p">):</span>
+                            <span class="n">special_info</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;PATTERN&quot;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">token_id</span><span class="p">))</span>
+                        <span class="k">break</span>
+
+        <span class="c1"># Sort by token ID for consistent display</span>
+        <span class="n">special_info</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">special_info</span>
+
+    <span class="n">special_tokens_info</span> <span class="o">=</span> <span class="n">get_all_special_tokens</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">)</span>
+
+    <span class="c1"># --- 3. Additional Configuration ---</span>
+    <span class="n">padding_side</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;padding_side&quot;</span><span class="p">,</span> <span class="s2">&quot;N/A&quot;</span><span class="p">)</span>
+    <span class="n">truncation_side</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;truncation_side&quot;</span><span class="p">,</span> <span class="s2">&quot;N/A&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Get tokenizer class name</span>
+    <span class="n">tokenizer_class</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+
+    <span class="c1"># Chat template handling</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">chat_template</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;chat_template&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">chat_template</span><span class="p">:</span>
+            <span class="c1"># Truncate if too long and format for display</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chat_template</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="n">chat_template</span> <span class="o">=</span> <span class="n">chat_template</span><span class="p">[:</span><span class="mi">200</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;...&quot;</span>
+            <span class="n">chat_template</span> <span class="o">=</span> <span class="n">chat_template</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&lt;br&gt;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="s2">&quot;    &quot;</span><span class="p">,</span> <span class="s2">&quot;&amp;nbsp;&amp;nbsp;&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">chat_template</span> <span class="o">=</span> <span class="s2">&quot;Not defined&quot;</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">chat_template</span> <span class="o">=</span> <span class="s2">&quot;N/A&quot;</span>
+
+    <span class="c1"># --- 4. Create Compact Layout ---</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">make_subplots</span><span class="p">(</span>
+        <span class="n">rows</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">cols</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">specs</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;indicator&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;indicator&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;indicator&quot;</span><span class="p">}],</span>
+            <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;table&quot;</span><span class="p">,</span> <span class="s2">&quot;colspan&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="p">],</span>
+        <span class="n">vertical_spacing</span><span class="o">=</span><span class="mf">0.12</span><span class="p">,</span>
+        <span class="n">row_heights</span><span class="o">=</span><span class="p">[</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">],</span>
+        <span class="n">subplot_titles</span><span class="o">=</span><span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;b style=&#39;color:#00d4ff&#39;&gt;Vocabulary Size&lt;/b&gt;&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;b style=&#39;color:#ff6b6b&#39;&gt;Max Length&lt;/b&gt;&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;b style=&#39;color:#4ecdc4&#39;&gt;Special Tokens&lt;/b&gt;&quot;</span><span class="p">,</span>
+        <span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># --- 5. Add Indicator Traces ---</span>
+    <span class="c1"># Vocab size with gradient effect</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+        <span class="n">go</span><span class="o">.</span><span class="n">Indicator</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;number+delta&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">vocab_size</span><span class="p">,</span>
+            <span class="n">number</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;font&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">36</span><span class="p">,</span> <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#00d4ff&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot; tokens&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;valueformat&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;row&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;column&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">col</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Max length with context</span>
+    <span class="n">max_len_display</span> <span class="o">=</span> <span class="n">max_len</span> <span class="k">if</span> <span class="n">max_len</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;∞&quot;</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+        <span class="n">go</span><span class="o">.</span><span class="n">Indicator</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;number&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">max_len</span> <span class="k">if</span> <span class="n">max_len</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">number</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;font&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">36</span><span class="p">,</span> <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#ff6b6b&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot; tokens&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;valueformat&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;row&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;column&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">col</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Special tokens count</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+        <span class="n">go</span><span class="o">.</span><span class="n">Indicator</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;number&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">special_tokens_info</span><span class="p">),</span>
+            <span class="n">number</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;font&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">36</span><span class="p">,</span> <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#4ecdc4&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot; special tokens&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;valueformat&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;row&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;column&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">row</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">col</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># --- 6. Enhanced Special Tokens Table ---</span>
+    <span class="k">if</span> <span class="n">special_tokens_info</span><span class="p">:</span>
+        <span class="n">token_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">special_tokens_info</span><span class="p">]</span>
+        <span class="n">token_values</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;&lt;code&gt;</span><span class="si">{</span><span class="n">info</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&lt;/code&gt;&quot;</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">special_tokens_info</span><span class="p">]</span>
+        <span class="n">token_ids</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="n">info</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+            <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">special_tokens_info</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Color code by type</span>
+        <span class="n">type_colors</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;PAD&quot;</span><span class="p">:</span> <span class="s2">&quot;#ff9999&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;UNK&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffcc99&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;CLS&quot;</span><span class="p">:</span> <span class="s2">&quot;#99ff99&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SEP&quot;</span><span class="p">:</span> <span class="s2">&quot;#99ccff&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MASK&quot;</span><span class="p">:</span> <span class="s2">&quot;#cc99ff&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;BOS&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffff99&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;EOS&quot;</span><span class="p">:</span> <span class="s2">&quot;#ff99cc&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SPECIAL&quot;</span><span class="p">:</span> <span class="s2">&quot;#cccccc&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;PATTERN&quot;</span><span class="p">:</span> <span class="s2">&quot;#55C96A&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="n">cell_colors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">token_type</span> <span class="ow">in</span> <span class="n">token_types</span><span class="p">:</span>
+            <span class="n">color</span> <span class="o">=</span> <span class="n">type_colors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">token_type</span><span class="p">,</span> <span class="s2">&quot;#f0f0f0&quot;</span><span class="p">)</span>
+            <span class="n">cell_colors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">color</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">token_types</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;No special tokens found&quot;</span><span class="p">]</span>
+        <span class="n">token_values</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]</span>
+        <span class="n">token_ids</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]</span>
+        <span class="n">cell_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;#f0f0f0&quot;</span><span class="p">]</span>
+
+    <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+        <span class="n">go</span><span class="o">.</span><span class="n">Table</span><span class="p">(</span>
+            <span class="n">header</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">values</span><span class="o">=</span><span class="p">[</span>
+                    <span class="s2">&quot;&lt;b&gt;Type&lt;/b&gt;&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;&lt;b&gt;Token&lt;/b&gt;&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;&lt;b&gt;ID&lt;/b&gt;&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;&lt;b&gt;Config Info&lt;/b&gt;&quot;</span><span class="p">,</span>
+                <span class="p">],</span>
+                <span class="n">fill_color</span><span class="o">=</span><span class="s2">&quot;#2c3e50&quot;</span><span class="p">,</span>
+                <span class="n">align</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">),</span>
+                <span class="n">height</span><span class="o">=</span><span class="mi">35</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">cells</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">values</span><span class="o">=</span><span class="p">[</span>
+                    <span class="n">token_types</span><span class="p">,</span>
+                    <span class="n">token_values</span><span class="p">,</span>
+                    <span class="n">token_ids</span><span class="p">,</span>
+                    <span class="p">[</span>
+                        <span class="sa">f</span><span class="s2">&quot;&lt;b&gt;Class:&lt;/b&gt; </span><span class="si">{</span><span class="n">tokenizer_class</span><span class="si">}</span><span class="s2">&lt;br&gt;&lt;b&gt;Padding:&lt;/b&gt; </span><span class="si">{</span><span class="n">padding_side</span><span class="si">}</span><span class="s2">&lt;br&gt;&lt;b&gt;Truncation:&lt;/b&gt; </span><span class="si">{</span><span class="n">truncation_side</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">]</span>
+                    <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">token_types</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="p">],</span>
+                <span class="n">fill_color</span><span class="o">=</span><span class="p">[</span><span class="n">cell_colors</span> <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;#ecf0f1&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">token_types</span><span class="p">)],</span>
+                <span class="n">align</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">],</span>
+                <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#2c3e50&quot;</span><span class="p">),</span>
+                <span class="n">height</span><span class="o">=</span><span class="mi">28</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">row</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">col</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># --- 7. Final Layout Styling ---</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+        <span class="n">title</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;🔍 Tokenizer of: &lt;b&gt;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">&lt;/b&gt;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+            <span class="s2">&quot;xanchor&quot;</span><span class="p">:</span> <span class="s2">&quot;center&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;font&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span> <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#d1d4d6&quot;</span><span class="p">},</span>
+        <span class="p">},</span>
+        <span class="n">height</span><span class="o">=</span><span class="mi">550</span><span class="p">,</span>  <span class="c1"># Much more compressed!</span>
+        <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">template</span><span class="o">=</span><span class="s2">&quot;plotly_white&quot;</span><span class="p">,</span>
+        <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">l</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">15</span><span class="p">),</span>
+        <span class="n">font</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">family</span><span class="o">=</span><span class="s2">&quot;SF Pro Display, -apple-system, system-ui, sans-serif&quot;</span><span class="p">),</span>
+        <span class="n">paper_bgcolor</span><span class="o">=</span><span class="s2">&quot;#1e252c&quot;</span><span class="p">,</span>
+        <span class="n">plot_bgcolor</span><span class="o">=</span><span class="s2">&quot;#333030&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Add subtle styling</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">update_annotations</span><span class="p">(</span><span class="n">font_size</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">font_color</span><span class="o">=</span><span class="s2">&quot;#34495e&quot;</span><span class="p">)</span>
+
+    <span class="c1"># # Add a subtle footer with chat template info if available</span>
+    <span class="c1"># if chat_template and chat_template != &quot;Not defined&quot;:</span>
+    <span class="c1">#     fig.add_annotation(</span>
+    <span class="c1">#         text=f&quot;&lt;i&gt;Chat Template: {chat_template}&lt;/i&gt;&quot;,</span>
+    <span class="c1">#         xref=&quot;paper&quot;,</span>
+    <span class="c1">#         yref=&quot;paper&quot;,</span>
+    <span class="c1">#         x=1,</span>
+    <span class="c1">#         y=0,</span>
+    <span class="c1">#         showarrow=False,</span>
+    <span class="c1">#         font=dict(size=9, color=&quot;#7f8c8d&quot;),</span>
+    <span class="c1">#         bgcolor=&quot;rgba(255,255,255,0.8)&quot;,</span>
+    <span class="c1">#         bordercolor=&quot;#bdc3c7&quot;,</span>
+    <span class="c1">#         borderwidth=1,</span>
+    <span class="c1">#     )</span>
+
+    <span class="c1"># Show with style</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -5,10 +5,10 @@ import os
 
 
 def test_rl_info():
-    from tools.rl import log_episode
+    from rl import log_episode
 
     reward_bias = 0
-    max_steps = 12000
+    max_steps = 10000
     step = 0
     while step < max_steps:
         ep_len = 0
@@ -21,6 +21,7 @@ def test_rl_info():
                     ep_len,
                     step=(step, max_steps),
                     other_metrics={"Rand": random.random()},
+                    experiment_name="flashml_rl2",
                 )
                 ep_len = 0
                 reward_bias += math.exp(1 + step / max_steps) * 0.001 * random.random()
@@ -28,7 +29,7 @@ def test_rl_info():
 
 
 def test_train_info():
-    from tools import log_metrics
+    from flashml import log_metrics
 
     HYPERPARAMS = {
         "model": "Qwen/Qwen3-0.6B",  # "tiiuae/Falcon-H1-0.5B-Base",
@@ -51,16 +52,17 @@ def test_train_info():
             acc = loss + random.random()
             log_metrics(
                 {"loss": loss_, "acc": acc},
-                step=(epoch, batches * epochs),
+                # step=(epoch, batches * epochs),
                 hyperparams=HYPERPARAMS,
+                # experiment_name=None,
             )
             loss -= 1e-2
-            time.sleep(0.001)
+            time.sleep(0.0002)
         print("\n\n\n")
 
 
 def test_plotting():
-    from tools import plot_graph
+    from flashml import plot_graph
     # values = [10, 15, 17, 18, 18.3]
     # values2 = [9, 14, 17.5, 19, 20.1]
     # values3 = [10, 14.2, 17.7, 19.2, 20.3]
@@ -72,7 +74,7 @@ def test_plotting():
 
 
 def test_conf_matrix():
-    from tools import plot_confusion_matrix
+    from flashml import plot_confusion_matrix
 
     y = [0, 0, 1, 20, 0, 0, 1, 2, 3, 4, 5, 6, 7, 12, 11, 14]
     y_hat = [0, 1, 1, 20, 0, 0, 1, 2, 9, 3, 4, 5, 10, 12, 11, 14]
@@ -93,21 +95,21 @@ def test_scheduler():
 
 
 def test_logging():
-    from tools import ansi_of, hex_of
-    from tools import log, display_logs
+    from flashml import ansi_of, hex_of
+    from flashml import log_record, display_logs
 
-    log("This is red", color="red")  # Entire text in red
-    log("This is hex blue", color="#0000FF")  # Entire text in blue (hex)
-    log(
+    log_record("This is red", color="red")  # Entire text in red
+    log_record("This is hex blue", color="#0000FF")  # Entire text in blue (hex)
+    log_record(
         "This is a test message\n with a new line and some random characters:   "
     )  # Entire text in white
-    log("This is hex green", color="#00FF00")  # Entire text in green (hex)
-    log("Khaki hex", color="khaki")
+    log_record("This is hex green", color="#00FF00")  # Entire text in green (hex)
+    log_record("Khaki hex", color="khaki")
     display_logs()
 
 
 def test_rt_plotting():
-    from tools import plot_rt_graph
+    from flashml import plot_rt_graph
     import matplotlib.pyplot as plt
 
     for i in range(200):
@@ -147,7 +149,7 @@ def test_log_session():
         time.sleep(random.random())
         return {"acc": random.random() * 100, "f1": random.random() * 99}
 
-    from flashml.tools import log_session
+    from flashml import log_session
 
     hyperparams1 = {"learning_rate": 0.001, "dang": 32}
     log_session(hyperparams1, example_train_function, sort_by=None)
@@ -178,35 +180,12 @@ def test_log_session():
     log_session(None, None, sort_by="f1")
 
 
-from tools.nlp import *
-
-
-def test_nlp_preprocesssing():
-    # Polars
-    import polars as pl
-
-    df_pl = pl.DataFrame({"Name": ["Alice♥ ️🐈", "BOB", "Charlie"]})
-    df_pl = lowercase(df_pl, "Name")
-    print(df_pl)
-
-    data = {
-        "text": [
-            "I have 2 dogs!.♥ ️🐈",
-            "My phone number is 1234567890.",
-            "The year is 2025.",
-            "I bought 5 a♥ ️🐈pples and 3 bananas.",
-            "The answer is 42.",
-        ]
-    }
-
-    df = pl.DataFrame(data)
-    df = replace_emojis(df, "text")
-    df = lemmatize(df, "text")
-    print(df)
+from flashml.main_tools import parallel
+from nlp import *
 
 
 def test_plot_dist():
-    from tools import plot_distribution
+    from flashml import plot_distribution
 
     # Create a fake frequency dictionary with 100 token IDs
     fake_freqs = {i: random.randint(1, 1000) for i in range(1000)}
@@ -220,9 +199,9 @@ def stress_test():
 
 
 def test_logger():
-    from tools import log, load_logs
+    from flashml import log_record, load_records
 
-    print(load_logs(as_df="pl"))
+    print(load_records(as_df="pl"))
 
 
 def test_simple_for():
@@ -244,13 +223,13 @@ def test_parallel_for():
 
 def plot_tensorx():
     import torch
-    from tools import plot_tensor
+    from flashml import plot_tensor
 
     plot_tensor(torch.randn(42, 121))
 
 
 def test_batch_generation():
-    from tools import BatchIterator
+    from flashml import BatchIterator
 
     for x in BatchIterator(
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], num_epochs=10, batch_size=3, mode="train"
@@ -266,14 +245,14 @@ def test_batch_generation():
 
 def test_plot_tsne():
     import numpy as np
-    from tools import plot_tsne
+    from flashml import plot_tsne
 
     data = np.random.rand(1200, 10)
     plot_tsne(data, verbose=1)
 
 
 def log_metrics_test():
-    from tools import log_metrics
+    from flashml import log_metrics
 
     for i in range(100):
         x = random.random()
@@ -293,6 +272,115 @@ def log_metrics_test():
         time.sleep(0.1)
 
 
-from tools import resource_monitor
+def test_nlp_preprocesssing():
+    import polars as pl
+    import random
+    import string
 
-resource_monitor()
+    # Seed for reproducibility
+    random.seed(42)
+
+    # Lists for generating varied text
+    nouns = [
+        "dog",
+        "cat",
+        "apple",
+        "banana",
+        "phone",
+        "book",
+        "car",
+        "house",
+        "tree",
+        "computer",
+    ]
+    verbs = [
+        "have",
+        "bought",
+        "run",
+        "eat",
+        "see",
+        "write",
+        "drive",
+        "build",
+        "play",
+        "sing",
+    ]
+    adjectives = [
+        "happy",
+        "big",
+        "small",
+        "red",
+        "blue",
+        "fast",
+        "slow",
+        "new",
+        "old",
+        "smart",
+    ]
+    emojis = ["🐈", "🐶", "♥️", "😊", "⭐", "🚗", "🍎", "🍌", "📱", "🏠"]
+    special_chars = ["!", ".", ",", "?", ";", "@", "#", "&", "*"]
+
+    def generate_sentence():
+        """Generate a single random sentence similar to the provided example."""
+        sentence_type = random.choice(["quantity", "phone", "year", "fact", "mixed"])
+
+        if sentence_type == "quantity":
+            # Example: "I bought 5 apples and 3 bananas."
+            num1 = random.randint(1, 10)
+            num2 = random.randint(1, 10)
+            noun1 = random.choice(nouns)
+            noun2 = random.choice(nouns)
+            verb = random.choice(verbs)
+            emoji = random.choice(emojis) if random.random() < 0.3 else ""
+            special = random.choice(special_chars) if random.random() < 0.5 else ""
+            return f"I {verb} {num1} {noun1}s and {num2} {noun2}s{emoji}{special}"
+
+        elif sentence_type == "phone":
+            # Example: "My phone number is 1234567890."
+            phone = "".join([str(random.randint(0, 9)) for _ in range(10)])
+            special = random.choice(special_chars) if random.random() < 0.5 else ""
+            return f"My phone number is {phone}{special}"
+
+        elif sentence_type == "year":
+            # Example: "The year is 2025."
+            year = random.randint(2000, 2030)
+            special = random.choice(special_chars) if random.random() < 0.5 else ""
+            return f"The year is {year}{special}"
+
+        elif sentence_type == "fact":
+            # Example: "The answer is 42."
+            num = random.randint(1, 100)
+            noun = random.choice(nouns)
+            special = random.choice(special_chars) if random.random() < 0.5 else ""
+            return f"The {noun} is {num}{special}"
+
+        else:  # mixed
+            # Example: "I have 2 dogs!.♥️🐈"
+            num = random.randint(1, 10)
+            noun = random.choice(nouns)
+            verb = random.choice(verbs)
+            adj = random.choice(adjectives)
+            emoji = random.choice(emojis) if random.random() < 0.5 else ""
+            special = random.choice(special_chars) if random.random() < 0.5 else ""
+            return f"I {verb} {num} {adj} {noun}s{emoji}{special}"
+
+    # Generate 10,000 sentences
+    n_rows = 5000
+    data = {"text": [generate_sentence() for _ in range(n_rows)]}
+
+    # Create pandas DataFrame
+    df = pl.DataFrame(data)
+
+    import time
+
+    print(f"Dataset created {df.shape}")
+    start = time.time()
+
+    df = lemmatize(df, "text", 1)
+
+    end = time.time() - start
+    print(end)
+
+
+if __name__ == "__main__":
+    test_nlp_preprocesssing()

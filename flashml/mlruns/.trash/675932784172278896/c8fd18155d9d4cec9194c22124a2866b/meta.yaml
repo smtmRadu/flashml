@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/675932784172278896/c8fd18155d9d4cec9194c22124a2866b/artifacts
+deleted_time: 1750073934613
+end_time: null
+entry_point_name: ''
+experiment_id: '675932784172278896'
+lifecycle_stage: deleted
+run_id: c8fd18155d9d4cec9194c22124a2866b
+run_name: selective-hawk-856
+run_uuid: c8fd18155d9d4cec9194c22124a2866b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750070727308
+status: 1
+tags: []
+user_id: radup

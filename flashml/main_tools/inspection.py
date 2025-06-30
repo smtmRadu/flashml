@@ -1,5 +1,5 @@
 # --- Data Visualization Colors ---
-TRAINABLE_COLORS_VIZ = {"Trainable": "#ff6b6b", "Frozen": "#4ecdc4"}
+TRAINABLE_COLORS_VIZ = {"Trainable": "#ff6b6b", "Frozen": "#57b7e0"}
 DTYPE_BASE_COLORS_VIZ = [
     "#667eea",
     "#f093fb",
@@ -143,22 +143,81 @@ def create_pie_chart(data_percentages, colors, title, icon_map=None):
     return fig
 
 
-def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
+def inspect_model(model, input_data=None, renderer="vscode", view_uint8_as_int4=True):
     """
     Inspect PyTorch model with interactive Plotly visualizations
 
     Args:
         model: PyTorch model to inspect
+        input_data: the input tensor/dict or object the model receives as arg
         renderer: Plotly renderer ('vscode', 'browser', 'notebook', etc.)
+        view_uint8_as_int4: Whether to interpret uint8 parameters as packed int4
     """
     import inspect as py_inspect
+    import math
+
     import plotly.io as pio
+
+    TRAINABLE_COLORS_VIZ = {"Trainable": "#2ecc71", "Frozen": "#3498db"}
+    DTYPE_BASE_COLORS_VIZ = ["#9b59b6", "#e74c3c", "#f1c40f", "#34495e", "#1abc9c"]
+    DEVICE_COLORS_VIZ_MAP = {
+        "cpu": "#f39c12",
+        "cuda:0": "#16a085",
+        "mps": "#8e44ad",
+        "rocm": "#c0392b",
+        "other_gpu_shades": ["#1abc9c", "#27ae60", "#2980b9"],
+        "default": "#7f8c8d",
+    }
+    # --- End Helper Functions ---
 
     pio.templates.default = "plotly_dark"
 
-    # has_uint8_params = any(
-    #    str(param.dtype) == "torch.uint8" for _, param in model.named_parameters()
-    # )
+    # --- Helper Functions (assuming these are defined elsewhere) ---
+    def format_size(size_bytes):
+        if size_bytes == 0:
+            return "0 B"
+        size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+        i = int(math.floor(math.log(size_bytes, 1024)))
+        p = math.pow(1024, i)
+        s = round(size_bytes / p, 2)
+        return f"{s} {size_name[i]}"
+
+    def get_parameter_dtype(param, view_uint8_as_int4_flag):
+        if view_uint8_as_int4_flag and str(param.dtype) == "torch.uint8":
+            return "torch.int4"
+        return str(param.dtype)
+
+    def get_parameter_device(param):
+        try:
+            return str(param.device)
+        except RuntimeError:
+            return "N/A"
+
+    def get_memory_size(num_params, dtype_str):
+        dtype_to_bytes = {
+            "torch.float32": 4,
+            "torch.float": 4,
+            "torch.float64": 8,
+            "torch.double": 8,
+            "torch.float16": 2,
+            "torch.half": 2,
+            "torch.bfloat16": 2,
+            "torch.int64": 8,
+            "torch.long": 8,
+            "torch.int32": 4,
+            "torch.int": 4,
+            "torch.int16": 2,
+            "torch.short": 2,
+            "torch.int8": 1,
+            "torch.uint8": 1,
+            "torch.int4": 0.5,  # Custom handling
+            "torch.bool": 1,  # Often stored as a byte
+        }
+        return num_params * dtype_to_bytes.get(dtype_str, 0)
+
+    def to_bold_digits(s):
+        # Placeholder for unicode bolding if needed, otherwise just return string
+        return s
 
     def analyze_model_data():
         total_params = 0
@@ -209,11 +268,13 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
             module_param_shapes = []
             module_has_params = False
             current_params_list = list(module.parameters(recurse=False))
+            module_type = module.__class__.__name__
 
             if not current_params_list and not list(module.children()):
                 module_details.append(
                     {
                         "name": name if name else model.__class__.__name__,
+                        "type": module_type,
                         "num_params": 0,
                         "params_percentage": 0.0,
                         "dtypes": "N/A",
@@ -302,6 +363,7 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                 module_details.append(
                     {
                         "name": name if name else model.__class__.__name__,
+                        "type": module_type,
                         "num_params": module_num_params,
                         "params_percentage": current_module_percentage,
                         "dtypes": module_dtype_str,
@@ -324,9 +386,9 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
         }
 
     def create_dashboard():
-        from plotly.subplots import make_subplots
         import plotly.graph_objects as go
         import polars as pl
+        from plotly.subplots import make_subplots
 
         data = analyze_model_data()
 
@@ -346,8 +408,8 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                 [{"type": "pie"}, {"type": "pie"}, {"type": "pie"}],
                 [{"colspan": 3, "type": "table"}, None, None],
             ],
-            vertical_spacing=0.08,  # Reduced vertical spacing
-            horizontal_spacing=0.05,
+            vertical_spacing=0.0,  # Reduced vertical spacing
+            horizontal_spacing=0.05,  # GAP between the pies
         )
 
         # Trainable pie chart
@@ -367,23 +429,16 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
             ]
 
         if trainable_data:
-            labels = []
-            values = []
-            colors_list = []
-            hover_texts = []
-            text_labels = []
-
+            labels, values, colors_list, hover_texts, text_labels = [], [], [], [], []
             for name, perc, val_str in trainable_data:
                 if perc > 0:
                     labels.append(name)
                     values.append(perc)
                     colors_list.append(TRAINABLE_COLORS_VIZ.get(name, "#95a5a6"))
                     hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
-
-                    if perc < 5:
-                        text_labels.append(f"{perc:.1f}%")
-                    else:
-                        text_labels.append(f"{name}<br>{perc:.1f}%")
+                    text_labels.append(
+                        f"{name}<br>{perc:.1f}%" if perc >= 5 else f"{perc:.1f}%"
+                    )
 
             fig.add_trace(
                 go.Pie(
@@ -395,7 +450,7 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                     text=text_labels,
                     textinfo="text",
                     textposition="auto",
-                    textfont=dict(size=11, color="white"),
+                    textfont=dict(size=11, color="black"),
                     hole=0.3,
                     pull=[0.02] * len(values),
                     name="Trainable Status",
@@ -429,24 +484,16 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                     * (len(dtype_data) // len(DTYPE_BASE_COLORS_VIZ) + 1),
                 )
             }
-
-            labels = []
-            values = []
-            colors_list = []
-            hover_texts = []
-            text_labels = []
-
+            labels, values, colors_list, hover_texts, text_labels = [], [], [], [], []
             for name, perc, val_str in dtype_data:
                 if perc > 0:
                     labels.append(name)
                     values.append(perc)
                     colors_list.append(dtype_colors.get(name, "#95a5a6"))
                     hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
-
-                    if perc < 5:
-                        text_labels.append(f"{perc:.1f}%")
-                    else:
-                        text_labels.append(f"{name}<br>{perc:.1f}%")
+                    text_labels.append(
+                        f"{name}<br>{perc:.1f}%" if perc >= 5 else f"{perc:.1f}%"
+                    )
 
             fig.add_trace(
                 go.Pie(
@@ -458,7 +505,7 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                     text=text_labels,
                     textinfo="text",
                     textposition="auto",
-                    textfont=dict(size=11, color="white"),
+                    textfont=dict(size=11, color="black"),
                     hole=0.3,
                     pull=[0.02] * len(values),
                     name="Data Types",
@@ -505,23 +552,16 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                 else:
                     device_colors[dev_name] = DEVICE_COLORS_VIZ_MAP["default"]
 
-            labels = []
-            values = []
-            colors_list = []
-            hover_texts = []
-            text_labels = []
-
+            labels, values, colors_list, hover_texts, text_labels = [], [], [], [], []
             for name, perc, val_str in device_data:
                 if perc > 0:
                     labels.append(name)
                     values.append(perc)
                     colors_list.append(device_colors.get(name, "#95a5a6"))
                     hover_texts.append(f"<b>{name}</b><br>{val_str}<br>{perc:.1f}%")
-
-                    if perc < 5:
-                        text_labels.append(f"{perc:.1f}%")
-                    else:
-                        text_labels.append(f"{name}<br>{perc:.1f}%")
+                    text_labels.append(
+                        f"{name}<br>{perc:.1f}%" if perc >= 5 else f"{perc:.1f}%"
+                    )
 
             fig.add_trace(
                 go.Pie(
@@ -533,7 +573,7 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                     text=text_labels,
                     textinfo="text",
                     textposition="auto",
-                    textfont=dict(size=11, color="white"),
+                    textfont=dict(size=11, color="black"),
                     hole=0.3,
                     pull=[0.02] * len(values),
                     name="Devices",
@@ -545,7 +585,6 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
         # Module details table
         module_df = pl.DataFrame(data["module_details"])
         if not module_df.is_empty():
-            # Prepare table data
             trainable_emojis = {
                 "Yes": "✔️",
                 "No": "❌",
@@ -553,13 +592,11 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                 "N/A": "",
                 "-": "",
             }
-
             table_data = []
             for row in module_df.iter_rows(named=True):
                 trainable_display = trainable_emojis.get(
                     row["trainable_status"], row["trainable_status"]
                 )
-
                 if row["trainable_status"] == "-":
                     params_shape_display = "-"
                     params_perc_display = "-"
@@ -577,12 +614,13 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                         else "0.00%"
                     )
                 else:
-                    params_shape_display = "-"  # Show "-" when parameters are zero
+                    params_shape_display = "-"
                     params_perc_display = "----"
 
                 table_data.append(
                     [
                         row["name"],
+                        row["type"],
                         params_shape_display,
                         params_perc_display,
                         row["dtypes"],
@@ -597,97 +635,90 @@ def inspect_model(model, renderer="vscode", view_uint8_as_int4=True):
                     header=dict(
                         values=[
                             "Module Name",
+                            "Type",
                             "Params (Shape)",
                             "% Total",
                             "Dtypes (% module)",
                             "Device(s) (% module)",
                             "Est. Size",
-                            "Train",  # Shortened column name
+                            "Trainable",
                         ],
                         fill_color="#404040",
-                        font=dict(color="white", size=12, family="Arial, sans-serif"),
+                        font=dict(color="white", size=12),
                         align="left",
-                        line=dict(width=0),  # Remove border lines
+                        line=dict(width=0),
                     ),
                     cells=dict(
                         values=list(zip(*table_data))
                         if table_data
-                        else [[] for _ in range(7)],
+                        else [[] for _ in range(8)],
                         fill_color="#2d2d2d",
-                        font=dict(color="white", size=10, family="Arial, sans-serif"),
+                        font=dict(color="white", size=10),
                         align="left",
                         height=32,
-                        line=dict(
-                            width=0
-                        ),  # Remove border lines for rounder appearance
+                        line=dict(width=0),
                     ),
                     columnwidth=[
-                        3,
                         2.5,
-                        1,
-                        2,
-                        2,
                         1.5,
-                        0.8,
-                    ],  # Adjust column widths, making Trainable smaller
+                        2.25,
+                        1,
+                        1.75,
+                        1.25,
+                        1,
+                        1,
+                    ],  # Adjusted widths
                 ),
                 row=2,
                 col=1,
             )
 
         # Update layout
-        try:
-            model_class_name_str = model.__class__.__name__
-        except:
-            model_class_name_str = "N/A"
-
+        model_class_name_str = model.__class__.__name__
         try:
             model_source_file_str = py_inspect.getfile(model.__class__)
         except (TypeError, OSError):
             model_source_file_str = "Source not found"
 
         title_text = (
-            f"<b>{model_class_name_str}</b><br>"  # Removed "Model Inspector:" as requested
+            f"<b>{model_class_name_str}</b><br>"
             f"<sub>Source: {model_source_file_str}</sub><br>"
             f"<sub>Total Parameters: {data['total_params']:,} | "
             f"Estimated Size: {format_size(data['total_memory_bytes'])}</sub>"
         )
 
         fig.update_layout(
-            title=dict(
-                text=title_text, x=0.5, font=dict(size=16), y=0.98
-            ),  # Position title higher
-            height=1100,  # Increased height to accommodate spacing
-            showlegend=False,  # Remove all legends as requested
-            margin=dict(t=120, b=50, l=50, r=50),
+            title=dict(text=title_text, x=0.5, font=dict(size=16), y=0.98),
+            height=1100,
+            showlegend=False,
+            margin=dict(t=25, b=25, l=25, r=25),  # pad (let it like this)
         )
 
-        # Update subplot titles positioning to avoid overlap
-        fig.update_annotations(
-            font_size=12,
-            yshift=-20,  # Push subplot titles down
-        )
+        # Update subplot titles positioning
+        fig.update_annotations(font_size=12, yshift=-80)  # Reduced yshift
 
         return fig
 
-    # Create and show dashboard
     fig = create_dashboard()
 
-    # Only show if not in a context where it might be displayed automatically
     try:
-        # Check if we're in a Jupyter environment
         from IPython import get_ipython
 
         if get_ipython() is None:
             fig.show(renderer=renderer)
-        else:
-            # In Jupyter, just return the figure - it will display automatically
-            pass
     except ImportError:
-        # Not in Jupyter, safe to show
         fig.show(renderer=renderer)
 
-    return fig
+    if input_data is not None:
+        from torchinfo import summary
+
+        try:
+            s = summary(model, input_data)
+            return fig, s
+        except:
+            return fig
+    else:
+        return fig  # let this here
 
 
 ##############################################################################################
@@ -714,10 +745,11 @@ def inspect_tokenizer(tokenizer, renderer="vscode"):
                                   Defaults to "vscode". Common options include "notebook",
                                   "browser", or None for default behavior.
     """
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import plotly.io as pio
     import re
+
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    from plotly.subplots import make_subplots
 
     pio.templates.default = "plotly_dark"
 

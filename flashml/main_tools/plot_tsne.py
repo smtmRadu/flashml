@@ -7,7 +7,6 @@ def plot_tsne(
     max_iter=300,
     title="t-SNE Visualization",
     point_size=5,
-    renderer="vscode",
 ):
     """
     Plot in browser the t-SNE 2D/3D of the given data using Plotly.
@@ -23,11 +22,12 @@ def plot_tsne(
         point_size (int): Size of the scatter points.
 
     Returns:
+        fig (plotly.graph_objects.Figure): A plotly figure object containing the t-SNE visualization.
         tsne_results (numpy array): A numpy array of shape (n_samples, 2|3) containing the t-SNE mapped data.
     """
-    import plotly.graph_objects as go
-    import plotly.express as px
     import numpy as np
+    import plotly.express as px
+    import plotly.graph_objects as go
     from sklearn.manifold import TSNE
 
     mode = mode.lower()
@@ -216,6 +216,4 @@ def plot_tsne(
             height=700,
         )
 
-    fig.show(renderer=renderer)
-
-    return tsne_results
+    return fig, tsne_results

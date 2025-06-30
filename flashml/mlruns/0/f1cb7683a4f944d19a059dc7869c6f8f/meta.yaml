@@ -1,0 +1,15 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/f1cb7683a4f944d19a059dc7869c6f8f/artifacts
+end_time: 1751035813047
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: f1cb7683a4f944d19a059dc7869c6f8f
+run_name: dummy_uniform
+run_uuid: f1cb7683a4f944d19a059dc7869c6f8f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1751035813015
+status: 3
+tags: []
+user_id: radup

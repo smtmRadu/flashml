@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/eab5cac6f6654e949a47afb572bdc995/artifacts
+deleted_time: 1750586511481
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: eab5cac6f6654e949a47afb572bdc995
+run_name: Baselines
+run_uuid: eab5cac6f6654e949a47afb572bdc995
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750582558894
+status: 1
+tags: []
+user_id: radup

@@ -1,128 +1,150 @@
-###begin of file
-
-
-def _export_values(x_label: str, y_label: str, x_ticks, values):
-    import csv
-    from tkinter import filedialog, Tk
-    from collections.abc import Iterable
-
-    # Hide the root Tkinter window
-    root = Tk()
-    root.withdraw()
-
-    file_path = filedialog.asksaveasfilename(
-        defaultextension=".csv",
-        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-    )
-
-    if file_path:
-        with open(file_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-
-            if isinstance(values[0], Iterable):
-                header = [x_label] + [f"{y_label}_{i + 1}" for i in range(len(values))]
-                writer.writerow(header)
-                for i in range(len(x_ticks)):
-                    row = [x_ticks[i]] + [series[i] for series in values]
-                    writer.writerow(row)
-            else:
-                writer.writerow([x_label, y_label])
-                for x, y in zip(x_ticks, values):
-                    writer.writerow([x, y])
-
-        print(f"Data exported to {file_path}")
-
-
 def plot_graph(
     values: list | tuple[list] | list[list],
     steps: list = None,
-    x_label: str = "X",
-    y_label: str = "Y",
+    x_label: str = "x",
+    y_label: str = "y",
     color: str | list[str] = None,
-    linestyle: str | list[str] = "-",
+    linestyle: str | list[str] = "solid",
     marker: str | list[str] = "",
-    blocking: bool = True,
 ):
-    import matplotlib.pyplot as plt
-    from matplotlib.widgets import Button
     from collections.abc import Iterable
-    import numpy as np
+
+    import plotly.graph_objects as go
+    from plotly.colors import qualitative
 
     """
-    Plot single or multiple line graphs with export functionality.
+    Plot single or multiple line graphs using Plotly with dark theme.
 
     Args:
         values (list|tuple[list]|list[list]): Single list for one line or list of lists for multiple lines
         steps (list): Values for x-axis
-
         x_label (str): Label for x-axis
         y_label (str): Label for y-axis
         color (str|list[str]): Single color or list of colors for multiple lines. If None, uses automatic colors
         linestyle (str|list[str]): Single line style or list of styles for multiple lines
+        marker (str|list[str]): Marker style(s)
+        blocking (bool): Ignored (kept for compatibility)
+    
+    Returns:
+        plotly.graph_objects.Figure: The plotly figure object
     """
+
+    # Validate steps length
     if steps is not None:
         assert (
             len(steps) == len(values)
             if not isinstance(values[0], Iterable)
             else len(steps) == len(values[0])
-        ), "Length of teps must be equal to length of values"
+        ), "Length of steps must be equal to length of values"
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    fig.canvas.manager.set_window_title("flashml")
-    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    # Create figure with dark theme
+    fig = go.Figure()
 
+    # Map matplotlib linestyles to plotly dash styles
+    linestyle_map = {
+        "-": "solid",
+        "--": "dash",
+        "-.": "dashdot",
+        ":": "dot",
+        "solid": "solid",
+        "dash": "dash",
+        "dashdot": "dashdot",
+        "dot": "dot",
+    }
+
+    # Map matplotlib markers to plotly symbols
+    marker_map = {
+        "o": "circle",
+        "s": "square",
+        "^": "triangle-up",
+        "v": "triangle-down",
+        "D": "diamond",
+        "+": "cross",
+        "x": "x",
+        "*": "star",
+        "": None,
+        None: None,
+    }
+
+    # Check if we have multiple series
     if isinstance(values[0], Iterable):
         if steps is None:
-            steps = [i for i in range(len(values[0]))]
+            steps = list(range(len(values[0])))
 
         n_lines = len(values)
+
+        # Handle colors
         if color is None:
-            prop_cycle = plt.rcParams["axes.prop_cycle"]
-            colors = prop_cycle.by_key()["color"]
-            if n_lines > len(colors):
-                colors = plt.cm.tab20(np.linspace(0, 1, n_lines))
+            colors = qualitative.Plotly[:n_lines]
+            if n_lines > len(qualitative.Plotly):
+                colors = qualitative.Set3[:n_lines]
         else:
             colors = [color] * n_lines if isinstance(color, str) else color
-            colors = colors[:n_lines] + [
-                plt.cm.tab20(i) for i in np.linspace(0, 1, n_lines - len(colors))
-            ]
+            colors = colors[:n_lines] + qualitative.Plotly[: (n_lines - len(colors))]
 
+        # Handle line styles
         styles = [linestyle] * n_lines if isinstance(linestyle, str) else linestyle
-        styles = styles[:n_lines] + ["-"] * (n_lines - len(styles))
+        styles = styles[:n_lines] + ["solid"] * (n_lines - len(styles))
 
+        # Handle markers
+        markers = [marker] * n_lines if isinstance(marker, str) else marker
+        markers = markers[:n_lines] + [""] * (n_lines - len(markers))
+
+        # Add traces for each series
         for i, each in enumerate(values):
-            ax.plot(
-                steps,
-                each,
-                linestyle=styles[i],
-                marker=marker,
-                linewidth=min(100 / len(values), 1),
-                color=colors[i],
-                label=f"Series {i + 1}",
+            dash_style = linestyle_map.get(styles[i], "solid")
+            marker_symbol = marker_map.get(markers[i], None)
+
+            # Calculate line width (similar to matplotlib logic)
+            line_width = min(100 / len(values), 3)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=steps,
+                    y=each,
+                    mode="lines+markers" if marker_symbol else "lines",
+                    line=dict(color=colors[i], dash=dash_style, width=line_width),
+                    marker=dict(symbol=marker_symbol, size=6)
+                    if marker_symbol
+                    else None,
+                    name=f"Series {i + 1}",
+                )
             )
-        ax.legend()
     else:
+        # Single series
         if steps is None:
-            steps = [i for i in range(len(values))]
-        ax.plot(
-            steps,
-            values,
-            linestyle=linestyle,
-            marker=marker,
-            linewidth=min(100 / len(values), 1),
-            color="blue" if color is None else color,
+            steps = list(range(len(values)))
+
+        dash_style = linestyle_map.get(linestyle, "solid")
+        marker_symbol = marker_map.get(marker, None)
+        line_color = "blue" if color is None else color
+        line_width = min(100 / len(values), 3)
+
+        fig.add_trace(
+            go.Scatter(
+                x=steps,
+                y=values,
+                mode="lines+markers" if marker_symbol else "lines",
+                line=dict(color=line_color, dash=dash_style, width=line_width),
+                marker=dict(symbol=marker_symbol, size=6) if marker_symbol else None,
+                showlegend=False,
+            )
         )
 
-    ax.set_xlabel(xlabel=x_label)
-    ax.set_ylabel(ylabel=y_label)
-    ax.set_title(f"{y_label} vs {x_label}")
-    ax.grid(True)
-    plt.tight_layout()
-
-    export_ax = plt.axes([0.85, 0.01, 0.12, 0.05])
-    export_button = Button(export_ax, "Export CSV")
-    export_button.on_clicked(
-        lambda event: _export_values(x_label, y_label, steps, values)
+    # Update layout with dark theme and labels
+    fig.update_layout(
+        template="plotly_dark",
+        title=f"{y_label} vs {x_label}",
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+        showlegend=isinstance(values[0], Iterable),
+        hovermode="x unified",
+        width=800,
+        height=400,
     )
 
-    plt.show(block=blocking)
+    # Add grid
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="rgba(128,128,128,0.3)")
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="rgba(128,128,128,0.3)")
+
+    return fig

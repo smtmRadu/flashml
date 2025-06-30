@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.main_tools.colors &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.main_tools.colors</h1><div class="highlight"><pre>
+<span></span><span class="c1">### begin of file</span>
+
+<span class="n">_COLOR_MAP</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="ansi_of">
+<a class="viewcode-back" href="../../../flashml.html#flashml.ansi_of">[docs]</a>
+<span class="k">def</span> <span class="nf">ansi_of</span><span class="p">(</span><span class="n">color_name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the ANSI escape sequence for the given color name. Note that if printed, the console color will change.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_COLOR_MAP</span>
+    <span class="k">if</span> <span class="n">_COLOR_MAP</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_COLOR_MAP</span> <span class="o">=</span> <span class="n">_init_color_map</span><span class="p">()</span>
+
+    <span class="n">color_name</span> <span class="o">=</span> <span class="n">color_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">color_name</span> <span class="ow">in</span> <span class="n">_COLOR_MAP</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Color </span><span class="si">{</span><span class="n">color_name</span><span class="si">}</span><span class="s2"> not found in color map.&quot;</span>
+    <span class="k">return</span> <span class="n">_COLOR_MAP</span><span class="p">[</span><span class="n">color_name</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Index 0 for ANSI</span></div>
+
+
+
+<div class="viewcode-block" id="hex_to_ansi">
+<a class="viewcode-back" href="../../../flashml.html#flashml.hex_to_ansi">[docs]</a>
+<span class="k">def</span> <span class="nf">hex_to_ansi</span><span class="p">(</span><span class="n">hex_str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts a hexadecimal color string (e.g., &#39;#FF0000&#39;) to an ANSI escape sequence.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">r</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">hex_str</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="mi">16</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">hex_str</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span> <span class="mi">16</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">hex_str</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">7</span><span class="p">],</span> <span class="mi">16</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">;</span><span class="si">{</span><span class="n">g</span><span class="si">}</span><span class="s2">;</span><span class="si">{</span><span class="n">b</span><span class="si">}</span><span class="s2">m&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="ansi_to_hex">
+<a class="viewcode-back" href="../../../flashml.html#flashml.ansi_to_hex">[docs]</a>
+<span class="k">def</span> <span class="nf">ansi_to_hex</span><span class="p">(</span><span class="n">ansi_str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts an ANSI escape sequence to a hexadecimal color string (e.g., &#39;#FF0000&#39;).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">r</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">ansi_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;m&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;#</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">02X</span><span class="si">}{</span><span class="n">g</span><span class="si">:</span><span class="s2">02X</span><span class="si">}{</span><span class="n">b</span><span class="si">:</span><span class="s2">02X</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="hex_of">
+<a class="viewcode-back" href="../../../flashml.html#flashml.hex_of">[docs]</a>
+<span class="k">def</span> <span class="nf">hex_of</span><span class="p">(</span><span class="n">color_name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the hexadecimal representation of the given color name (e.g., &#39;#FF0000&#39;).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_COLOR_MAP</span>
+    <span class="k">if</span> <span class="n">_COLOR_MAP</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_COLOR_MAP</span> <span class="o">=</span> <span class="n">_init_color_map</span><span class="p">()</span>
+
+    <span class="n">color_name</span> <span class="o">=</span> <span class="n">color_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">color_name</span> <span class="ow">in</span> <span class="n">_COLOR_MAP</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Color </span><span class="si">{</span><span class="n">color_name</span><span class="si">}</span><span class="s2"> not found in color map.&quot;</span>
+    <span class="k">return</span> <span class="n">_COLOR_MAP</span><span class="p">[</span><span class="n">color_name</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Index 1 for HEX</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_init_color_map</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initializes and returns a single color map with tuples containing (ANSI, HEX) values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;black&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[30m&quot;</span><span class="p">,</span> <span class="s2">&quot;#000000&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;red&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[31m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF0000&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;green&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[32m&quot;</span><span class="p">,</span> <span class="s2">&quot;#008000&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;yellow&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[33m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFFF00&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;blue&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[34m&quot;</span><span class="p">,</span> <span class="s2">&quot;#0000FF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;purple&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[35m&quot;</span><span class="p">,</span> <span class="s2">&quot;#800080&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;cyan&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[36m&quot;</span><span class="p">,</span> <span class="s2">&quot;#00FFFF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;white&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[37m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFFFFF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;gray&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[90m&quot;</span><span class="p">,</span> <span class="s2">&quot;#808080&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;light_red&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[91m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF5555&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;light_green&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[92m&quot;</span><span class="p">,</span> <span class="s2">&quot;#55FF55&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;light_yellow&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[93m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFFF55&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;light_blue&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[94m&quot;</span><span class="p">,</span> <span class="s2">&quot;#5555FF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;magenta&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[95m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF00FF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;light_cyan&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[96m&quot;</span><span class="p">,</span> <span class="s2">&quot;#55FFFF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;pure_white&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[97m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFFFFF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;orange&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;165;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFA500&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;pink&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;105;180m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF69B4&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;lime&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;0;255;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#00FF00&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;teal&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;0;128;128m&quot;</span><span class="p">,</span> <span class="s2">&quot;#008080&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;violet&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;238;130;238m&quot;</span><span class="p">,</span> <span class="s2">&quot;#EE82EE&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;indigo&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;75;0;130m&quot;</span><span class="p">,</span> <span class="s2">&quot;#4B0082&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;gold&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;215;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFD700&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;silver&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;192;192;192m&quot;</span><span class="p">,</span> <span class="s2">&quot;#C0C0C0&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;brown&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;165;42;42m&quot;</span><span class="p">,</span> <span class="s2">&quot;#A52A2A&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;maroon&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;128;0;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#800000&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;olive&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;128;128;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#808000&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;navy&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;0;0;128m&quot;</span><span class="p">,</span> <span class="s2">&quot;#000080&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;coral&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;127;80m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF7F50&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;turquoise&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;64;224;208m&quot;</span><span class="p">,</span> <span class="s2">&quot;#40E0D0&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;salmon&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;250;128;114m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FA8072&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;plum&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;221;160;221m&quot;</span><span class="p">,</span> <span class="s2">&quot;#DDA0DD&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;orchid&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;218;112;214m&quot;</span><span class="p">,</span> <span class="s2">&quot;#DA70D6&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;sienna&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;160;82;45m&quot;</span><span class="p">,</span> <span class="s2">&quot;#A0522D&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;khaki&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;240;230;140m&quot;</span><span class="p">,</span> <span class="s2">&quot;#F0E68C&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;crimson&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;220;20;60m&quot;</span><span class="p">,</span> <span class="s2">&quot;#DC143C&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;lavender&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;230;230;250m&quot;</span><span class="p">,</span> <span class="s2">&quot;#E6E6FA&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;beige&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;245;245;220m&quot;</span><span class="p">,</span> <span class="s2">&quot;#F5F5DC&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;mint&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;189;252;201m&quot;</span><span class="p">,</span> <span class="s2">&quot;#BDFCC9&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;peach&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;218;185m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFDAB9&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;aqua&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;0;255;255m&quot;</span><span class="p">,</span> <span class="s2">&quot;#00FFFF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;chartreuse&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;127;255;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#7FFF00&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;tan&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;210;180;140m&quot;</span><span class="p">,</span> <span class="s2">&quot;#D2B48C&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;rose&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;0;127m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF007F&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;emerald&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;80;200;120m&quot;</span><span class="p">,</span> <span class="s2">&quot;#50C878&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;amber&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;191;0m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFBF00&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;jade&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;0;168;107m&quot;</span><span class="p">,</span> <span class="s2">&quot;#00A86B&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;fuchsia&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;0;255m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FF00FF&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;slate&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;112;128;144m&quot;</span><span class="p">,</span> <span class="s2">&quot;#708090&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;ivory&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;255;255;240m&quot;</span><span class="p">,</span> <span class="s2">&quot;#FFFFF0&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;sand&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;194;178;128m&quot;</span><span class="p">,</span> <span class="s2">&quot;#C2B280&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;lilac&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[38;2;200;162;200m&quot;</span><span class="p">,</span> <span class="s2">&quot;#C8A2C8&quot;</span><span class="p">),</span>
+    <span class="p">}</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

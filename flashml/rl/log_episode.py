@@ -1,7 +1,7 @@
-from typing import Any
-import time
-import sys
 import math
+import sys
+import time
+from typing import Any
 
 
 def log_episode(
@@ -9,8 +9,8 @@ def log_episode(
     episode_length: int,
     step: tuple[int, int],
     other_metrics: dict[str, Any] = None,
-    hyperparams: dict[str, Any] = None,
     running_statistics_momentum: float = 0.9,
+    experiment_name: str = "Default",
 ) -> None:
     """
     Records RL training data and logs it in MLFlow.
@@ -20,7 +20,6 @@ def log_episode(
             `step`(tuple[int, int]): The current (global step out of max_steps, max_steps).
 
             `other_metrics`(dict[str, Any]): Other information to log (e.g. GD steps).
-            `hyperparams`(dict[str, Any]): Hyperparameters used in the training process (you can log them anytime but only on the first call are taken into consideration)
             `momentum`(int): RT statistics are computed using running average.
     """
     _RLTrainLogger.log_episode(
@@ -29,25 +28,34 @@ def log_episode(
         step=step,
         momentum=running_statistics_momentum,
         other=other_metrics,
-        hyperparams=hyperparams,
+        experiment_name=experiment_name,
     )
 
 
 class _RLTrainLogger:
     _instance: "_RLTrainLogger" = None
 
-    def __new__(cls, total_steps: int = 1e5):
+    def __new__(
+        cls,
+        total_steps: int = 1e5,
+        experiment_name: str = "flashml-rl",
+    ):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, total_steps: int = 1e5):
+    def __init__(
+        self,
+        total_steps: int = 1e5,
+        experiment_name: str = "flashml-rl",
+    ):
         if hasattr(self, "_initialized"):
             return
 
-        from tqdm import tqdm
-        import mlflow
         import atexit
+
+        import mlflow
+        from tqdm import tqdm
 
         self.host = "127.0.0.1"
         self.port = 5000
@@ -66,6 +74,12 @@ class _RLTrainLogger:
         self.max_steps = total_steps
         self.other: dict[str, Any] = None
         self._hyperparams_logged = False
+        if experiment_name is not None:
+            exp = mlflow.get_experiment_by_name(experiment_name)
+            if exp is None:
+                mlflow.create_experiment(experiment_name)
+        mlflow.set_experiment(experiment_name)
+
         self.mlflow_op = mlflow.start_run(
             tags={"flashml": 0}
         )  # (log_system_metrics=True)
@@ -125,7 +139,7 @@ class _RLTrainLogger:
         step: tuple[int, int],
         momentum: float = 0.9,
         other: dict[str, Any] = None,
-        hyperparams: dict[str, Any] = None,
+        experiment_name: str = "flashml-rl",
     ) -> None:
         assert isinstance(step, tuple), "Note `step` must be a tuple[int, int]"
         assert episode_length > 0, "Episodes cannot last 0 steps or less."
@@ -135,7 +149,7 @@ class _RLTrainLogger:
 
         import mlflow
 
-        logger = _RLTrainLogger(total_steps=step[1])
+        logger = _RLTrainLogger(total_steps=step[1], experiment_name=experiment_name)
 
         if cumulative_reward > logger.reward_MAX:
             logger.reward_MAX = cumulative_reward
@@ -164,9 +178,23 @@ class _RLTrainLogger:
 
         logger.other = other
 
-        if logger._hyperparams_logged is False and hyperparams is not None:
-            mlflow.log_params(hyperparams, synchronous=False)
-            logger._hyperparams_logged = True
+        if _RLTrainLogger._instance._hyperparams_logged is False:
+            for var_name in globals():
+                if var_name.lower() in [
+                    "hyperparam",
+                    "hyperparams",
+                    "hyperparameters",
+                    "config",
+                    "configs",
+                    "configuration",
+                    "configurations",
+                    "hp",
+                    "hps",
+                    "hparam",
+                    "hparams",
+                ]:
+                    mlflow.log_params(globals()[var_name], synchronous=False)
+            _RLTrainLogger._instance._hyperparams_logged = True
 
         mlflow.log_metrics(
             {
@@ -183,8 +211,9 @@ class _RLTrainLogger:
 
     def _start_mlflow_ui(self, host: str, port: int) -> None:
         """Check if MLflow UI is running and start it in the Conda environment if not."""
-        import requests
         import subprocess
+
+        import requests
 
         try:
             response = requests.get(f"http://{host}:{port}", timeout=5)

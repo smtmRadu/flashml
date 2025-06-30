@@ -1,0 +1,728 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>flashml.modules package &mdash; flashml 0.5.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=b9afe91b"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="flashml.nlp package" href="flashml.nlp.html" />
+    <link rel="prev" title="flashml.legacy package" href="flashml.legacy.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            flashml
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">flashml</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="flashml.html">flashml package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="flashml.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="flashml.legacy.html">flashml.legacy package</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">flashml.modules package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.nlp.html">flashml.nlp package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.rl.html">flashml.rl package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html">flashml.schedulers package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#module-flashml.test">flashml.test module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#module-flashml">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">flashml</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">flashml</a></li>
+          <li class="breadcrumb-item"><a href="flashml.html">flashml package</a></li>
+      <li class="breadcrumb-item active">flashml.modules package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/flashml.modules.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="flashml-modules-package">
+<h1>flashml.modules package<a class="headerlink" href="#flashml-modules-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="flashml-modules-deepseekmoe-module">
+<h2>flashml.modules.DeepSeekMoE module<a class="headerlink" href="#flashml-modules-deepseekmoe-module" title="Link to this heading"></a></h2>
+</section>
+<section id="module-flashml.modules.FFN">
+<span id="flashml-modules-ffn-module"></span><h2>flashml.modules.FFN module<a class="headerlink" href="#module-flashml.modules.FFN" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.FFN.FFN">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.FFN.</span></span><span class="sig-name descname"><span class="pre">FFN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_dim=4096</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layers_num=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_activation=&lt;class</span> <span class="pre">'torch.nn.modules.activation.SiLU'&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/FFN.html#FFN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.FFN.FFN" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.FFN.FFN.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/FFN.html#FFN.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.FFN.FFN.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="flashml-modules-gqa-module">
+<h2>flashml.modules.GQA module<a class="headerlink" href="#flashml-modules-gqa-module" title="Link to this heading"></a></h2>
+</section>
+<section id="module-flashml.modules.MHA">
+<span id="flashml-modules-mha-module"></span><h2>flashml.modules.MHA module<a class="headerlink" href="#module-flashml.modules.MHA" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MHA.MHA">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.MHA.</span></span><span class="sig-name descname"><span class="pre">MHA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads_q</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads_kv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_causal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_rope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_max_seq_len</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4096</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_theta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MHA.html#MHA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MHA.MHA" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Grouped Query Attention with Rotary Positional Embeddings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MHA.MHA.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attn_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/MHA.html#MHA.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MHA.MHA.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.MLA">
+<span id="flashml-modules-mla-module"></span><h2>flashml.modules.MLA module<a class="headerlink" href="#module-flashml.modules.MLA" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MLA.MLA">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.MLA.</span></span><span class="sig-name descname"><span class="pre">MLA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heads_num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_seq_len</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4096</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_causal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MLA.html#MLA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MLA.MLA" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Multihead Latent Attention Layer with Rotary Positional Embeddings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MLA.MLA.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/MLA.html#MLA.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MLA.MLA.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.MinGRU">
+<span id="flashml-modules-mingru-module"></span><h2>flashml.modules.MinGRU module<a class="headerlink" href="#module-flashml.modules.MinGRU" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.MinGRU">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.MinGRU.</span></span><span class="sig-name descname"><span class="pre">MinGRU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#MinGRU"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.MinGRU" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.MinGRU.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#MinGRU.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.MinGRU.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.g">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinGRU.</span></span><span class="sig-name descname"><span class="pre">g</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#g"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.log_g">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinGRU.</span></span><span class="sig-name descname"><span class="pre">log_g</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#log_g"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.log_g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.parallel_scan_log">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinGRU.</span></span><span class="sig-name descname"><span class="pre">parallel_scan_log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_coeffs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#parallel_scan_log"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.parallel_scan_log" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-flashml.modules.MinLSTM">
+<span id="flashml-modules-minlstm-module"></span><h2>flashml.modules.MinLSTM module<a class="headerlink" href="#module-flashml.modules.MinLSTM" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.MinLSTM">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.MinLSTM.</span></span><span class="sig-name descname"><span class="pre">MinLSTM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#MinLSTM"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.MinLSTM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.MinLSTM.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#MinLSTM.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.MinLSTM.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.g">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinLSTM.</span></span><span class="sig-name descname"><span class="pre">g</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#g"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.log_g">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinLSTM.</span></span><span class="sig-name descname"><span class="pre">log_g</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#log_g"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.log_g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.parallel_scan_log">
+<span class="sig-prename descclassname"><span class="pre">flashml.modules.MinLSTM.</span></span><span class="sig-name descname"><span class="pre">parallel_scan_log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_coeffs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#parallel_scan_log"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.parallel_scan_log" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-flashml.modules.OrnsteinUhlenbeckProcess">
+<span id="flashml-modules-ornsteinuhlenbeckprocess-module"></span><h2>flashml.modules.OrnsteinUhlenbeckProcess module<a class="headerlink" href="#module-flashml.modules.OrnsteinUhlenbeckProcess" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.OrnsteinUhlenbeckProcess.</span></span><span class="sig-name descname"><span class="pre">OrnsteinUhlenbeckProcess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype=&lt;class</span> <span class="pre">'numpy.float32'&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Generates OU noise.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset the internal state (= noise) to mean (mu).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess.OrnsteinUhlenbeckProcess.sample" title="Link to this definition"></a></dt>
+<dd><p>Update internal state and return it as a noise sample.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.PolyakAveraging">
+<span id="flashml-modules-polyakaveraging-module"></span><h2>flashml.modules.PolyakAveraging module<a class="headerlink" href="#module-flashml.modules.PolyakAveraging" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging.PolyakAveraging">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.PolyakAveraging.</span></span><span class="sig-name descname"><span class="pre">PolyakAveraging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polyak</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.99</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_after</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/PolyakAveraging.html#PolyakAveraging"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.PolyakAveraging.PolyakAveraging" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>### Usage:
+polyak_model = PolyakAveraging(model)</p>
+<dl class="simple">
+<dt>for epoch in epochs:</dt><dd><dl class="simple">
+<dt>for step in steps:</dt><dd><p>forward()
+zero_grad()
+backward()
+optim_step()
+polyak_model.step()  # Update EMA weights</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>model = polyak_model.EMA_Model</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging.PolyakAveraging.EMA_Model">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">EMA_Model</span></span><a class="headerlink" href="#flashml.modules.PolyakAveraging.PolyakAveraging.EMA_Model" title="Link to this definition"></a></dt>
+<dd><p>Returns the current state of the EMA model</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging.PolyakAveraging.step">
+<span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/PolyakAveraging.html#PolyakAveraging.step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.PolyakAveraging.PolyakAveraging.step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.RMSNorm">
+<span id="flashml-modules-rmsnorm-module"></span><h2>flashml.modules.RMSNorm module<a class="headerlink" href="#module-flashml.modules.RMSNorm" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.RMSNorm.RMSNorm">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.RMSNorm.</span></span><span class="sig-name descname"><span class="pre">RMSNorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">affine_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/RMSNorm.html#RMSNorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.RMSNorm.RMSNorm" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.RMSNorm.RMSNorm.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/RMSNorm.html#RMSNorm.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.RMSNorm.RMSNorm.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.Rish">
+<span id="flashml-modules-rish-module"></span><h2>flashml.modules.Rish module<a class="headerlink" href="#module-flashml.modules.Rish" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.Rish.Rish">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.Rish.</span></span><span class="sig-name descname"><span class="pre">Rish</span></span><a class="reference internal" href="_modules/flashml/modules/Rish.html#Rish"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.Rish.Rish" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>= (x - 1) * exp(x) / (1 + exp(x))</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.Rish.Rish.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/Rish.html#Rish.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.Rish.Rish.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.SwiGLU">
+<span id="flashml-modules-swiglu-module"></span><h2>flashml.modules.SwiGLU module<a class="headerlink" href="#module-flashml.modules.SwiGLU" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.SwiGLU.SwiGLU">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.SwiGLU.</span></span><span class="sig-name descname"><span class="pre">SwiGLU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/SwiGLU.html#SwiGLU"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.SwiGLU.SwiGLU" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Swish-Gated Linear Unit (SwiGLU). Kaiming normalization is default.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.SwiGLU.SwiGLU.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/SwiGLU.html#SwiGLU.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.SwiGLU.SwiGLU.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.VAE">
+<span id="flashml-modules-vae-module"></span><h2>flashml.modules.VAE module<a class="headerlink" href="#module-flashml.modules.VAE" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.VAE.</span></span><span class="sig-name descname"><span class="pre">VAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE.decode">
+<span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE.decode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE.encode">
+<span class="sig-name descname"><span class="pre">encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.encode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE.encode" title="Link to this definition"></a></dt>
+<dd><p>Returns the mean and log variance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE.forward" title="Link to this definition"></a></dt>
+<dd><p>Returns: x_hat, mu, logvar</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE.loss_function">
+<span class="sig-name descname"><span class="pre">loss_function</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_hat</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logvar</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.loss_function"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE.loss_function" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.VAE.reparametrize">
+<span class="sig-name descname"><span class="pre">reparametrize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logvar</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.reparametrize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.VAE.reparametrize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules.pRoPE">
+<span id="flashml-modules-prope-module"></span><h2>flashml.modules.pRoPE module<a class="headerlink" href="#module-flashml.modules.pRoPE" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.pRoPE.pRoPE">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.pRoPE.</span></span><span class="sig-name descname"><span class="pre">pRoPE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">head_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_wavelength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_percentage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.75</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/pRoPE.html#pRoPE"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.pRoPE.pRoPE" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.pRoPE.pRoPE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">positions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/pRoPE.html#pRoPE.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.pRoPE.pRoPE.forward" title="Link to this definition"></a></dt>
+<dd><p>Applies p-RoPE to the input tensor.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>x (torch.Tensor): Input tensor, e.g., query or key, with shape [B, L, num_heads, head_dim].</dt><dd><p>Rotation is applied to the last dimension.</p>
+</dd>
+<dt>positions (Optional[torch.Tensor]): Optional tensor containing the position ids</dt><dd><p>of each token. Shape [B, L].
+If None, assumes sequential positions [0, 1, …, L-1]
+for all sequences in the batch. Defaults to None.</p>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>torch.Tensor: Output tensor with p-RoPE applied, same shape as input x ([B, L, nH, hD]).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-flashml.modules">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-flashml.modules" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.FFN">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">FFN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_dim=4096</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layers_num=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_activation=&lt;class</span> <span class="pre">'torch.nn.modules.activation.SiLU'&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/FFN.html#FFN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.FFN" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.FFN.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/FFN.html#FFN.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.FFN.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MHA">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">MHA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads_q</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads_kv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_causal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_rope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_max_seq_len</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4096</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_theta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MHA.html#MHA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MHA" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Grouped Query Attention with Rotary Positional Embeddings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MHA.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attn_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/MHA.html#MHA.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MHA.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">MinGRU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#MinGRU"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MinGRU.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinGRU.html#MinGRU.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinGRU.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">MinLSTM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#MinLSTM"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.MinLSTM.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/MinLSTM.html#MinLSTM.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.MinLSTM.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">OrnsteinUhlenbeckProcess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype=&lt;class</span> <span class="pre">'numpy.float32'&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Generates OU noise.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset the internal state (= noise) to mean (mu).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.OrnsteinUhlenbeckProcess.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/flashml/modules/OrnsteinUhlenbeckProcess.html#OrnsteinUhlenbeckProcess.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.OrnsteinUhlenbeckProcess.sample" title="Link to this definition"></a></dt>
+<dd><p>Update internal state and return it as a noise sample.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">PolyakAveraging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polyak</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.99</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_after</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/PolyakAveraging.html#PolyakAveraging"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.PolyakAveraging" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>### Usage:
+polyak_model = PolyakAveraging(model)</p>
+<dl class="simple">
+<dt>for epoch in epochs:</dt><dd><dl class="simple">
+<dt>for step in steps:</dt><dd><p>forward()
+zero_grad()
+backward()
+optim_step()
+polyak_model.step()  # Update EMA weights</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>model = polyak_model.EMA_Model</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging.EMA_Model">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">EMA_Model</span></span><a class="headerlink" href="#flashml.modules.PolyakAveraging.EMA_Model" title="Link to this definition"></a></dt>
+<dd><p>Returns the current state of the EMA model</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.PolyakAveraging.step">
+<span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/PolyakAveraging.html#PolyakAveraging.step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.PolyakAveraging.step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.RMSNorm">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">RMSNorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">affine_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/RMSNorm.html#RMSNorm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.RMSNorm" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.RMSNorm.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/RMSNorm.html#RMSNorm.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.RMSNorm.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.Rish">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">Rish</span></span><a class="reference internal" href="_modules/flashml/modules/Rish.html#Rish"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.Rish" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>= (x - 1) * exp(x) / (1 + exp(x))</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.Rish.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/Rish.html#Rish.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.Rish.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.SwiGLU">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">SwiGLU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/SwiGLU.html#SwiGLU"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.SwiGLU" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Swish-Gated Linear Unit (SwiGLU). Kaiming normalization is default.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.SwiGLU.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/SwiGLU.html#SwiGLU.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.SwiGLU.forward" title="Link to this definition"></a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.VAE">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">VAE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latent_dim</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.decode">
+<span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.decode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.encode">
+<span class="sig-name descname"><span class="pre">encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.encode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.encode" title="Link to this definition"></a></dt>
+<dd><p>Returns the mean and log variance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.forward" title="Link to this definition"></a></dt>
+<dd><p>Returns: x_hat, mu, logvar</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.loss_function">
+<span class="sig-name descname"><span class="pre">loss_function</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_hat</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logvar</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.loss_function"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.loss_function" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.VAE.reparametrize">
+<span class="sig-name descname"><span class="pre">reparametrize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logvar</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/VAE.html#VAE.reparametrize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.VAE.reparametrize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flashml.modules.pRoPE">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flashml.modules.</span></span><span class="sig-name descname"><span class="pre">pRoPE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">head_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_wavelength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope_percentage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.75</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/modules/pRoPE.html#pRoPE"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.pRoPE" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flashml.modules.pRoPE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">positions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/flashml/modules/pRoPE.html#pRoPE.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.modules.pRoPE.forward" title="Link to this definition"></a></dt>
+<dd><p>Applies p-RoPE to the input tensor.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>x (torch.Tensor): Input tensor, e.g., query or key, with shape [B, L, num_heads, head_dim].</dt><dd><p>Rotation is applied to the last dimension.</p>
+</dd>
+<dt>positions (Optional[torch.Tensor]): Optional tensor containing the position ids</dt><dd><p>of each token. Shape [B, L].
+If None, assumes sequential positions [0, 1, …, L-1]
+for all sequences in the batch. Defaults to None.</p>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>torch.Tensor: Output tensor with p-RoPE applied, same shape as input x ([B, L, nH, hD]).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="flashml.legacy.html" class="btn btn-neutral float-left" title="flashml.legacy package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="flashml.nlp.html" class="btn btn-neutral float-right" title="flashml.nlp package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, kbradu.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

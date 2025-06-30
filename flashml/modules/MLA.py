@@ -27,7 +27,7 @@ class MLA(nn.Module):
         self.dh = embedding_dim // heads_num
         self.nh = heads_num
 
-        # idk what is the compression ratio
+        # idk what value they use for the compression ratio
         kv_compression_dim = self.d // 3
         q_compression_dim = self.d // 3
         assert kv_compression_dim < self.dh * self.nh, (

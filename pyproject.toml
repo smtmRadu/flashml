@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashml"
-version = "0.6"
+version = "0.6.1"
 authors = [{ name = "kbradu" }]
 dependencies = [
     "ipywidgets",
@@ -40,6 +40,9 @@ dependencies = [
     "peft",
     "ipykernel",
     "opencv-python",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
 ]
 
 [tool.setuptools]

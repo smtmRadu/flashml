@@ -1,0 +1,546 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>flashml.nlp package &mdash; flashml 0.5.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=b9afe91b"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="flashml.rl package" href="flashml.rl.html" />
+    <link rel="prev" title="flashml.modules package" href="flashml.modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            flashml
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">flashml</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="flashml.html">flashml package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="flashml.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="flashml.legacy.html">flashml.legacy package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.modules.html">flashml.modules package</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">flashml.nlp package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.rl.html">flashml.rl package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="flashml.schedulers.html">flashml.schedulers package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#module-flashml.test">flashml.test module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="flashml.html#module-flashml">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">flashml</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">flashml</a></li>
+          <li class="breadcrumb-item"><a href="flashml.html">flashml package</a></li>
+      <li class="breadcrumb-item active">flashml.nlp package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/flashml.nlp.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="flashml-nlp-package">
+<h1>flashml.nlp package<a class="headerlink" href="#flashml-nlp-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-flashml.nlp.text_removers">
+<span id="flashml-nlp-text-removers-module"></span><h2>flashml.nlp.text_removers module<a class="headerlink" href="#module-flashml.nlp.text_removers" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_removers.remove_double_spacing">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_removers.</span></span><span class="sig-name descname"><span class="pre">remove_double_spacing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_removers.html#remove_double_spacing"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_removers.remove_double_spacing" title="Link to this definition"></a></dt>
+<dd><p>Removes multiple consecutive spaces from a text column in a Pandas or Polars DataFrame, replacing them with a single space.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with multiple spaces reduced to single spaces in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_removers.remove_stopwords">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_removers.</span></span><span class="sig-name descname"><span class="pre">remove_stopwords</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_spacy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'en_core_web_sm'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_removers.html#remove_stopwords"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_removers.remove_stopwords" title="Link to this definition"></a></dt>
+<dd><p>Removes stopwords from a text column in a Pandas or Polars DataFrame using spaCy.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with the specified column having stopwords removed</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-flashml.nlp.text_replacers">
+<span id="flashml-nlp-text-replacers-module"></span><h2>flashml.nlp.text_replacers module<a class="headerlink" href="#module-flashml.nlp.text_replacers" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_currency">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_currency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'CURRENCY'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_currency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_currency" title="Link to this definition"></a></dt>
+<dd><p>Replaces currencies ($100, €50, ¥1000) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emails with (default: ‘EMAIL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with email addresses replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_emails">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_emails</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'EMAIL'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_emails"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_emails" title="Link to this definition"></a></dt>
+<dd><p>Replaces email addresses in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emails with (default: ‘EMAIL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with email addresses replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_emojis">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_emojis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'EMOJI'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_emojis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_emojis" title="Link to this definition"></a></dt>
+<dd><p>Replaces emojis in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emojis with (default: ‘EMOJI’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with emojis replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_hashtags">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_hashtags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'HASH'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_hashtags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_hashtags" title="Link to this definition"></a></dt>
+<dd><p>Replaces hashtags (e.g. #ab4_23a) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace hashtags with (default: ‘HASH’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with hashtags replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_measurements">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_measurements</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SIZE'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_measurements"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_measurements" title="Link to this definition"></a></dt>
+<dd><p>Replaces measurements (8oz, 13kg etc.) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace smileys with (default: ‘SMILEY’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with smiley faces replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_numbers">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_numbers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'NUM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">including_floats</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_numbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_numbers" title="Link to this definition"></a></dt>
+<dd><p>Replaces numbers in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace numbers with (default: ‘NUM’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with numbers replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_pattern">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_pattern</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regex_pattern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'MATCH'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_pattern"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_pattern" title="Link to this definition"></a></dt>
+<dd><p>GENERAL - Replaces text matching a regex pattern in a text column of a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+pattern: str - regex pattern to match
+replacement: str - the string to replace matches with (default: ‘MATCH’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with the matched patterns replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_punctuation">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_punctuation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'PUNC'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_punctuation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_punctuation" title="Link to this definition"></a></dt>
+<dd><p>Replaces punctuation in a text column with a placeholder in a Pandas or Polars DataFrame.
+Replaces sequences of one or more punctuation characters with a single replacement token.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace punctuation with (default: ‘PUNC’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with punctuation replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_smileys">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_smileys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SMILEY'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_smileys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_smileys" title="Link to this definition"></a></dt>
+<dd><p>Replaces text-based smiley faces (e.g., :), :-), =)))))) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace smileys with (default: ‘SMILEY’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with smiley faces replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_replacers.replace_urls">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_replacers.</span></span><span class="sig-name descname"><span class="pre">replace_urls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'URL'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_urls"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_replacers.replace_urls" title="Link to this definition"></a></dt>
+<dd><p>Replaces URLs in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace URLs with (default: ‘URL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with URLs replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-flashml.nlp.text_special_prepreocessing">
+<span id="flashml-nlp-text-special-prepreocessing-module"></span><h2>flashml.nlp.text_special_prepreocessing module<a class="headerlink" href="#module-flashml.nlp.text_special_prepreocessing" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_special_prepreocessing.expand_contractions">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_special_prepreocessing.</span></span><span class="sig-name descname"><span class="pre">expand_contractions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#expand_contractions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_special_prepreocessing.expand_contractions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_special_prepreocessing.lemmatize">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_special_prepreocessing.</span></span><span class="sig-name descname"><span class="pre">lemmatize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiprocess</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spacy_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'en_core_web_sm'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#lemmatize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_special_prepreocessing.lemmatize" title="Link to this definition"></a></dt>
+<dd><p>Applies parallel lemmatization to a text column in a DataFrame using spaCy.
+This works only in .py files, when called within if __name__ == “__main__”:</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame.
+column_name: The name of the column to process.
+spacy_model: The name of the spaCy model to use.
+batch_size: The number of texts to buffer during processing.</p>
+</dd>
+<dt>Returns:</dt><dd><p>A new DataFrame with the lemmatized text in the specified column.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.text_special_prepreocessing.lowercase">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.text_special_prepreocessing.</span></span><span class="sig-name descname"><span class="pre">lowercase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#lowercase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.text_special_prepreocessing.lowercase" title="Link to this definition"></a></dt>
+<dd><p>Lowercases a column in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - the name of the column to lowercase</p>
+</dd>
+<dt>Returns:</dt><dd><p>A new DataFrame with the specified column lowercased</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-flashml.nlp">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-flashml.nlp" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.expand_contractions">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">expand_contractions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#expand_contractions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.expand_contractions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.lemmatize">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">lemmatize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiprocess</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spacy_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'en_core_web_sm'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#lemmatize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.lemmatize" title="Link to this definition"></a></dt>
+<dd><p>Applies parallel lemmatization to a text column in a DataFrame using spaCy.
+This works only in .py files, when called within if __name__ == “__main__”:</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame.
+column_name: The name of the column to process.
+spacy_model: The name of the spaCy model to use.
+batch_size: The number of texts to buffer during processing.</p>
+</dd>
+<dt>Returns:</dt><dd><p>A new DataFrame with the lemmatized text in the specified column.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.lowercase">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">lowercase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_special_prepreocessing.html#lowercase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.lowercase" title="Link to this definition"></a></dt>
+<dd><p>Lowercases a column in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - the name of the column to lowercase</p>
+</dd>
+<dt>Returns:</dt><dd><p>A new DataFrame with the specified column lowercased</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.remove_double_spacing">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">remove_double_spacing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_removers.html#remove_double_spacing"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.remove_double_spacing" title="Link to this definition"></a></dt>
+<dd><p>Removes multiple consecutive spaces from a text column in a Pandas or Polars DataFrame, replacing them with a single space.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with multiple spaces reduced to single spaces in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.remove_stopwords">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">remove_stopwords</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_spacy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'en_core_web_sm'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_removers.html#remove_stopwords"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.remove_stopwords" title="Link to this definition"></a></dt>
+<dd><p>Removes stopwords from a text column in a Pandas or Polars DataFrame using spaCy.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with the specified column having stopwords removed</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_currency">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_currency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'CURRENCY'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_currency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_currency" title="Link to this definition"></a></dt>
+<dd><p>Replaces currencies ($100, €50, ¥1000) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emails with (default: ‘EMAIL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with email addresses replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_emails">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_emails</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'EMAIL'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_emails"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_emails" title="Link to this definition"></a></dt>
+<dd><p>Replaces email addresses in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emails with (default: ‘EMAIL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with email addresses replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_emojis">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_emojis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'EMOJI'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_emojis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_emojis" title="Link to this definition"></a></dt>
+<dd><p>Replaces emojis in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace emojis with (default: ‘EMOJI’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with emojis replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_hashtags">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_hashtags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'HASH'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_hashtags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_hashtags" title="Link to this definition"></a></dt>
+<dd><p>Replaces hashtags (e.g. #ab4_23a) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace hashtags with (default: ‘HASH’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with hashtags replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_measurements">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_measurements</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SIZE'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_measurements"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_measurements" title="Link to this definition"></a></dt>
+<dd><p>Replaces measurements (8oz, 13kg etc.) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace smileys with (default: ‘SMILEY’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with smiley faces replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_numbers">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_numbers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'NUM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">including_floats</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_numbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_numbers" title="Link to this definition"></a></dt>
+<dd><p>Replaces numbers in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace numbers with (default: ‘NUM’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with numbers replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_pattern">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_pattern</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regex_pattern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'MATCH'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_pattern"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_pattern" title="Link to this definition"></a></dt>
+<dd><p>GENERAL - Replaces text matching a regex pattern in a text column of a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+pattern: str - regex pattern to match
+replacement: str - the string to replace matches with (default: ‘MATCH’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with the matched patterns replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_punctuation">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_punctuation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'PUNC'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_punctuation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_punctuation" title="Link to this definition"></a></dt>
+<dd><p>Replaces punctuation in a text column with a placeholder in a Pandas or Polars DataFrame.
+Replaces sequences of one or more punctuation characters with a single replacement token.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace punctuation with (default: ‘PUNC’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with punctuation replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_smileys">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_smileys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SMILEY'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_smileys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_smileys" title="Link to this definition"></a></dt>
+<dd><p>Replaces text-based smiley faces (e.g., :), :-), =)))))) in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace smileys with (default: ‘SMILEY’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with smiley faces replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="flashml.nlp.replace_urls">
+<span class="sig-prename descclassname"><span class="pre">flashml.nlp.</span></span><span class="sig-name descname"><span class="pre">replace_urls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replacement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'URL'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/flashml/nlp/text_replacers.html#replace_urls"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#flashml.nlp.replace_urls" title="Link to this definition"></a></dt>
+<dd><p>Replaces URLs in a text column with a placeholder in a Pandas or Polars DataFrame.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df: A pandas.DataFrame or polars.DataFrame
+column_name: str - name of the column to process
+replacement: str - the string to replace URLs with (default: ‘URL’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>A DataFrame with URLs replaced in the specified column</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="flashml.modules.html" class="btn btn-neutral float-left" title="flashml.modules package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="flashml.rl.html" class="btn btn-neutral float-right" title="flashml.rl package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, kbradu.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

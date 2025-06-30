@@ -1,0 +1,15 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/4d0b7a9455f14ffa801b6eee774fc91a/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 4d0b7a9455f14ffa801b6eee774fc91a
+run_name: clumsy-newt-699
+run_uuid: 4d0b7a9455f14ffa801b6eee774fc91a
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1751093057427
+status: 1
+tags: []
+user_id: radup

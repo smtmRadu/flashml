@@ -1,19 +1,17 @@
+from .FFN import FFN
 from .MHA import MHA
-from .GQA import GQA
 from .MinGRU import MinGRU
 from .MinLSTM import MinLSTM
-from .RMSNorm import RMSNorm
-from .SwiGLU import SwiGLU
-from .Rish import Rish
-from .FFN import FFN
-from .VAE import VAE
-from .pRoPE import pRoPE
 from .OrnsteinUhlenbeckProcess import OrnsteinUhlenbeckProcess
 from .PolyakAveraging import PolyakAveraging
+from .pRoPE import pRoPE
+from .Rish import Rish
+from .RMSNorm import RMSNorm
+from .SwiGLU import SwiGLU
+from .VAE import VAE
 
 __all__ = [
     "FFN",
-    "GQA",
     "MHA",
     "MinGRU",
     "MinLSTM",

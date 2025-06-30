@@ -6,7 +6,6 @@ def plot_tensor(
     title: str = "",
     colorscale: str = "Viridis",
     show_values: bool = True,
-    renderer: str = "vscode",
 ):
     """
     Creates interactive Plotly visualizations for 0D, 1D, 2D, and 3D tensors.
@@ -28,9 +27,9 @@ def plot_tensor(
     Returns:
         Plotly figure object
     """
+    import numpy as np
     import plotly.graph_objects as go
     import plotly.io as pio
-    import numpy as np
 
     pio.templates.default = "plotly_dark"
     # Convert input to numpy array
@@ -39,6 +38,8 @@ def plot_tensor(
         original_device = tensor.device
     except:
         pass
+
+    original_dtype = tensor.dtype
 
     if not isinstance(tensor, np.ndarray):
         try:
@@ -83,7 +84,7 @@ def plot_tensor(
 
     if dim == 0:
         return _plot_0d_tensor(
-            tensor, title, colorscale, width, height, original_device, renderer
+            tensor, title, colorscale, width, height, original_device, original_dtype
         )
     elif dim == 1:
         return _plot_1d_tensor(
@@ -94,7 +95,7 @@ def plot_tensor(
             width,
             height,
             original_device,
-            renderer,
+            original_dtype,
         )
     elif dim == 2:
         return _plot_2d_tensor(
@@ -105,16 +106,11 @@ def plot_tensor(
             width,
             height,
             original_device,
-            renderer,
+            original_dtype,
         )
     elif dim == 3:
         return _plot_3d_tensor(
-            tensor,
-            title,
-            colorscale,
-            show_values,
-            original_device,
-            renderer=renderer,
+            tensor, title, colorscale, show_values, original_device, original_dtype
         )
     else:
         # High-dimensional tensor - show error
@@ -129,19 +125,19 @@ def plot_tensor(
             font=dict(size=20, color="red"),
         )
         fig.update_layout(
-            title=f"{title} Unsupported Dimension ({dim}D)",
+            title=f"{title} Unsupported Dimension ({dim}D) | device: {original_device} | dtype: {original_dtype}",
             width=width,
             height=height,
         )
-        fig.show(renderer=renderer)
+        return fig
 
 
 def _plot_0d_tensor(
-    tensor, title, colorscale, width, height, original_device, renderer
+    tensor, title, colorscale, width, height, original_device, original_dtype
 ):
     """Plot 0D tensor (scalar) with gauge and info card"""
-    import plotly.graph_objects as go
     import plotly.express as px
+    import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
     value = tensor.item()
@@ -213,20 +209,26 @@ def _plot_0d_tensor(
     )
 
     fig.update_layout(
-        title=f"{title} 0D Tensor (Scalar) | Device: {original_device}",
+        title=f"{title} 0D Tensor (Scalar) | device: {original_device} | dtype: {original_dtype}",
         width=width,
         height=height,
     )
-
-    fig.show(renderer=renderer)
+    return fig
 
 
 def _plot_1d_tensor(
-    tensor, title, colorscale, show_values, width, height, original_device, renderer
+    tensor,
+    title,
+    colorscale,
+    show_values,
+    width,
+    height,
+    original_device,
+    original_dtype,
 ):
-    from plotly.subplots import make_subplots
-    import plotly.graph_objects as go
     import numpy as np
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     """Plot 1D tensor with bar chart and heatmap views"""
 
@@ -304,7 +306,7 @@ def _plot_1d_tensor(
 
     fig.update_layout(
         title=dict(
-            text=f"{title} 1D Tensor ({len(tensor)} elements) | Device: {original_device}",
+            text=f"{title} 1D Tensor ({len(tensor)} elements) | device: {original_device} | dtype: {original_dtype}",
             x=0.5,  # Center the title horizontally
             xanchor="center",
         ),
@@ -312,12 +314,18 @@ def _plot_1d_tensor(
         height=height,
         showlegend=False,
     )
-
-    fig.show(renderer=renderer)
+    return fig
 
 
 def _plot_2d_tensor(
-    tensor, title, colorscale, show_values, width, height, original_device, renderer
+    tensor,
+    title,
+    colorscale,
+    show_values,
+    width,
+    height,
+    original_device,
+    original_dtype,
 ):
     """Plot 2D tensor with interactive heatmap"""
     import plotly.graph_objects as go
@@ -363,7 +371,7 @@ def _plot_2d_tensor(
 
     fig.update_layout(
         title=dict(
-            text=f"{title} 2D Tensor ({rows}×{cols}) | Device: {original_device}",
+            text=f"{title} 2D Tensor ({rows}×{cols}) | device: {original_device} | dtype: {original_dtype}",
             x=0.5,  # Center the title horizontally
             xanchor="center",
         ),
@@ -373,17 +381,11 @@ def _plot_2d_tensor(
         height=height,
         yaxis=dict(autorange="reversed"),  # Match matrix convention
     )
-
-    fig.show(renderer=renderer)
+    return fig
 
 
 def _plot_3d_tensor(
-    tensor,
-    title,
-    colorscale,
-    show_values,
-    original_device,
-    renderer,
+    tensor, title, colorscale, show_values, original_device, original_dtype
 ):
     """Plot 3D tensor with slice slider"""
     import plotly.graph_objects as go
@@ -475,7 +477,7 @@ def _plot_3d_tensor(
     # Update layout
     fig.update_layout(
         title=dict(
-            text=f"{title} (Slice 0) 3D Tensor ({depth}×{rows}×{cols}) | Device: {original_device}",
+            text=f"{title} (Slice 0) 3D Tensor ({depth}×{rows}×{cols}) | device: {original_device} | dtype: {original_dtype}",
             x=0.5,
             xanchor="center",
         ),
@@ -484,7 +486,5 @@ def _plot_3d_tensor(
         yaxis=dict(autorange="reversed"),
         sliders=sliders,
     )
-
-    fig.show(renderer=renderer)
 
     return fig

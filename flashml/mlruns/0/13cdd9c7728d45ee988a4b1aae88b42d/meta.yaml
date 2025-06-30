@@ -1,0 +1,16 @@
+artifact_uri: file:///e:/Development/flashml/flashml/mlruns/0/13cdd9c7728d45ee988a4b1aae88b42d/artifacts
+deleted_time: 1750586511566
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: 13cdd9c7728d45ee988a4b1aae88b42d
+run_name: charming-seal-738
+run_uuid: 13cdd9c7728d45ee988a4b1aae88b42d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750074166307
+status: 1
+tags: []
+user_id: radup

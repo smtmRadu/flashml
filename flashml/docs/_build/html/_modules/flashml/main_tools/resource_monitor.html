@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.main_tools.resource_monitor &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.main_tools.resource_monitor</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">psutil</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+
+<span class="n">ALWAYS_ON_TOP</span> <span class="o">=</span> <span class="kc">True</span>
+
+<span class="n">UPDATE_INTERVAL_MS</span> <span class="o">=</span> <span class="mi">250</span>
+<span class="n">HISTORY_LENGTH</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="n">CHART_HEIGHT</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="n">BAR_LENGTH</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="n">BG_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#24292e&quot;</span>
+<span class="n">FG_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#c9d1d9&quot;</span>
+<span class="n">BORDER_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#444c56&quot;</span>
+<span class="n">CANVAS_BG_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#2d333b&quot;</span>
+<span class="n">CANVAS_GRID_COLOR</span> <span class="o">=</span> <span class="n">BORDER_COLOR</span>
+
+<span class="n">CPU_ACCENT_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#58a6ff&quot;</span>
+<span class="n">CPU_FRAME_BORDER_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#2a5487&quot;</span>
+<span class="n">CPU_PROGRESS_BAR_BG</span> <span class="o">=</span> <span class="s2">&quot;#1e3a5c&quot;</span>
+
+<span class="n">RAM_ACCENT_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#f1e05a&quot;</span>
+<span class="n">RAM_FRAME_BORDER_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#7f742f&quot;</span>
+<span class="n">RAM_PROGRESS_BAR_BG</span> <span class="o">=</span> <span class="s2">&quot;#4d461c&quot;</span>
+
+<span class="n">GPU_ACCENT_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#3fb950&quot;</span>
+<span class="n">GPU_FRAME_BORDER_COLOR</span> <span class="o">=</span> <span class="s2">&quot;#2b6134&quot;</span>
+<span class="n">GPU_PROGRESS_BAR_BG</span> <span class="o">=</span> <span class="s2">&quot;#22442a&quot;</span>
+
+<span class="n">IO_ACCENT_COLOR</span> <span class="o">=</span> <span class="n">FG_COLOR</span>
+<span class="n">IO_FRAME_BORDER_COLOR</span> <span class="o">=</span> <span class="n">BORDER_COLOR</span>  <span class="c1">#</span>
+
+
+<span class="n">LOCKFILE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">(),</span> <span class="s2">&quot;resource_monitor.lock&quot;</span><span class="p">)</span>
+
+<span class="n">last_net_io</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">last_disk_io</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">last_time</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">nvml_handles</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">nvml_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_pynvml_imported</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">pynvml</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">nvml_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+<span class="n">_monitor_active_flag</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">is_monitor_running</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">pid</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+            <span class="c1"># Check if PID exists and if the command line looks like python</span>
+            <span class="c1"># This is a basic check, might not be foolproof</span>
+            <span class="k">if</span> <span class="n">psutil</span><span class="o">.</span><span class="n">pid_exists</span><span class="p">(</span><span class="n">pid</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">proc</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">pid</span><span class="p">)</span>
+                    <span class="c1"># Simple check if it&#39;s a python process, could be refined</span>
+                    <span class="k">if</span> <span class="s2">&quot;python&quot;</span> <span class="ow">in</span> <span class="n">proc</span><span class="o">.</span><span class="n">name</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">or</span> <span class="s2">&quot;py&quot;</span> <span class="ow">in</span> <span class="n">proc</span><span class="o">.</span><span class="n">name</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+                        <span class="k">return</span> <span class="kc">True</span>
+                <span class="k">except</span> <span class="p">(</span><span class="n">psutil</span><span class="o">.</span><span class="n">NoSuchProcess</span><span class="p">,</span> <span class="n">psutil</span><span class="o">.</span><span class="n">AccessDenied</span><span class="p">):</span>
+                    <span class="k">pass</span>  <span class="c1"># Process died between checks or we lack permissions</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Removing stale lock file...&quot;</span><span class="p">)</span>
+            <span class="n">remove_lockfile</span><span class="p">()</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">EnvironmentError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error checking lock file, removing it: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">remove_lockfile</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error checking lock file: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">pass</span>  <span class="c1"># Ignore other errors like permission denied</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">write_lockfile</span><span class="p">():</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()))</span>
+    <span class="k">except</span> <span class="ne">EnvironmentError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error writing lock file: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">remove_lockfile</span><span class="p">():</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Check if the lock file still belongs to the current process before removing</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">pid_in_file</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+                <span class="k">if</span> <span class="n">pid_in_file</span> <span class="o">==</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">():</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">)</span>
+                <span class="c1"># else:</span>
+                <span class="c1">#    print(f&quot;Lock file {LOCKFILE} belongs to another process ({pid_in_file}), not removing.&quot;)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">FileNotFoundError</span><span class="p">):</span>
+                <span class="c1"># If reading fails, maybe remove anyway or log? For simplicity, try removing.</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">LOCKFILE</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">EnvironmentError</span> <span class="k">as</span> <span class="n">e_rem</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Warning: Could not remove potentially corrupt lock file </span><span class="si">{</span><span class="n">LOCKFILE</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e_rem</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">EnvironmentError</span> <span class="k">as</span> <span class="n">e_rem</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not remove lock file </span><span class="si">{</span><span class="n">LOCKFILE</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e_rem</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error removing lock file: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_bytes2human</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="s2">&quot;N/A&quot;</span>
+    <span class="n">symbols</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;KB&quot;</span><span class="p">,</span> <span class="s2">&quot;MB&quot;</span><span class="p">,</span> <span class="s2">&quot;GB&quot;</span><span class="p">,</span> <span class="s2">&quot;TB&quot;</span><span class="p">,</span> <span class="s2">&quot;PB&quot;</span><span class="p">)</span>
+    <span class="n">prefix</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">symbols</span><span class="p">)}</span>
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">symbols</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;=</span> <span class="n">prefix</span><span class="p">[</span><span class="n">s</span><span class="p">]:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">/</span> <span class="n">prefix</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
+                <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;Error&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="si">}</span><span class="s2"> B&quot;</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;N/A B&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">initialize_nvml</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">nvml_initialized</span><span class="p">,</span> <span class="n">nvml_handles</span><span class="p">,</span> <span class="n">_pynvml_imported</span><span class="p">,</span> <span class="n">pynvml</span>
+    <span class="k">with</span> <span class="n">nvml_lock</span><span class="p">:</span>  <span class="c1"># Acquire lock</span>
+        <span class="k">if</span> <span class="n">nvml_initialized</span> <span class="ow">or</span> <span class="n">_pynvml_imported</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nvml_initialized</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># print(&quot;Attempting to import pynvml...&quot;)</span>
+            <span class="kn">import</span> <span class="nn">pynvml</span> <span class="k">as</span> <span class="nn">pynvml_lib</span>  <span class="c1"># Import with a different local name</span>
+
+            <span class="n">pynvml</span> <span class="o">=</span> <span class="n">pynvml_lib</span>  <span class="c1"># Assign to global name</span>
+            <span class="c1"># print(&quot;pynvml imported successfully.&quot;)</span>
+            <span class="n">_pynvml_imported</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># print(&quot;Initializing NVML...&quot;)</span>
+            <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlInit</span><span class="p">()</span>
+            <span class="c1"># print(&quot;NVML Initialized.&quot;)</span>
+            <span class="n">nvml_handles</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">gpu_count</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetCount</span><span class="p">()</span>
+            <span class="c1"># print(f&quot;Found {gpu_count} GPU(s).&quot;)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">gpu_count</span><span class="p">):</span>
+                <span class="n">handle</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetHandleByIndex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                <span class="c1"># --- THIS LINE IS CHANGED ---</span>
+                <span class="n">gpu_name</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetName</span><span class="p">(</span>
+                    <span class="n">handle</span>
+                <span class="p">)</span>  <span class="c1"># Already a string in this version</span>
+                <span class="c1"># --- END OF CHANGE ---</span>
+                <span class="n">nvml_handles</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">gpu_name</span><span class="p">})</span>
+                <span class="c1"># print(f&quot;  GPU {i}: {gpu_name}&quot;)</span>
+            <span class="n">nvml_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># print(&quot;NVML setup complete.&quot;)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;pynvml library not found. GPU monitoring disabled.&quot;</span><span class="p">)</span>
+            <span class="n">_pynvml_imported</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Set _pynvml_imported so we don&#39;t try again</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">err_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="c1"># Ensure pynvml and necessary attributes exist before trying to use them</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">_pynvml_imported</span>
+                <span class="ow">and</span> <span class="n">pynvml</span>
+                <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">pynvml</span><span class="p">,</span> <span class="s2">&quot;NVMLError&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">NVMLError</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="c1"># Attempt to get error string only if pynvml and NVMLError are available</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># NVMLError often returns the error code in args[0]</span>
+                    <span class="n">error_code</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+                    <span class="n">err_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlErrorString</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2"> (Code: </span><span class="si">{</span><span class="n">error_code</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e_str</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Could not get NVML error string: </span><span class="si">{</span><span class="n">e_str</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>  <span class="c1"># Log if getting string fails</span>
+                    <span class="c1"># Fallback to default error string if nvmlErrorString fails</span>
+                    <span class="k">pass</span>  <span class="c1"># Keep the original err_str</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to initialize NVML: </span><span class="si">{</span><span class="n">err_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Attempt shutdown only if pynvml was imported and initialization *might* have partially succeeded</span>
+            <span class="k">if</span> <span class="n">_pynvml_imported</span> <span class="ow">and</span> <span class="n">pynvml</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># print(&quot;Attempting NVML shutdown after initialization error...&quot;)</span>
+                    <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlShutdown</span><span class="p">()</span>
+                    <span class="c1"># print(&quot;NVML shutdown successful.&quot;)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">sd_e</span><span class="p">:</span>
+                    <span class="c1"># Don&#39;t print shutdown error if it&#39;s &#39;NVML_ERROR_UNINITIALIZED&#39; - expected here</span>
+                    <span class="n">is_uninitialized_error</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">pynvml</span><span class="p">,</span> <span class="s2">&quot;NVMLError&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+                        <span class="n">sd_e</span><span class="p">,</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">NVMLError</span>
+                    <span class="p">):</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="p">(</span>
+                                <span class="n">sd_e</span><span class="o">.</span><span class="n">args</span>
+                                <span class="ow">and</span> <span class="n">sd_e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">NVML_ERROR_UNINITIALIZED</span>
+                            <span class="p">):</span>
+                                <span class="n">is_uninitialized_error</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                            <span class="k">pass</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">is_uninitialized_error</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during NVML shutdown after init failure: </span><span class="si">{</span><span class="n">sd_e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="n">nvml_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">nvml_handles</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">shutdown_nvml</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">nvml_initialized</span>
+    <span class="k">with</span> <span class="n">nvml_lock</span><span class="p">:</span>  <span class="c1"># Acquire lock</span>
+        <span class="c1"># print(f&quot;Shutdown called. NVML Initialized: {nvml_initialized}, pynvml imported: {_pynvml_imported}&quot;)</span>
+        <span class="k">if</span> <span class="n">nvml_initialized</span> <span class="ow">and</span> <span class="n">_pynvml_imported</span> <span class="ow">and</span> <span class="n">pynvml</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># print(&quot;Shutting down NVML...&quot;);</span>
+                <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlShutdown</span><span class="p">()</span>
+            <span class="c1"># print(&quot;NVML shut down successfully.&quot;)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">err_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">pynvml</span><span class="p">,</span> <span class="s2">&quot;NVMLError&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">NVMLError</span><span class="p">):</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">err_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlErrorString</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2"> (Code: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;N/A&#39;</span><span class="si">}</span><span class="s2">)&quot;</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error shutting down NVML: </span><span class="si">{</span><span class="n">err_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">nvml_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">nvml_handles</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="c1"># print(&quot;NVML state reset.&quot;)</span>
+        <span class="c1"># else:</span>
+        <span class="c1"># print(&quot;NVML shutdown condition not met, skipping.&quot;)</span>
+
+
+<span class="k">def</span> <span class="nf">get_cpu_temperature</span><span class="p">():</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">psutil</span><span class="p">,</span> <span class="s2">&quot;sensors_temperatures&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">get_gpu_info</span><span class="p">(</span><span class="n">gpu_index</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">nvml_initialized</span><span class="p">,</span> <span class="n">_pynvml_imported</span><span class="p">,</span> <span class="n">pynvml</span>  <span class="c1"># Ensure pynvml is accessible</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="n">nvml_initialized</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="n">_pynvml_imported</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="n">pynvml</span>
+        <span class="ow">or</span> <span class="n">gpu_index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nvml_handles</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;temp&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;util&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;vram_used&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s2">&quot;vram_total&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s2">&quot;vram_percent&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="n">handle_info</span> <span class="o">=</span> <span class="n">nvml_handles</span><span class="p">[</span><span class="n">gpu_index</span><span class="p">]</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">handle_info</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">]</span>
+    <span class="n">temp</span><span class="p">,</span> <span class="n">util</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="n">vram_used</span><span class="p">,</span> <span class="n">vram_total</span><span class="p">,</span> <span class="n">vram_percent</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">0.0</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">temp</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetTemperature</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">NVML_TEMPERATURE_GPU</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">pass</span>  <span class="c1"># Ignore errors (might happen temporarily)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">util</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetUtilizationRates</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span><span class="o">.</span><span class="n">gpu</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">mem_info</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetMemoryInfo</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
+        <span class="n">vram_used</span><span class="p">,</span> <span class="n">vram_total</span> <span class="o">=</span> <span class="n">mem_info</span><span class="o">.</span><span class="n">used</span><span class="p">,</span> <span class="n">mem_info</span><span class="o">.</span><span class="n">total</span>
+        <span class="n">vram_percent</span> <span class="o">=</span> <span class="p">(</span><span class="n">vram_used</span> <span class="o">/</span> <span class="n">vram_total</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="k">if</span> <span class="n">vram_total</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;temp&quot;</span><span class="p">:</span> <span class="n">temp</span><span class="p">,</span>
+        <span class="s2">&quot;util&quot;</span><span class="p">:</span> <span class="n">util</span><span class="p">,</span>
+        <span class="s2">&quot;vram_used&quot;</span><span class="p">:</span> <span class="n">vram_used</span><span class="p">,</span>
+        <span class="s2">&quot;vram_total&quot;</span><span class="p">:</span> <span class="n">vram_total</span><span class="p">,</span>
+        <span class="s2">&quot;vram_percent&quot;</span><span class="p">:</span> <span class="n">vram_percent</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">get_all_stats</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">last_net_io</span><span class="p">,</span> <span class="n">last_disk_io</span><span class="p">,</span> <span class="n">last_time</span>
+    <span class="n">current_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">disk_read_speed</span><span class="p">,</span> <span class="n">disk_write_speed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
+    <span class="n">net_sent_speed</span><span class="p">,</span> <span class="n">net_recv_speed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
+
+    <span class="n">current_disk_io</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">disk_io_counters</span><span class="p">()</span>
+    <span class="n">current_net_io</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">net_io_counters</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">last_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current_time</span> <span class="o">&gt;</span> <span class="n">last_time</span><span class="p">:</span>
+        <span class="n">time_delta</span> <span class="o">=</span> <span class="n">current_time</span> <span class="o">-</span> <span class="n">last_time</span>
+        <span class="k">if</span> <span class="n">current_disk_io</span> <span class="ow">and</span> <span class="n">last_disk_io</span><span class="p">:</span>
+            <span class="n">read_bytes</span> <span class="o">=</span> <span class="n">current_disk_io</span><span class="o">.</span><span class="n">read_bytes</span> <span class="o">-</span> <span class="n">last_disk_io</span><span class="o">.</span><span class="n">read_bytes</span>
+            <span class="n">write_bytes</span> <span class="o">=</span> <span class="n">current_disk_io</span><span class="o">.</span><span class="n">write_bytes</span> <span class="o">-</span> <span class="n">last_disk_io</span><span class="o">.</span><span class="n">write_bytes</span>
+            <span class="n">disk_read_speed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">read_bytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">time_delta</span>
+            <span class="n">disk_write_speed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">write_bytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">time_delta</span>
+        <span class="k">if</span> <span class="n">current_net_io</span> <span class="ow">and</span> <span class="n">last_net_io</span><span class="p">:</span>
+            <span class="n">sent_bytes</span> <span class="o">=</span> <span class="n">current_net_io</span><span class="o">.</span><span class="n">bytes_sent</span> <span class="o">-</span> <span class="n">last_net_io</span><span class="o">.</span><span class="n">bytes_sent</span>
+            <span class="n">recv_bytes</span> <span class="o">=</span> <span class="n">current_net_io</span><span class="o">.</span><span class="n">bytes_recv</span> <span class="o">-</span> <span class="n">last_net_io</span><span class="o">.</span><span class="n">bytes_recv</span>
+            <span class="n">net_sent_speed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sent_bytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">time_delta</span>
+            <span class="n">net_recv_speed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">recv_bytes</span><span class="p">)</span> <span class="o">/</span> <span class="n">time_delta</span>
+
+    <span class="c1"># Update lasts for the *next* iteration</span>
+    <span class="n">last_disk_io</span> <span class="o">=</span> <span class="n">current_disk_io</span>
+    <span class="n">last_net_io</span> <span class="o">=</span> <span class="n">current_net_io</span>
+    <span class="n">last_time</span> <span class="o">=</span> <span class="n">current_time</span>
+
+    <span class="c1"># Fetch other stats</span>
+    <span class="n">cpu_percent</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">cpu_temp</span> <span class="o">=</span> <span class="n">get_cpu_temperature</span><span class="p">()</span>
+    <span class="n">mem</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">virtual_memory</span><span class="p">()</span>
+    <span class="n">mem_percent</span><span class="p">,</span> <span class="n">mem_used</span><span class="p">,</span> <span class="n">mem_total</span> <span class="o">=</span> <span class="n">mem</span><span class="o">.</span><span class="n">percent</span><span class="p">,</span> <span class="n">mem</span><span class="o">.</span><span class="n">used</span><span class="p">,</span> <span class="n">mem</span><span class="o">.</span><span class="n">total</span>
+
+    <span class="n">gpus_info</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">nvml_initialized</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">nvml_handles</span><span class="p">)):</span>
+            <span class="n">gpus_info</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">nvml_handles</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">get_gpu_info</span><span class="p">(</span><span class="n">i</span><span class="p">)})</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;cpu_percent&quot;</span><span class="p">:</span> <span class="n">cpu_percent</span><span class="p">,</span>
+        <span class="s2">&quot;cpu_temp&quot;</span><span class="p">:</span> <span class="n">cpu_temp</span><span class="p">,</span>
+        <span class="s2">&quot;mem_percent&quot;</span><span class="p">:</span> <span class="n">mem_percent</span><span class="p">,</span>
+        <span class="s2">&quot;mem_used&quot;</span><span class="p">:</span> <span class="n">mem_used</span><span class="p">,</span>
+        <span class="s2">&quot;mem_total&quot;</span><span class="p">:</span> <span class="n">mem_total</span><span class="p">,</span>
+        <span class="s2">&quot;disk_read_speed&quot;</span><span class="p">:</span> <span class="n">disk_read_speed</span><span class="p">,</span>
+        <span class="s2">&quot;disk_write_speed&quot;</span><span class="p">:</span> <span class="n">disk_write_speed</span><span class="p">,</span>
+        <span class="s2">&quot;net_sent_speed&quot;</span><span class="p">:</span> <span class="n">net_sent_speed</span><span class="p">,</span>
+        <span class="s2">&quot;net_recv_speed&quot;</span><span class="p">:</span> <span class="n">net_recv_speed</span><span class="p">,</span>
+        <span class="s2">&quot;gpus&quot;</span><span class="p">:</span> <span class="n">gpus_info</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<span class="k">class</span> <span class="nc">ResourceMonitorApp</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;flashml Resource Monitor&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">bg</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">)</span>
+
+        <span class="c1"># Determine number of GPUs *after* NVML initialization attempt</span>
+        <span class="n">num_gpus</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nvml_handles</span><span class="p">)</span> <span class="k">if</span> <span class="n">nvml_initialized</span> <span class="k">else</span> <span class="mi">0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">HISTORY_LENGTH</span><span class="p">,</span> <span class="n">maxlen</span><span class="o">=</span><span class="n">HISTORY_LENGTH</span><span class="p">),</span>
+            <span class="s2">&quot;mem&quot;</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">HISTORY_LENGTH</span><span class="p">,</span> <span class="n">maxlen</span><span class="o">=</span><span class="n">HISTORY_LENGTH</span><span class="p">),</span>
+            <span class="c1"># Initialize GPU history lists based on actual detected GPUs</span>
+            <span class="s2">&quot;gpus_util&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">HISTORY_LENGTH</span><span class="p">,</span> <span class="n">maxlen</span><span class="o">=</span><span class="n">HISTORY_LENGTH</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">)</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;gpus_vram&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">HISTORY_LENGTH</span><span class="p">,</span> <span class="n">maxlen</span><span class="o">=</span><span class="n">HISTORY_LENGTH</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">)</span>
+            <span class="p">],</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_widgets</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_gpus</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_gpus</span>
+
+        <span class="c1"># --- Configure Styles ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Style</span><span class="p">()</span>
+        <span class="n">available_themes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">theme_names</span><span class="p">()</span>
+        <span class="n">theme_to_use</span> <span class="o">=</span> <span class="s2">&quot;clam&quot;</span> <span class="k">if</span> <span class="s2">&quot;clam&quot;</span> <span class="ow">in</span> <span class="n">available_themes</span> <span class="k">else</span> <span class="s2">&quot;default&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">theme_use</span><span class="p">(</span><span class="n">theme_to_use</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="c1"># --- Base Styles ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span> <span class="n">foreground</span><span class="o">=</span><span class="n">FG_COLOR</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="s2">&quot;TFrame&quot;</span><span class="p">,</span> <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">)</span>
+        <span class="c1"># Default Label Style (for &quot;Utilization:&quot;, &quot;History:&quot;, etc.)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="s2">&quot;BG.TLabel&quot;</span><span class="p">,</span> <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span> <span class="n">foreground</span><span class="o">=</span><span class="n">FG_COLOR</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="s2">&quot;BGUnit.TLabel&quot;</span><span class="p">,</span>
+            <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span>
+            <span class="n">foreground</span><span class="o">=</span><span class="n">FG_COLOR</span><span class="p">,</span>
+            <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="s2">&quot;Error.TLabel&quot;</span><span class="p">,</span>
+            <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span>
+            <span class="n">foreground</span><span class="o">=</span><span class="s2">&quot;#ffcc00&quot;</span><span class="p">,</span>
+            <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># --- Section Specific Styles ---</span>
+        <span class="k">for</span> <span class="n">section</span><span class="p">,</span> <span class="n">accent</span><span class="p">,</span> <span class="n">border</span><span class="p">,</span> <span class="n">prog_bg</span> <span class="ow">in</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s2">&quot;CPU&quot;</span><span class="p">,</span> <span class="n">CPU_ACCENT_COLOR</span><span class="p">,</span> <span class="n">CPU_FRAME_BORDER_COLOR</span><span class="p">,</span> <span class="n">CPU_PROGRESS_BAR_BG</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;RAM&quot;</span><span class="p">,</span> <span class="n">RAM_ACCENT_COLOR</span><span class="p">,</span> <span class="n">RAM_FRAME_BORDER_COLOR</span><span class="p">,</span> <span class="n">RAM_PROGRESS_BAR_BG</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;GPU&quot;</span><span class="p">,</span> <span class="n">GPU_ACCENT_COLOR</span><span class="p">,</span> <span class="n">GPU_FRAME_BORDER_COLOR</span><span class="p">,</span> <span class="n">GPU_PROGRESS_BAR_BG</span><span class="p">),</span>
+            <span class="p">(</span>
+                <span class="s2">&quot;IO&quot;</span><span class="p">,</span>
+                <span class="n">IO_ACCENT_COLOR</span><span class="p">,</span>
+                <span class="n">IO_FRAME_BORDER_COLOR</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+            <span class="p">),</span>  <span class="c1"># IO has no progress bar</span>
+        <span class="p">]:</span>
+            <span class="c1"># Data Label Style (colored)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section</span><span class="si">}</span><span class="s2">.Data.TLabel&quot;</span><span class="p">,</span>
+                <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span>
+                <span class="n">foreground</span><span class="o">=</span><span class="n">accent</span><span class="p">,</span>
+                <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="s2">&quot;bold&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="c1"># LabelFrame Style (tinted border)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section</span><span class="si">}</span><span class="s2">.TLabelframe&quot;</span><span class="p">,</span>
+                <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span>
+                <span class="n">bordercolor</span><span class="o">=</span><span class="n">border</span><span class="p">,</span>
+                <span class="n">relief</span><span class="o">=</span><span class="s2">&quot;groove&quot;</span><span class="p">,</span>
+                <span class="n">borderwidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section</span><span class="si">}</span><span class="s2">.TLabelframe.Label&quot;</span><span class="p">,</span>
+                <span class="n">background</span><span class="o">=</span><span class="n">BG_COLOR</span><span class="p">,</span>
+                <span class="n">foreground</span><span class="o">=</span><span class="n">FG_COLOR</span><span class="p">,</span>
+                <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">&quot;bold&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="c1"># Progress Bar Style</span>
+            <span class="k">if</span> <span class="n">prog_bg</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section</span><span class="si">}</span><span class="s2">.Horizontal.TProgressbar&quot;</span><span class="p">,</span>
+                    <span class="n">troughcolor</span><span class="o">=</span><span class="n">prog_bg</span><span class="p">,</span>
+                    <span class="n">background</span><span class="o">=</span><span class="n">accent</span><span class="p">,</span>
+                    <span class="n">bordercolor</span><span class="o">=</span><span class="n">border</span><span class="p">,</span>
+                    <span class="n">lightcolor</span><span class="o">=</span><span class="n">accent</span><span class="p">,</span>
+                    <span class="n">darkcolor</span><span class="o">=</span><span class="n">accent</span><span class="p">,</span>
+                <span class="p">)</span>
+
+        <span class="c1"># --- Main Frame ---</span>
+        <span class="n">main_frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Frame</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s2">&quot;10&quot;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;TFrame&quot;</span><span class="p">)</span>
+        <span class="n">main_frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;nsew&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">grid_rowconfigure</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">grid_columnconfigure</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">main_frame</span><span class="o">.</span><span class="n">grid_columnconfigure</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span>
+        <span class="p">)</span>  <span class="c1"># Allow content to expand horizontally</span>
+
+        <span class="c1"># --- Create Sections (passing section type for styling) ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_cpu_section</span><span class="p">(</span><span class="n">main_frame</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_mem_section</span><span class="p">(</span><span class="n">main_frame</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># _create_gpu_sections now correctly uses the initialized nvml_handles</span>
+        <span class="n">next_row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_gpu_sections</span><span class="p">(</span><span class="n">main_frame</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="n">io_container_frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Frame</span><span class="p">(</span><span class="n">main_frame</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;TFrame&quot;</span><span class="p">)</span>
+        <span class="c1"># Make IO container span the full width</span>
+        <span class="n">io_container_frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">next_row</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        <span class="c1"># Configure columns inside the IO container to share space</span>
+        <span class="n">io_container_frame</span><span class="o">.</span><span class="n">grid_columnconfigure</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">io_container_frame</span><span class="o">.</span><span class="n">grid_columnconfigure</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">main_frame</span><span class="o">.</span><span class="n">grid_rowconfigure</span><span class="p">(</span>
+            <span class="n">next_row</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>  <span class="c1"># IO section shouldn&#39;t expand vertically</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_disk_section</span><span class="p">(</span><span class="n">io_container_frame</span><span class="p">)</span>  <span class="c1"># Uses &quot;IO&quot; styles implicitly</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_network_section</span><span class="p">(</span><span class="n">io_container_frame</span><span class="p">)</span>  <span class="c1"># Uses &quot;IO&quot; styles implicitly</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">protocol</span><span class="p">(</span><span class="s2">&quot;WM_DELETE_WINDOW&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_closing</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Store the id of the scheduled &#39;after&#39; job</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">after</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">start_update_loop</span><span class="p">)</span>  <span class="c1"># Start the loop safely</span>
+
+    <span class="k">def</span> <span class="nf">start_update_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Safely starts the periodic update.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_gui</span><span class="p">()</span>
+
+    <span class="c1"># --- Modified Helper Functions to Accept Styles ---</span>
+    <span class="k">def</span> <span class="nf">_create_section_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">section_prefix</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a LabelFrame using the section-specific style.&quot;&quot;&quot;</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">LabelFrame</span><span class="p">(</span>
+            <span class="n">parent</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section_prefix</span><span class="si">}</span><span class="s2">.TLabelframe&quot;</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s2">&quot;5&quot;</span>
+        <span class="p">)</span>
+        <span class="n">frame</span><span class="o">.</span><span class="n">grid_columnconfigure</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Allow value column to expand</span>
+        <span class="k">return</span> <span class="n">frame</span><span class="p">,</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">_add_info_row</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">row_idx</span><span class="p">,</span> <span class="n">label_text</span><span class="p">,</span> <span class="n">section_prefix</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adds an info row using section-specific styles for data/unit.&quot;&quot;&quot;</span>
+        <span class="c1"># Standard label uses the default background style</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="n">label_text</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;BG.TLabel&quot;</span><span class="p">)</span>
+        <span class="n">label</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_idx</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Data value label uses the section-specific colored style</span>
+        <span class="c1"># Use anchor &quot;e&quot; (east) for right alignment within its grid cell</span>
+        <span class="n">value_label</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span>
+            <span class="n">text</span><span class="o">=</span><span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+            <span class="n">style</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section_prefix</span><span class="si">}</span><span class="s2">.Data.TLabel&quot;</span><span class="p">,</span>
+            <span class="n">anchor</span><span class="o">=</span><span class="s2">&quot;e&quot;</span><span class="p">,</span>
+            <span class="n">width</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">value_label</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span>
+            <span class="n">row</span><span class="o">=</span><span class="n">row_idx</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">1</span>
+        <span class="p">)</span>  <span class="c1"># sticky=&quot;ew&quot; makes it expand</span>
+        <span class="c1"># Unit label uses the default background style (or a specific Unit style if defined)</span>
+        <span class="n">unit_label</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;BGUnit.TLabel&quot;</span><span class="p">,</span> <span class="n">anchor</span><span class="o">=</span><span class="s2">&quot;w&quot;</span>
+        <span class="p">)</span>  <span class="c1"># anchor=&quot;w&quot; keeps it left-aligned</span>
+        <span class="n">unit_label</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_idx</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">value_label</span><span class="p">,</span> <span class="n">unit_label</span>
+
+    <span class="k">def</span> <span class="nf">_add_progress_bar</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">row_idx</span><span class="p">,</span> <span class="n">section_prefix</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adds a progress bar using the section-specific style.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+        <span class="n">pb</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Progressbar</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span>
+            <span class="n">orient</span><span class="o">=</span><span class="s2">&quot;horizontal&quot;</span><span class="p">,</span>
+            <span class="n">length</span><span class="o">=</span><span class="n">BAR_LENGTH</span><span class="p">,</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;determinate&quot;</span><span class="p">,</span>
+            <span class="n">style</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">section_prefix</span><span class="si">}</span><span class="s2">.Horizontal.TProgressbar&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">pb</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_idx</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pb</span>
+
+    <span class="k">def</span> <span class="nf">_add_chart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">row_idx</span><span class="p">,</span> <span class="n">data_key</span><span class="p">,</span> <span class="n">gpu_index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+        <span class="k">if</span> <span class="n">label</span><span class="p">:</span>
+            <span class="n">chart_label</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">&quot;History:&quot;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;BGUnit.TLabel&quot;</span><span class="p">)</span>
+            <span class="n">chart_label</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_idx</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">canvas</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">Canvas</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="n">CHART_HEIGHT</span><span class="p">,</span>
+            <span class="n">width</span><span class="o">=</span><span class="n">BAR_LENGTH</span><span class="p">,</span>
+            <span class="n">bg</span><span class="o">=</span><span class="n">CANVAS_BG_COLOR</span><span class="p">,</span>
+            <span class="n">highlightthickness</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">highlightbackground</span><span class="o">=</span><span class="n">BORDER_COLOR</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">canvas</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span>
+            <span class="n">row</span><span class="o">=</span><span class="n">row_idx</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">label</span> <span class="k">else</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span>
+            <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+            <span class="n">pady</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">gpu_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data_key</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cpu_chart_canvas</span> <span class="o">=</span> <span class="n">canvas</span>
+            <span class="k">elif</span> <span class="n">data_key</span> <span class="o">==</span> <span class="s2">&quot;mem&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mem_chart_canvas</span> <span class="o">=</span> <span class="n">canvas</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data_key</span> <span class="o">==</span> <span class="s2">&quot;util&quot;</span> <span class="ow">and</span> <span class="n">gpu_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">[</span><span class="n">gpu_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">canvas</span>
+            <span class="k">elif</span> <span class="n">data_key</span> <span class="o">==</span> <span class="s2">&quot;vram&quot;</span> <span class="ow">and</span> <span class="n">gpu_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">[</span><span class="n">gpu_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">canvas</span>
+        <span class="k">return</span> <span class="n">row_idx</span> <span class="o">+</span> <span class="p">(</span><span class="mi">2</span> <span class="k">if</span> <span class="n">label</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># --- Section Creation Methods (using prefixes) ---</span>
+    <span class="k">def</span> <span class="nf">_create_cpu_section</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">row_index</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;CPU&quot;</span>
+        <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;CPU&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+        <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_util_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_util_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span><span class="p">,</span> <span class="s2">&quot;Utilization:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_util_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;%&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_pb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_progress_bar</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+        <span class="n">next_row</span> <span class="o">+=</span> <span class="mi">2</span>
+
+        <span class="c1"># Create a sub-frame for the chart and temperature</span>
+        <span class="n">chart_frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Frame</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;TFrame&quot;</span><span class="p">)</span>
+        <span class="n">chart_frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span>
+            <span class="n">row</span><span class="o">=</span><span class="n">next_row</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Add chart canvas with reduced width</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_chart_canvas</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">Canvas</span><span class="p">(</span>
+            <span class="n">chart_frame</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="n">CHART_HEIGHT</span><span class="p">,</span>
+            <span class="n">width</span><span class="o">=</span><span class="n">BAR_LENGTH</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="n">bg</span><span class="o">=</span><span class="n">CANVAS_BG_COLOR</span><span class="p">,</span>
+            <span class="n">highlightthickness</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">highlightbackground</span><span class="o">=</span><span class="n">BORDER_COLOR</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_chart_canvas</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Add temperature label to the right of the chart</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_temp_val</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span>
+            <span class="n">chart_frame</span><span class="p">,</span>
+            <span class="n">text</span><span class="o">=</span><span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+            <span class="n">style</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">.Data.TLabel&quot;</span><span class="p">,</span>
+            <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="s2">&quot;bold&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_temp_val</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">side</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># Update the temperature unit label (not needed as we&#39;re displaying temperature directly)</span>
+        <span class="c1"># self.cpu_temp_unit = ttk.Label(chart_frame, text=&quot;°C&quot;, style=&#39;BGUnit.TLabel&#39;)</span>
+        <span class="c1"># self.cpu_temp_unit.pack(side=&quot;right&quot;)</span>
+
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">_create_mem_section</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">row_index</span><span class="p">):</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;RAM&quot;</span>
+        <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;RAM&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+        <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_usage_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mem_usage_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span><span class="p">,</span> <span class="s2">&quot;Usage:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_percent_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mem_percent_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Percent:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_percent_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;%&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_pb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_progress_bar</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+        <span class="n">next_row</span> <span class="o">+=</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_chart</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span><span class="p">,</span> <span class="s2">&quot;mem&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_create_gpu_sections</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">start_row_index</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+        <span class="kn">from</span> <span class="nn">tkinter</span> <span class="kn">import</span> <span class="n">ttk</span>
+
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;GPU&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nvml_initialized</span><span class="p">:</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;GPU&quot;</span><span class="p">,</span> <span class="s2">&quot;IO&quot;</span><span class="p">)</span>
+            <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">start_row_index</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+            <span class="n">no_gpu_label</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span>
+                <span class="n">text</span><span class="o">=</span><span class="s2">&quot;NVIDIA GPU / NVML not detected or failed.&quot;</span><span class="p">,</span>
+                <span class="n">style</span><span class="o">=</span><span class="s2">&quot;Error.TLabel&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">no_gpu_label</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">start_row_index</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="n">current_row</span> <span class="o">=</span> <span class="n">start_row_index</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">gpu_handle_info</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">nvml_handles</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_widgets</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+            <span class="n">widgets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_widgets</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">gpu_name</span> <span class="o">=</span> <span class="n">gpu_handle_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;GPU </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span>
+                <span class="n">parent</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">gpu_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="n">current_row</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">pady</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;frame&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">frame</span>
+
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_val&quot;</span><span class="p">],</span> <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_unit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span><span class="p">,</span> <span class="s2">&quot;Utilization:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_unit&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;%&quot;</span><span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_pb&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_progress_bar</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">next_row_in_frame</span> <span class="o">+=</span> <span class="mi">2</span>
+
+            <span class="c1"># Create a sub-frame for the utilization chart and temperature</span>
+            <span class="n">util_chart_frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Frame</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;TFrame&quot;</span><span class="p">)</span>
+            <span class="n">util_chart_frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span>
+                <span class="n">row</span><span class="o">=</span><span class="n">next_row_in_frame</span><span class="p">,</span>
+                <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span>
+                <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+                <span class="n">pady</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Add utilization chart canvas with reduced width</span>
+            <span class="n">util_canvas</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">Canvas</span><span class="p">(</span>
+                <span class="n">util_chart_frame</span><span class="p">,</span>
+                <span class="n">height</span><span class="o">=</span><span class="n">CHART_HEIGHT</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="n">BAR_LENGTH</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">bg</span><span class="o">=</span><span class="n">CANVAS_BG_COLOR</span><span class="p">,</span>
+                <span class="n">highlightthickness</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">highlightbackground</span><span class="o">=</span><span class="n">BORDER_COLOR</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">util_canvas</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">util_canvas</span>
+
+            <span class="c1"># Add temperature label to the right of the utilization chart</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;temp_val&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Label</span><span class="p">(</span>
+                <span class="n">util_chart_frame</span><span class="p">,</span>
+                <span class="n">text</span><span class="o">=</span><span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                <span class="n">style</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">.Data.TLabel&quot;</span><span class="p">,</span>
+                <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="s2">&quot;bold&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;temp_val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">side</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+            <span class="n">next_row_in_frame</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_val&quot;</span><span class="p">],</span> <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_unit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span><span class="p">,</span> <span class="s2">&quot;VRAM Usage:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_perc_val&quot;</span><span class="p">],</span> <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_perc_unit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;VRAM Percent:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_perc_unit&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;%&quot;</span><span class="p">)</span>
+            <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_pb&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_progress_bar</span><span class="p">(</span>
+                <span class="n">frame</span><span class="p">,</span> <span class="n">next_row_in_frame</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="n">prefix</span>
+            <span class="p">)</span>
+            <span class="n">next_row_in_frame</span> <span class="o">+=</span> <span class="mi">3</span>
+
+            <span class="c1"># Create a sub-frame for the VRAM chart</span>
+            <span class="n">vram_chart_frame</span> <span class="o">=</span> <span class="n">ttk</span><span class="o">.</span><span class="n">Frame</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s2">&quot;TFrame&quot;</span><span class="p">)</span>
+            <span class="n">vram_chart_frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span>
+                <span class="n">row</span><span class="o">=</span><span class="n">next_row_in_frame</span><span class="p">,</span>
+                <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">columnspan</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span>
+                <span class="n">padx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+                <span class="n">pady</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Add VRAM chart canvas with reduced width</span>
+            <span class="n">vram_canvas</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">Canvas</span><span class="p">(</span>
+                <span class="n">vram_chart_frame</span><span class="p">,</span>
+                <span class="n">height</span><span class="o">=</span><span class="n">CHART_HEIGHT</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="n">BAR_LENGTH</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">bg</span><span class="o">=</span><span class="n">CANVAS_BG_COLOR</span><span class="p">,</span>
+                <span class="n">highlightthickness</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">highlightbackground</span><span class="o">=</span><span class="n">BORDER_COLOR</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">vram_canvas</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">vram_canvas</span>
+
+            <span class="n">next_row_in_frame</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">current_row</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">current_row</span>
+
+    <span class="k">def</span> <span class="nf">_create_disk_section</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent_container</span><span class="p">):</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;IO&quot;</span>  <span class="c1"># Use IO prefix for neutral styling</span>
+        <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span>
+            <span class="n">parent_container</span><span class="p">,</span> <span class="s2">&quot;Disk I/O&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="c1"># Place in the first column (0) of the container, sticky=&quot;nsew&quot; to fill its cell</span>
+        <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;nsew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">pady</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disk_read_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">disk_read_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span><span class="p">,</span> <span class="s2">&quot;Read:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disk_write_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">disk_write_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Write:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_create_network_section</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent_container</span><span class="p">):</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;IO&quot;</span>  <span class="c1"># Use IO prefix for neutral styling</span>
+        <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_section_frame</span><span class="p">(</span>
+            <span class="n">parent_container</span><span class="p">,</span> <span class="s2">&quot;Network I/O&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="c1"># Place in the second column (1) of the container, sticky=&quot;nsew&quot; to fill its cell</span>
+        <span class="n">frame</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">row</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">sticky</span><span class="o">=</span><span class="s2">&quot;nsew&quot;</span><span class="p">,</span> <span class="n">padx</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">pady</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">net_recv_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">net_recv_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span><span class="p">,</span> <span class="s2">&quot;Down:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">net_sent_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">net_sent_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_info_row</span><span class="p">(</span>
+            <span class="n">frame</span><span class="p">,</span> <span class="n">next_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Up:&quot;</span><span class="p">,</span> <span class="n">prefix</span>
+        <span class="p">)</span>
+
+    <span class="c1"># --- Chart Update Method ---</span>
+    <span class="k">def</span> <span class="nf">_update_chart</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">canvas</span><span class="p">,</span> <span class="n">data_deque</span><span class="p">,</span> <span class="n">line_color</span><span class="p">,</span> <span class="n">max_value</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">overlay_text</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">canvas</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">canvas</span><span class="o">.</span><span class="n">winfo_exists</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">canvas</span><span class="o">.</span><span class="n">winfo_viewable</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">canvas</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="n">canvas</span><span class="o">.</span><span class="n">winfo_width</span><span class="p">()</span>
+            <span class="n">height</span> <span class="o">=</span> <span class="n">canvas</span><span class="o">.</span><span class="n">winfo_height</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">width</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="n">height</span>
+            <span class="ow">or</span> <span class="n">width</span> <span class="o">&lt;</span> <span class="mi">2</span>
+            <span class="ow">or</span> <span class="n">height</span> <span class="o">&lt;</span> <span class="mi">2</span>
+            <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_deque</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span>
+            <span class="ow">or</span> <span class="n">max_value</span> <span class="o">&lt;=</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="n">y_range</span> <span class="o">=</span> <span class="n">height</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="k">for</span> <span class="n">perc</span> <span class="ow">in</span> <span class="p">[</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">]:</span>
+            <span class="n">y_line</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">y_range</span> <span class="o">-</span> <span class="p">(</span><span class="n">perc</span> <span class="o">*</span> <span class="n">y_range</span><span class="p">)</span>
+            <span class="n">canvas</span><span class="o">.</span><span class="n">create_line</span><span class="p">(</span>
+                <span class="mi">1</span><span class="p">,</span> <span class="n">y_line</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">y_line</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="n">CANVAS_GRID_COLOR</span><span class="p">,</span> <span class="n">dash</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">points</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">x_step</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">width</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">HISTORY_LENGTH</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">HISTORY_LENGTH</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="p">(</span><span class="n">width</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data_deque</span><span class="p">):</span>
+            <span class="n">clamped_value</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+                <span class="mf">0.0</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">value</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_value</span><span class="p">))</span>
+            <span class="p">)</span>
+            <span class="n">normalized_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">clamped_value</span> <span class="o">/</span> <span class="n">max_value</span><span class="p">)</span> <span class="o">*</span> <span class="n">y_range</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">y_range</span> <span class="o">-</span> <span class="n">normalized_y</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">x_step</span><span class="p">)</span>
+            <span class="n">points</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">canvas</span><span class="o">.</span><span class="n">create_line</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="n">line_color</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">overlay_text</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">canvas</span><span class="o">.</span><span class="n">create_text</span><span class="p">(</span>
+                        <span class="n">width</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>
+                        <span class="n">height</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>
+                        <span class="n">text</span><span class="o">=</span><span class="n">overlay_text</span><span class="p">,</span>
+                        <span class="n">fill</span><span class="o">=</span><span class="n">line_color</span><span class="p">,</span>
+                        <span class="n">font</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">update_gui</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+
+        <span class="c1"># Simple lock to prevent re-entry if update takes longer than interval</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Check if root window exists before doing anything else</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">winfo_exists</span><span class="p">():</span>
+                <span class="c1"># print(&quot;Root window does not exist. Stopping update loop.&quot;)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># Do not reschedule &#39;after&#39; if the window is gone</span>
+                <span class="k">return</span>
+
+            <span class="n">stats</span> <span class="o">=</span> <span class="n">get_all_stats</span><span class="p">()</span>
+
+            <span class="c1"># --- Update History Deques ---</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cpu_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;mem&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mem_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+            <span class="c1"># Ensure GPU history update matches the number of actual GPUs found</span>
+            <span class="n">num_gpus_detected</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;gpus&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">num_gpus_detected</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_util&quot;</span><span class="p">]))):</span>
+                <span class="n">gpu_info</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;gpus&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_util&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;util&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;util&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">num_gpus_detected</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_vram&quot;</span><span class="p">]))):</span>
+                <span class="n">gpu_info</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="s2">&quot;gpus&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_vram&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vram_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+            <span class="c1"># --- Update Widgets (inside try/except blocks for robustness) ---</span>
+            <span class="c1"># CPU</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cpu_util_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cpu_percent&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cpu_pb</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cpu_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cpu_temp</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cpu_temp&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cpu_temp_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">cpu_temp</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">cpu_temp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="c1"># Memory</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mem_usage_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;mem_used&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;mem_total&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mem_percent_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;mem_percent&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mem_pb</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mem_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="c1"># Disk IO</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disk_read_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;disk_read_speed&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disk_read_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;/s&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disk_write_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;disk_write_speed&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disk_write_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;/s&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="c1"># Network IO</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">net_recv_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;net_recv_speed&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">net_recv_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;/s&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">net_sent_val</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;net_sent_speed&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">net_sent_unit</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;/s&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="c1"># GPUs</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">gpu_info</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;gpus&quot;</span><span class="p">,</span> <span class="p">[])):</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_widgets</span><span class="p">):</span>
+                    <span class="n">widgets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_widgets</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                    <span class="n">util</span> <span class="o">=</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;util&quot;</span><span class="p">)</span>
+                    <span class="n">temp</span> <span class="o">=</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temp&quot;</span><span class="p">)</span>
+                    <span class="n">vram_perc</span> <span class="o">=</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vram_percent&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="n">vram_used</span> <span class="o">=</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vram_used&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="n">vram_total</span> <span class="o">=</span> <span class="n">gpu_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vram_total&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                            <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">util</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">util</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;util_pb&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">util</span> <span class="k">if</span> <span class="n">util</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_util&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span>
+                                <span class="n">GPU_ACCENT_COLOR</span><span class="p">,</span>
+                                <span class="n">overlay_text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">°C&quot;</span>
+                                <span class="k">if</span> <span class="n">temp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                                <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span><span class="p">,</span>
+                            <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;temp_val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                            <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">°C&quot;</span> <span class="k">if</span> <span class="n">temp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;N/A&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                            <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">vram_used</span><span class="p">)</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="n">_bytes2human</span><span class="p">(</span><span class="n">vram_total</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_perc_val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">vram_perc</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="n">widgets</span><span class="p">[</span><span class="s2">&quot;vram_pb&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vram_perc</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_vram&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span>
+                                <span class="n">GPU_ACCENT_COLOR</span><span class="p">,</span>
+                            <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+
+            <span class="c1"># --- Update Charts ---</span>
+            <span class="c1"># Wrapped in try/except to catch errors if widgets disappear</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;cpu_chart_canvas&quot;</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_chart_canvas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">],</span> <span class="n">CPU_ACCENT_COLOR</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error updating CPU chart: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;mem_chart_canvas&quot;</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">mem_chart_canvas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;mem&quot;</span><span class="p">],</span> <span class="n">RAM_ACCENT_COLOR</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error updating Mem chart: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Use the correct list of canvases</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">canvas</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_util_chart_canvases</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">canvas</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_util&quot;</span><span class="p">]):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                            <span class="n">canvas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_util&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span> <span class="n">GPU_ACCENT_COLOR</span>
+                        <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error updating GPU Util chart: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">canvas</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_vram_chart_canvases</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">canvas</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_vram&quot;</span><span class="p">]):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_update_chart</span><span class="p">(</span>
+                            <span class="n">canvas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="s2">&quot;gpus_vram&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span> <span class="n">GPU_ACCENT_COLOR</span>
+                        <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error updating GPU VRAM chart index: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during GUI update cycle: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># import traceback</span>
+            <span class="c1"># traceback.print_exc() # Uncomment for detailed debugging</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_running</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="c1"># Reschedule the next update only if the root window still exists</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">winfo_exists</span><span class="p">():</span>
+                    <span class="c1"># Cancel previous &#39;after&#39; job if it exists, before scheduling a new one</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">after_cancel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">after</span><span class="p">(</span>
+                        <span class="n">UPDATE_INTERVAL_MS</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_gui</span>
+                    <span class="p">)</span>
+                <span class="c1"># else:</span>
+                <span class="c1"># print(&quot;Root window gone, update loop stopped naturally.&quot;)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>  <span class="c1"># Catch potential errors during rescheduling</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error rescheduling GUI update: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Ensure we don&#39;t hold a stale ID</span>
+
+    <span class="k">def</span> <span class="nf">on_closing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+
+        <span class="c1"># print(&quot;WM_DELETE_WINDOW triggered (on_closing)&quot;)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Cancel any pending update job</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span><span class="p">:</span>
+                <span class="c1"># print(f&quot;Cancelling pending update job: {self._after_id}&quot;)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">after_cancel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span><span class="p">)</span>
+                <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>
+                    <span class="k">pass</span>  <span class="c1"># Ignore error if root is already gone</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_after_id</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># print(&quot;Destroying root window...&quot;)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">winfo_exists</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">destroy</span><span class="p">()</span>
+                <span class="c1"># print(&quot;Root window destroyed.&quot;)</span>
+            <span class="c1"># else:</span>
+            <span class="c1"># print(&quot;Root window already destroyed or invalid.&quot;)</span>
+
+        <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;TclError during on_closing: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>  <span class="c1"># Should not happen often if winfo_exists check works</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error during on_closing: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">launch_monitor_gui</span><span class="p">():</span>
+    <span class="kn">import</span> <span class="nn">tkinter</span> <span class="k">as</span> <span class="nn">tk</span>
+
+    <span class="k">global</span> <span class="n">_monitor_active_flag</span>
+    <span class="n">_monitor_active_flag</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Define root here so it&#39;s accessible in finally block</span>
+
+    <span class="c1"># Signal handling should ideally be managed by the main thread or carefully in the GUI thread</span>
+    <span class="c1"># For simplicity here, keep basic signal handling but note Tkinter might have its own loop handling</span>
+    <span class="k">def</span> <span class="nf">signal_handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Received signal </span><span class="si">{</span><span class="n">signum</span><span class="si">}</span><span class="s2"> in GUI thread, initiating shutdown...&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">root</span> <span class="ow">and</span> <span class="n">root</span><span class="o">.</span><span class="n">winfo_exists</span><span class="p">():</span>
+            <span class="c1"># Use `after` to schedule the destroy from the Tkinter thread itself</span>
+            <span class="c1"># This is generally safer than calling destroy directly from a signal handler</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">root</span><span class="o">.</span><span class="n">after</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">root</span><span class="o">.</span><span class="n">destroy</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">tk</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span>  <span class="c1"># Window might already be closing</span>
+                <span class="k">pass</span>
+        <span class="c1"># Cleanup will happen in the finally block after mainloop exits</span>
+
+    <span class="c1"># original_sigint = signal.getsignal(signal.SIGINT)</span>
+    <span class="c1"># original_sigterm = signal.getsignal(signal.SIGTERM)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Register signal handlers specific to this thread if needed,</span>
+        <span class="c1"># but be cautious as signals are often delivered to the main thread.</span>
+        <span class="c1"># It might be better to rely on the main thread catching signals and signaling the GUI thread to close.</span>
+        <span class="c1"># For now, let&#39;s assume WM_DELETE_WINDOW and the finally block handle most cases.</span>
+        <span class="c1"># signal.signal(signal.SIGTERM, signal_handler) # Be careful with this in threads</span>
+        <span class="c1"># signal.signal(signal.SIGINT, signal_handler) # Be careful with this in threads</span>
+
+        <span class="c1"># --- Initialization within the thread ---</span>
+        <span class="n">write_lockfile</span><span class="p">()</span>
+        <span class="n">initialize_nvml</span><span class="p">()</span>  <span class="c1"># Initialize NVML within the GUI thread</span>
+
+        <span class="c1"># print(&quot;Initializing Tkinter...&quot;);</span>
+        <span class="n">root</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">Tk</span><span class="p">()</span>
+        <span class="c1"># Set window position (optional, e.g., top-left)</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">geometry</span><span class="p">(</span><span class="s2">&quot;+0+0&quot;</span><span class="p">)</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">withdraw</span><span class="p">()</span>  <span class="c1"># Hide window initially until ready</span>
+
+        <span class="c1"># print(&quot;Creating ResourceMonitorApp...&quot;);</span>
+        <span class="n">ResourceMonitorApp</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>  <span class="c1"># Pass the root window</span>
+
+        <span class="c1"># Make window appear after setup</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">deiconify</span><span class="p">()</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">lift</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">ALWAYS_ON_TOP</span><span class="p">:</span>
+            <span class="n">root</span><span class="o">.</span><span class="n">attributes</span><span class="p">(</span><span class="s2">&quot;-topmost&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">root</span><span class="o">.</span><span class="n">attributes</span><span class="p">(</span><span class="s2">&quot;-topmost&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">root</span><span class="o">.</span><span class="n">after_idle</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">root</span><span class="o">.</span><span class="n">attributes</span><span class="p">(</span><span class="s2">&quot;-topmost&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">mainloop</span><span class="p">()</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;An error occurred during GUI execution: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="kn">import</span> <span class="nn">traceback</span>
+
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">shutdown_nvml</span><span class="p">()</span>
+        <span class="n">remove_lockfile</span><span class="p">()</span>
+        <span class="n">_monitor_active_flag</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">is_notebook</span><span class="p">():</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">get_ipython</span>
+
+        <span class="k">return</span> <span class="s2">&quot;IPKernelApp&quot;</span> <span class="ow">in</span> <span class="n">get_ipython</span><span class="p">()</span><span class="o">.</span><span class="n">config</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+
+<div class="viewcode-block" id="resource_monitor">
+<a class="viewcode-back" href="../../../flashml.html#flashml.resource_monitor">[docs]</a>
+<span class="k">def</span> <span class="nf">resource_monitor</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Launches the resource monitor GUI as a completely detached process.</span>
+<span class="sd">    Prevents launching if already running (checks lock file).</span>
+<span class="sd">    The monitor will continue running independently even after the parent process exits.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">is_notebook</span><span class="p">():</span>
+        <span class="c1"># Run directly in notebook mode</span>
+        <span class="n">launch_monitor_gui</span><span class="p">()</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;--resource-monitor-standalone&quot;</span><span class="p">:</span>
+        <span class="n">launch_monitor_gui</span><span class="p">()</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Check if another process is running the monitor</span>
+    <span class="k">if</span> <span class="n">is_monitor_running</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[93mResource Monitor GUI appears to be already running (found lock file for another process).</span><span class="se">\033</span><span class="s2">[0m&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Get the current script&#39;s path</span>
+    <span class="n">script_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="c1"># Create a new Python process that will run independently</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Use subprocess.Popen with appropriate flags to detach the process</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;nt&quot;</span><span class="p">:</span>  <span class="c1"># Windows</span>
+            <span class="c1"># creationflags=subprocess.DETACHED_PROCESS makes it independent</span>
+            <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span> <span class="n">script_path</span><span class="p">,</span> <span class="s2">&quot;--resource-monitor-standalone&quot;</span><span class="p">],</span>
+                <span class="n">creationflags</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DETACHED_PROCESS</span>
+                <span class="o">|</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CREATE_NEW_PROCESS_GROUP</span><span class="p">,</span>
+                <span class="n">close_fds</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span>
+                <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Linux/macOS</span>
+            <span class="c1"># Start process in a new session, redirect output to /dev/null</span>
+            <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span> <span class="n">script_path</span><span class="p">,</span> <span class="s2">&quot;--resource-monitor-standalone&quot;</span><span class="p">],</span>
+                <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+                <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+                <span class="n">close_fds</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to start resource monitor: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">resource_monitor</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

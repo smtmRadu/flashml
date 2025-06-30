@@ -4,7 +4,6 @@ import torch.nn as nn
 
 class Rish(nn.Module):
     """
-    I'm experimenting with this one, seems to be too powerfull.
     = (x - 1) * exp(x) / (1 + exp(x))
 
     """

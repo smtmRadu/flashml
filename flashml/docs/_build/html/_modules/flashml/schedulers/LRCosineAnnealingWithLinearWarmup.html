@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flashml.schedulers.LRCosineAnnealingWithLinearWarmup &#8212; flashml 0.5.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=12dfc556" />
+    <script src="../../../_static/documentation_options.js?v=b9afe91b"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for flashml.schedulers.LRCosineAnnealingWithLinearWarmup</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">math</span>
+
+
+<div class="viewcode-block" id="LRConsineAnnealingWithLinearWarmup">
+<a class="viewcode-back" href="../../../flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup">[docs]</a>
+<span class="k">class</span> <span class="nc">LRConsineAnnealingWithLinearWarmup</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        `step()` called after `optim.step()`\\</span>
+<span class="sd">        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** \\</span>
+<span class="sd">        `warmup_steps_ratio` = 3%-10% of max_steps (use `warmup_steps_ratio` instead of `warmup_steps` to set it)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">warmup_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">min_lr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">warmup_steps_ratio</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;warmup_steps_ratio&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">warmup_steps_ratio</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">warmup_steps_ratio</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">,</span> <span class="p">(</span>
+                <span class="s2">&quot;warmup_steps_ratio must be between 0.0 and 1.0&quot;</span>
+            <span class="p">)</span>
+            <span class="n">warmup_steps</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">warmup_steps_ratio</span> <span class="o">*</span> <span class="n">max_steps</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="n">warmup_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="p">(</span>
+            <span class="s2">&quot;warmup_steps or warump_steps_ratio must be specified&quot;</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">max_steps</span> <span class="o">&gt;</span> <span class="n">warmup_steps</span><span class="p">,</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;The warmup steps (</span><span class="si">{</span><span class="n">warmup_steps</span><span class="si">}</span><span class="s2">) must be less than total training steps T max (</span><span class="si">{</span><span class="n">max_steps</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">optim</span> <span class="o">=</span> <span class="n">optimizer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_max</span> <span class="o">=</span> <span class="n">max_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span> <span class="o">=</span> <span class="n">warmup_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta_min</span> <span class="o">=</span> <span class="n">min_lr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta_max</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">param_groups</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;lr&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># init lr</span>
+
+<div class="viewcode-block" id="LRConsineAnnealingWithLinearWarmup.step">
+<a class="viewcode-back" href="../../../flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.step">[docs]</a>
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sets the optimizer&#39;s learning rates for each param_group. Must be called before optim.step()&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">eta_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_lr</span>
+        <span class="k">for</span> <span class="n">param_group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
+            <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;lr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">eta_t</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">current_lr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the current lr of the scheduler.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span><span class="p">:</span>
+            <span class="n">warm_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta_max</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span>
+            <span class="k">return</span> <span class="n">warm_lr</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">eta_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta_min</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eta_max</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta_min</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span>
+                <span class="mf">1.0</span>
+                <span class="o">+</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span>
+                    <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span><span class="p">)</span>
+                    <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t_max</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span><span class="p">)</span>
+                    <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">eta_t</span>
+
+<div class="viewcode-block" id="LRConsineAnnealingWithLinearWarmup.state_dict">
+<a class="viewcode-back" href="../../../flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.state_dict">[docs]</a>
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;t_cur&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span><span class="p">,</span>
+            <span class="s2">&quot;eta_max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta_max</span><span class="p">,</span>
+            <span class="s2">&quot;eta_min&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta_min</span><span class="p">,</span>
+            <span class="s2">&quot;warmup_steps&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span><span class="p">,</span>
+            <span class="s2">&quot;t_max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_max</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="LRConsineAnnealingWithLinearWarmup.load_state_dict">
+<a class="viewcode-back" href="../../../flashml.schedulers.html#flashml.schedulers.LRCosineAnnealingWithLinearWarmup.LRConsineAnnealingWithLinearWarmup.load_state_dict">[docs]</a>
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_cur</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;t_cur&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta_max</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;eta_max&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;warmup_steps&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_max</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;t_max&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta_min</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;eta_min&quot;</span><span class="p">]</span></div>
+</div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">flashml</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">flashml</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, kbradu.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
