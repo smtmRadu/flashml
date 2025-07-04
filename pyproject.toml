@@ -19,7 +19,6 @@ dependencies = [
     "tqdm",
     "psutil",
     "windows-curses",
-    "playsound==1.3.0",
     "pillow",
     "pynvml",
     "scikit-learn",
@@ -31,7 +30,10 @@ dependencies = [
     "polars",
     "pandas",
     "spacy",
-
+    "openai",
+    "nbformat",
+    "thefuzz",
+    
     "python-dotenv",
     "ollama",
     "torch-optimi",

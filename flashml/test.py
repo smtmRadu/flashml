@@ -383,4 +383,5 @@ def test_nlp_preprocesssing():
 
 
 if __name__ == "__main__":
-    test_nlp_preprocesssing()
+    from flashml import resource_monitor
+    resource_monitor()

@@ -1,8 +1,7 @@
-from typing import Literal
-
+from typing import Literal, Union, Collection
 
 def plot_dist(
-    freq_dict: dict,
+    data: Union[dict, Collection[float], Collection[int], Collection[bool]],
     sort_values: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     title: str = "Distribution",
@@ -10,89 +9,214 @@ def plot_dist(
     y_label: str = "Frequency",
     bar_color: str = "skyblue",
     rotation: int = 90,
-    show_values_on_top_of_the_bar: bool = False,
-    grid: bool = False,
-) -> None:
-    """
-    Plots a bar chart distribution from a frequency dictionary using Plotly.
-
-    Args:
-        freq_dict: Dictionary with items as keys and frequencies as values. (e.g. dict = {'apple': 5, 'banana': 3})
-        sort_values: How to sort the items. Can be 'ascending', 'descending', or None (default).
-        top_n: Display only the top N items.
-        title: Title of the plot.
-        x_label: Label for the x-axis.
-        y_label: Label for the y-axis.
-        bar_color: Color of the bars.
-        rotation: Rotation angle for x-axis tick labels.
-        max_xticks: Maximum number of x-axis ticks to display labels for.
-                     If exceeded, labels are hidden.
-        show_values_on_top_of_the_bar: If True, displays the frequency value on top of each bar.
-        grid: If True, adds a grid to the plot.
-        renderer: Renderer for displaying the plot (default: "vscode").
-    """
-
+    draw_details: bool = True,
+    grid: bool = True,
+    bins: int = 10,
+):
     import plotly.graph_objects as go
     import plotly.io as pio
+    import numpy as np
 
     MAX_XTICKS: int = 100
     pio.templates.default = "plotly_dark"
 
-    if not isinstance(freq_dict, dict):
-        raise TypeError("freq_dict must be a dictionary.")
-    if not freq_dict:
-        print("Warning: freq_dict is empty. Nothing to plot.")
-        return
+    def add_percentage_annotations(fig, x_vals, y_vals):
+        total = sum(y_vals)
+        for i, (x, y) in enumerate(zip(x_vals, y_vals)):
+            percent = y / total * 100 if total > 0 else 0
+            fig.add_annotation(
+                x=x,
+                y=y / 2,
+                text=f"{percent:.1f}%",
+                showarrow=False,
+                font=dict(size=13, color='white'),
+                textangle=-90,
+                xanchor="center",
+                yanchor="middle",
+                align="center",
+            )
 
-    items = list(freq_dict.items())
+    # If data is dict
+    if isinstance(data, dict):
+        freq_dict = data
+        if not freq_dict:
+            print("Warning: freq_dict is empty. Nothing to plot.")
+            return
 
-    if sort_values:
-        if sort_values.lower() == "descending":
-            items.sort(key=lambda x: x[1], reverse=True)
-        elif sort_values.lower() == "ascending":
-            items.sort(key=lambda x: x[1])
-        else:
-            raise ValueError("sort_values must be 'ascending', 'descending', or None.")
+        items = list(freq_dict.items())
 
-    if top_n is not None:
-        if not isinstance(top_n, int) or top_n <= 0:
-            raise ValueError("top_n must be a positive integer.")
-        items = items[:top_n]
+        if sort_values:
+            if sort_values.lower() == "descending":
+                items.sort(key=lambda x: x[1], reverse=True)
+            elif sort_values.lower() == "ascending":
+                items.sort(key=lambda x: x[1])
+            else:
+                raise ValueError("sort_values must be 'ascending', 'descending', or None.")
 
-    if not items:
-        print(
-            "Warning: No items to plot after filtering (e.g., empty original dict or top_n applied to empty list)."
+        if top_n is not None:
+            if not isinstance(top_n, int) or top_n <= 0:
+                raise ValueError("top_n must be a positive integer.")
+            items = items[:top_n]
+
+        if not items:
+            print("Warning: No items to plot after filtering.")
+            return
+
+        keys, values = zip(*items)
+        str_keys = [str(k) for k in keys]
+        total = sum(values)
+        percentages = [v / total * 100 if total > 0 else 0 for v in values]
+        customdata = np.array(percentages).reshape(-1, 1)
+
+        fig = go.Figure(
+            data=go.Bar(
+                x=str_keys,
+                y=values,
+                marker_color=bar_color,
+                text=values if draw_details else None,
+                textposition="outside" if draw_details else None,
+                texttemplate="%{text:.2f}" if draw_details and any(isinstance(v, float) for v in values)
+                            else "%{text}" if draw_details else None,
+                customdata=customdata,
+                hovertemplate=(
+                    "Item: %{x}<br>"
+                    "No. samples: %{y}<br>"
+                    "Percentage: %{customdata[0]:.1f}%<extra></extra>"
+                )
+            )
         )
+        num_items = len(str_keys)
+        width = max(1100, min(1200, num_items * 40))
+        height = max(500, min(800, 300 + num_items * 5))
+        fig.update_layout(
+            title=title,
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            width=width,
+            height=height,
+            showlegend=False,
+            xaxis=dict(
+                tickangle=-rotation if rotation > 0 else 0,
+                showticklabels=len(str_keys) <= MAX_XTICKS,
+                showgrid=grid,
+            ),
+            yaxis=dict(
+                showgrid=grid,
+            ),
+            margin=dict(
+                l=50,
+                r=50,
+                t=80,
+                b=10 if len(str_keys) <= MAX_XTICKS else 50,
+            ),
+        )
+        if draw_details:
+            add_percentage_annotations(fig, str_keys, values)
+        return fig
+
+    # If data is a collection
+    try:
+        arr = np.array(list(data))
+    except Exception as e:
+        raise TypeError("If not a dict, data must be a collection of numbers.") from e
+
+    if arr.size == 0:
+        print("Warning: Data is empty. Nothing to plot.")
         return
 
-    keys, values = zip(*items)
-    str_keys = [str(k) for k in keys]  # Ensure keys are strings for plotting
+    unique_vals = np.unique(arr)
+    if len(unique_vals) < bins:
+        unique_counts = {val: int(np.sum(arr == val)) for val in unique_vals}
+        def sort_key(x):
+            if isinstance(x[0], bool):
+                return (0, x[0])
+            else:
+                return (1, x[0])
+        sorted_items = sorted(unique_counts.items(), key=sort_key)
+        keys = [str(k) for k, _ in sorted_items]
+        values = [v for _, v in sorted_items]
+        total = sum(values)
+        percentages = [v / total * 100 if total > 0 else 0 for v in values]
+        customdata = np.array(percentages).reshape(-1, 1)
 
-    # Create the bar chart
+        fig = go.Figure(
+            data=go.Bar(
+                x=keys,
+                y=values,
+                marker_color=bar_color,
+                text=values if draw_details else None,
+                textposition="outside" if draw_details else None,
+                texttemplate="%{text:.2f}" if draw_details and any(isinstance(v, float) for v in values)
+                            else "%{text}" if draw_details else None,
+                customdata=customdata,
+                hovertemplate=(
+                    "Item: %{x}<br>"
+                    "No. samples: %{y}<br>"
+                    "Percentage: %{customdata[0]:.1f}%<extra></extra>"
+                )
+            )
+        )
+        num_items = len(keys)
+        width = max(1100, min(1200, num_items * 40))
+        height = max(500, min(800, 300 + num_items * 5))
+        fig.update_layout(
+            title=f"{title} ({len(arr)} elements, {len(keys)} unique)",
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            width=width,
+            height=height,
+            showlegend=False,
+            xaxis=dict(
+                tickangle=-rotation if rotation > 0 else 0,
+                showticklabels=len(keys) <= MAX_XTICKS,
+                showgrid=grid,
+            ),
+            yaxis=dict(
+                showgrid=grid,
+            ),
+            margin=dict(
+                l=50,
+                r=50,
+                t=80,
+                b=10 if len(keys) <= MAX_XTICKS else 50,
+            ),
+        )
+        if draw_details:
+            add_percentage_annotations(fig, keys, values)
+        return fig
+
+    # Histogram mode
+    import math
+    bins_to_use = bins if bins and bins > 0 else min(10, math.ceil(len(arr)/5))
+    hist, edges = np.histogram(arr, bins=bins_to_use)
+    x_labels = [f"{edges[i]:.2f}-{edges[i+1]:.2f}" for i in range(len(edges) - 1)]
+    values = hist
+    total = sum(values)
+    percentages = [v / total * 100 if total > 0 else 0 for v in values]
+    customdata = np.array(percentages).reshape(-1, 1)
+
     fig = go.Figure(
         data=go.Bar(
-            x=str_keys,
+            x=x_labels,
             y=values,
             marker_color=bar_color,
-            text=values if show_values_on_top_of_the_bar else None,
-            textposition="outside" if show_values_on_top_of_the_bar else None,
-            texttemplate="%{text:.2f}"
-            if show_values_on_top_of_the_bar
-            and any(isinstance(v, float) for v in values)
-            else "%{text}"
-            if show_values_on_top_of_the_bar
-            else None,
+            text=values if draw_details else None,
+            textposition="outside" if draw_details else None,
+            texttemplate="%{text:.2f}" if draw_details and any(isinstance(v, float) for v in values)
+                        else "%{text}" if draw_details else None,
+            customdata=customdata,
+            hovertemplate=(
+                "Range: %{x}<br>"
+                "No. samples: %{y}" + f" (out of {total})<br>"
+                "Percentage: %{customdata[0]:.1f}%<extra></extra>"
+            )
         )
     )
-
-    # Auto-adjust figure size based on number of items
-    num_items = len(str_keys)
-    width = max(1100, min(1200, num_items * 40))  # Scale width with number of items
-    height = max(500, min(800, 300 + num_items * 5))  # Scale height modestly
-
-    # Update layout
+    num_items = len(x_labels)
+    width = max(1100, min(1200, num_items * 40))
+    height = max(500, min(800, 300 + num_items * 5))
     fig.update_layout(
-        title=title,
+        title=f"{title} ({len(arr)} elements)",
         xaxis_title=x_label,
         yaxis_title=y_label,
         width=width,
@@ -100,7 +224,7 @@ def plot_dist(
         showlegend=False,
         xaxis=dict(
             tickangle=-rotation if rotation > 0 else 0,
-            showticklabels=len(str_keys) <= MAX_XTICKS,
+            showticklabels=len(x_labels) <= MAX_XTICKS,
             showgrid=grid,
         ),
         yaxis=dict(
@@ -110,9 +234,12 @@ def plot_dist(
             l=50,
             r=50,
             t=80,
-            b=10
-            if len(str_keys) <= MAX_XTICKS
-            else 50,  # Adjust bottom margin for rotated labels
+            b=10 if len(x_labels) <= MAX_XTICKS else 50,
         ),
     )
-    return fig
+    if draw_details:
+        add_percentage_annotations(fig, x_labels, values)
+        
+    fig.show()
+    # return fig
+    # we plot it because in notebooks when we want to plot twice we see only the last one
