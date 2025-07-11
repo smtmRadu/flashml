@@ -8,11 +8,11 @@
 from .main_tools.benchmark import benchmark, stress_cpu, stress_gpu
 from .main_tools.colors import ansi_of, ansi_to_hex, hex_of, hex_to_ansi
 from .main_tools.extern import call_cs_kernel
-from .main_tools.inspection import inspect_model, inspect_tokenizer
 from .main_tools.logging_jsonl import load_records, log_record
 from .main_tools.manipulation import (
     BatchIterator,
     sample_from,
+    sample_elementwise,
     shuffle_df,
     shuffle_tensor,
 )
@@ -25,7 +25,6 @@ from .main_tools.mlflow_logging import (
     log_metrics,
 )
 from .main_tools.parallel import parallel_for, parallel_foreach
-from .main_tools.plot_chat import plot_chat
 from .main_tools.plot_distribution import plot_dist
 from .main_tools.plot_graph import plot_graph
 from .main_tools.plot_rt_graph import plot_rt_graph
@@ -45,8 +44,6 @@ __all__ = [
     "hex_of",
     "hex_to_ansi",
     "host_mlflow",
-    "inspect_model",
-    "inspect_tokenizer",
     "load_checkpoint",
     "load_records",
     "log_checkpoint",
@@ -55,13 +52,13 @@ __all__ = [
     "log_record",
     "parallel_for",
     "parallel_foreach",
-    "plot_chat",
     "plot_dist",
     "plot_graph",
     "plot_rt_graph",
     "plot_tensor",
     "plot_tsne",
     "resource_monitor",
+    "sample_elementwise",
     "sample_from",
     "shuffle_df",
     "shuffle_tensor",

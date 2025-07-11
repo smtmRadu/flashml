@@ -7,7 +7,7 @@ from typing import Literal
 def log_record(
     record: dict | str,
     path="flashml_logger.jsonl",
-    augment_log=True,
+    add_timestamp=False,
     mode: str = "a",
     utf="utf-8",
 ):
@@ -21,7 +21,7 @@ def log_record(
     """
     if isinstance(record, str):
         record = {"message": record}
-    if augment_log:
+    if add_timestamp:
         new_dict = {"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), **record}
     else:
         new_dict = record

@@ -1,5 +1,35 @@
-from typing import List, Literal, Sequence, Tuple
+from typing import List, Literal, Sequence, Tuple, Any
 
+def sample_elementwise(*sequences: Sequence, num_samples: int, with_replacement: bool = False) -> Tuple[List[Any], ...]:
+    """
+    Sample indices in parallel from multiple sequences and return results as tuple of lists.
+
+    Args:
+        *sequences: Two or more sequences of equal length.
+        num_samples (int): Number of samples to draw.
+        with_replacement (bool): Sample with replacement or not.
+
+    Returns:
+        Tuple[List[Any], ...]: A tuple where each element is a list of sampled elements from each input sequence.
+    """
+    import random 
+    if not sequences:
+        raise ValueError("At least one sequence must be provided.")
+    seq_len = len(sequences[0])
+    if any(len(seq) != seq_len for seq in sequences):
+        raise ValueError("All sequences must have the same length.")
+    if not with_replacement and num_samples > seq_len:
+        raise ValueError("Cannot sample more items than available without replacement.")
+
+    # Sample indices
+    if with_replacement:
+        indices = [random.randint(0, seq_len - 1) for _ in range(num_samples)]
+    else:
+        indices = random.sample(range(seq_len), num_samples)
+
+    # Gather sampled elements for each sequence (as separate lists)
+    sampled_lists = tuple([seq[i] for i in indices] for seq in sequences)
+    return sampled_lists
 
 def sample_from(items: Sequence, num_samples, with_replacement=False):
     """
@@ -81,10 +111,12 @@ def shuffle_df(df):
 
 class Batch:
     """
-    sacgaskb
+    Represents a batch in the processing workflow of BatchIterator.
 
-
-    :ivar id: The id of the batch
+    :ivar (int) id: The id of the batch.
+    :ivar (tuple) step: The step information as a tuple (batch_id, num_batches).
+    :ivar value: The value associated with the batch.
+    :ivar (list) ids: The indices associated with the batch.
     """
 
     def __init__(self, batch_id, num_batches, batch_value, batch_idcs):
