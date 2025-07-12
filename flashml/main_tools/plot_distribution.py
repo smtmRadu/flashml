@@ -12,6 +12,7 @@ def plot_dist(
     draw_details: bool = True,
     grid: bool = True,
     bins: int = 10,
+    renderer='vscode'
 ):
     import plotly.graph_objects as go
     import plotly.io as pio
@@ -240,6 +241,6 @@ def plot_dist(
     if draw_details:
         add_percentage_annotations(fig, x_labels, values)
         
-    fig.show()
+    fig.show(renderer=renderer)
     # return fig
     # we plot it because in notebooks when we want to plot twice we see only the last one

@@ -129,7 +129,7 @@ def plot_roc_curve(scores, target):
 
     # Set the default renderer for VS Code
     pio.renderers.default = "vscode"
-
+    pio.templates.default = "plotly_dark"
     # Calculate ROC curve
     fpr, tpr, thresholds = roc_curve(target, scores)
     roc_auc = auc(fpr, tpr)

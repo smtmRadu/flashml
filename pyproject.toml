@@ -32,7 +32,8 @@ dependencies = [
     "spacy",
     "openai",
     "nbformat",
-    "thefuzz",
+    "thefuzz", # used for fuzzy matching 
+    "kneed", # used to find the best number of clusters for K-means clustering
     
     "python-dotenv",
     "ollama",
