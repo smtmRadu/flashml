@@ -1,5 +1,3 @@
-from sqlalchemy import column
-
 
 def expand_contractions(df, column_name):
     import contractions

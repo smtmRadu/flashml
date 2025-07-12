@@ -50,6 +50,7 @@ def _init_color_map() -> dict:
     Initializes and returns a single color map with tuples containing (ANSI, HEX) values.
     """
     return {
+        "white": ("\033[37m", "#FFFFFF"),
         "black": ("\033[30m", "#000000"),
         "red": ("\033[31m", "#FF0000"),
         "green": ("\033[32m", "#008000"),
@@ -57,7 +58,7 @@ def _init_color_map() -> dict:
         "blue": ("\033[34m", "#0000FF"),
         "purple": ("\033[35m", "#800080"),
         "cyan": ("\033[36m", "#00FFFF"),
-        "white": ("\033[37m", "#FFFFFF"),
+
         "gray": ("\033[90m", "#808080"),
         "light_red": ("\033[91m", "#FF5555"),
         "light_green": ("\033[92m", "#55FF55"),

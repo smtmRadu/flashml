@@ -41,6 +41,7 @@ dependencies = [
     "gymnasium",
     "transformers",
     "peft",
+    "bitsandbytes",
     "ipykernel",
     "opencv-python",
     "sphinx",

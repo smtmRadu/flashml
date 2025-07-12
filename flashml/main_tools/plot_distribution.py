@@ -2,7 +2,7 @@ from typing import Literal, Union, Collection
 
 def plot_dist(
     data: Union[dict, Collection[float], Collection[int], Collection[bool]],
-    sort_values: Literal["ascending", "descending"] | None = None,
+    sort: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     title: str = "Distribution",
     x_label: str = "Item",
@@ -23,20 +23,23 @@ def plot_dist(
 
     def add_percentage_annotations(fig, x_vals, y_vals):
         total = sum(y_vals)
+        y_max = max(y_vals)
+        min_height_for_percent = y_max * 0.15  # Only annotate if bar is at least 15% of max height (let it 15, it is the best)
+
         for i, (x, y) in enumerate(zip(x_vals, y_vals)):
             percent = y / total * 100 if total > 0 else 0
-            fig.add_annotation(
-                x=x,
-                y=y / 2,
-                text=f"{percent:.1f}%",
-                showarrow=False,
-                font=dict(size=13, color='white'),
-                textangle=-90,
-                xanchor="center",
-                yanchor="middle",
-                align="center",
-            )
-
+            if y >= min_height_for_percent:
+                fig.add_annotation(
+                    x=x,
+                    y=y / 2,
+                    text=f"{percent:.1f}%",
+                    showarrow=False,
+                    font=dict(size=13, color='white'),
+                    textangle=-90,
+                    xanchor="center",
+                    yanchor="middle",
+                    align="center",
+                )
     # If data is dict
     if isinstance(data, dict):
         freq_dict = data
@@ -46,10 +49,10 @@ def plot_dist(
 
         items = list(freq_dict.items())
 
-        if sort_values:
-            if sort_values.lower() == "descending":
+        if sort:
+            if sort.lower() == "descending":
                 items.sort(key=lambda x: x[1], reverse=True)
-            elif sort_values.lower() == "ascending":
+            elif sort.lower() == "ascending":
                 items.sort(key=lambda x: x[1])
             else:
                 raise ValueError("sort_values must be 'ascending', 'descending', or None.")
@@ -90,7 +93,7 @@ def plot_dist(
         width = max(1100, min(1200, num_items * 40))
         height = max(500, min(800, 300 + num_items * 5))
         fig.update_layout(
-            title=title,
+            title=f"{title} ({len(freq_dict)} elements{f", displayed {top_n}" if top_n else ""}{f", sorted {sort}" if sort else ""})",
             xaxis_title=x_label,
             yaxis_title=y_label,
             width=width,

@@ -180,7 +180,6 @@ def test_log_session():
     log_session(None, None, sort_by="f1")
 
 
-from flashml.main_tools import parallel
 from nlp import *
 
 
