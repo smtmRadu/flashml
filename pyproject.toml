@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashml"
-version = "0.6.1"
+version = "0.6.3"
 authors = [{ name = "kbradu" }]
 dependencies = [
     "ipywidgets",
+    "pydantic",
     "mlflow",
     "matplotlib",
     "plotly",
@@ -18,7 +19,7 @@ dependencies = [
     "torchinfo",
     "tqdm",
     "psutil",
-    "windows-curses",
+    # "windows-curses",
     "pillow",
     "pynvml",
     "scikit-learn",
@@ -42,6 +43,8 @@ dependencies = [
     "peft",
     "bitsandbytes",
     "ipykernel",
+    "notebook",
+    "jupyterlab",
     "opencv-python",
     "sphinx",
     "sphinx-rtd-theme",

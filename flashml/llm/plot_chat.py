@@ -60,14 +60,18 @@ class ChatPlotter:
         pio.templates.default = "vscode"
 
     def _wrap_text(self, text: str, width: int = 80) -> str:
-        import html
         import textwrap
-        """Wrap text to specified width and escape HTML."""
-        # Escape HTML characters
-        text = html.escape(text)
-        # Wrap text
-        wrapped_lines = textwrap.wrap(text, width=width)
-        return "<br>".join(wrapped_lines)
+        # Split on existing line breaks first, wrap each separately
+        paragraphs = text.split('\n')
+        wrapped_lines = []
+        for para in paragraphs:
+            wrapped = textwrap.wrap(para, width=width) or ['']
+            wrapped_lines.extend(wrapped)
+            # Add a blank line to indicate paragraph break, except after last
+            wrapped_lines.append('<br>')
+        if wrapped_lines and wrapped_lines[-1] == '<br>':
+            wrapped_lines.pop()  # Remove trailing <br>
+        return ' '.join(wrapped_lines)
 
     def _get_role_config(self, role: str) -> Dict:
         """Get styling configuration for a specific role."""

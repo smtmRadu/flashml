@@ -1,7 +1,7 @@
 from typing import Literal, Union, Collection
 
 def plot_dist(
-    data: Union[dict, Collection[float], Collection[int], Collection[bool]],
+    data: Union[dict, Collection[float], Collection[int], Collection[bool], Collection[str]],
     sort: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     title: str = "Distribution",
@@ -29,7 +29,7 @@ def plot_dist(
             percent = y / total * 100 if total > 0 else 0
             if y >= min_height_for_percent:
                 fig.add_annotation(
-                    x=x,
+                    x=i,  # Use index position instead of string value
                     y=y / 2,
                     text=f"{percent:.1f}%",
                     showarrow=False,
@@ -39,6 +39,7 @@ def plot_dist(
                     yanchor="middle",
                     align="center",
                 )
+    
     # If data is dict
     if isinstance(data, dict):
         freq_dict = data
@@ -128,13 +129,25 @@ def plot_dist(
         return
 
     unique_vals = np.unique(arr)
-    if len(unique_vals) < bins:
+    
+    # Check if data should be treated as discrete values
+    # Use discrete mode if:
+    # 1. Number of unique values is reasonable (< 50 by default)
+    # 2. OR data consists of integers/booleans/strings (not continuous floats)
+    is_discrete = (len(unique_vals) <= 50 or 
+                   all(isinstance(x, (int, bool, str, np.integer)) for x in arr) or
+                   all(float(x).is_integer() for x in arr if isinstance(x, (int, float))))
+    
+    if is_discrete:
+        # Discrete mode - treat each unique value as a separate bar
         unique_counts = {val: int(np.sum(arr == val)) for val in unique_vals}
+        
         def sort_key(x):
             if isinstance(x[0], bool):
                 return (0, x[0])
             else:
                 return (1, x[0])
+        
         sorted_items = sorted(unique_counts.items(), key=sort_key)
         keys = [str(k) for k, _ in sorted_items]
         values = [v for _, v in sorted_items]
@@ -188,7 +201,7 @@ def plot_dist(
             add_percentage_annotations(fig, keys, values)
         return fig
 
-    # Histogram mode
+    # Histogram mode for continuous data
     import math
     bins_to_use = bins if bins and bins > 0 else min(10, math.ceil(len(arr)/5))
     hist, edges = np.histogram(arr, bins=bins_to_use)
