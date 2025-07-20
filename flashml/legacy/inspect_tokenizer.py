@@ -16,7 +16,7 @@ def inspect_tokenizer(tokenizer, renderer="vscode"):
     import plotly.graph_objects as go
     import plotly.io as pio
     from plotly.subplots import make_subplots
-
+    
     pio.templates.default = "plotly_dark"
 
     # --- 1. Extract Core Data ---

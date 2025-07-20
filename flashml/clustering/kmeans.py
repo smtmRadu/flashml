@@ -1,13 +1,13 @@
 from typing import Literal, Collection
 
-def run_kmeans(x, n_clusters :int|Collection|range = range(2, 21), max_iter=300, weights= None, init:Literal['k-means++', 'random'] = 'k-means++', renderer='vscode'):
+def run_kmeans(x, n_clusters :int|Collection|range = range(2, 21), max_iter=300, weights:list[float]= None, init:Literal['k-means++', 'random'] = 'k-means++', renderer='vscode'):
     """Run k means (+Elbow method)
 
     Args:
         x (_type_): _description_
-        n_clusters (int | Collection | range, optional): _description_. Defaults to range(2, 20).
-        weights (_type_, optional): _description_. Defaults to None.
-        init (Literal[&#39;k, optional): _description_. Defaults to 'k-means++'.
+        n_clusters (int | Collection | range, optional): How many centroids to use for computation. If a Collection of integers, elbow method is used to compute the best number of centroids. Defaults to range(2, 20).
+        weights (_type_, optional): The weight of each sample in the computation. Defaults to None.
+        init (Literal['k-means++', 'random'], optional): _description_. Defaults to 'k-means++'.
         
     Returns:
         The best kmeans model

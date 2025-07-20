@@ -1,8 +1,6 @@
+from .model_inspector import inspect_model
+from .tokenizer_inspector import inspect_tokenizer
 
-from .inspect_model import inspect_model
-from .inspect_tokenizer import inspect_tokenizer
+all = ["inspect_model", "inspect_tokenizer"]
 
-__all__ = [
-    "inspect_model",
-    "inspect_tokenizer"
-]
+all == sorted(all), "Sort this"

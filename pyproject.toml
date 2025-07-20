@@ -8,18 +8,13 @@ version = "0.6.3"
 authors = [{ name = "kbradu" }]
 dependencies = [
     "ipywidgets",
-    "pydantic",
+    "pydantic", # used here for BaseClass in structured output with llms
     "mlflow",
     "matplotlib",
     "plotly",
     "numpy",
-    "torch",
-    "torchtune",
-    "torchao",
-    "torchinfo",
     "tqdm",
     "psutil",
-    # "windows-curses",
     "pillow",
     "pynvml",
     "scikit-learn",
@@ -35,7 +30,13 @@ dependencies = [
     "nbformat",
     "thefuzz", # used for fuzzy matching 
     "kneed", # used to find the best number of clusters for K-means clustering
-    
+    "glances", # used to monitor system resources
+
+    # extras
+    "torch",
+    "torchtune",
+    "torchao",
+    "torchinfo",
     "python-dotenv",
     "ollama",
     "torch-optimi",
@@ -50,7 +51,11 @@ dependencies = [
     "sphinx",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
+    # vllm but for linux
+     # "windows-curses",
 ]
+
+
 
 [tool.setuptools]
 packages = ["flashml"]

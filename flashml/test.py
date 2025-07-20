@@ -96,15 +96,15 @@ def test_scheduler():
 
 def test_logging():
     from flashml import ansi_of, hex_of
-    from flashml import log_record, display_logs
+    from flashml import log_json, display_logs
 
-    log_record("This is red", color="red")  # Entire text in red
-    log_record("This is hex blue", color="#0000FF")  # Entire text in blue (hex)
-    log_record(
+    log_json("This is red", color="red")  # Entire text in red
+    log_json("This is hex blue", color="#0000FF")  # Entire text in blue (hex)
+    log_json(
         "This is a test message\n with a new line and some random characters:   "
     )  # Entire text in white
-    log_record("This is hex green", color="#00FF00")  # Entire text in green (hex)
-    log_record("Khaki hex", color="khaki")
+    log_json("This is hex green", color="#00FF00")  # Entire text in green (hex)
+    log_json("Khaki hex", color="khaki")
     display_logs()
 
 
@@ -198,9 +198,9 @@ def stress_test():
 
 
 def test_logger():
-    from flashml import log_record, load_records
+    from flashml import log_json, load_jsonl
 
-    print(load_records(as_df="pl"))
+    print(load_jsonl(as_df="pl"))
 
 
 def test_simple_for():
@@ -380,7 +380,29 @@ def test_nlp_preprocesssing():
     end = time.time() - start
     print(end)
 
+def test_plot_func():
+    from flashml import plot_dist
+    import random
 
+    x1 = [random.randint(0, 5) for _ in range(10)]
+    x2 = [random.randint(0, 200) for _x in range(1000)]
+    x3 = [None, *x2, None]
+    x4= [random.random() for _ in range(1000)]
+    x5 = [None, *x4, None]
+    x6 = ["hi there"  , "jonanatha", "hi there", "hi there "]
+    x7 = [None, *x6]
+    x8 = {"daniel": 10, "james": 3}
+
+    plot_dist(x1)
+    plot_dist(x2)
+    plot_dist(x3)
+    plot_dist(x4)
+    plot_dist(x5)
+    plot_dist(x6)
+    plot_dist(x7)       
+    plot_dist(x8)      
+    
+    
 if __name__ == "__main__":
     from flashml import resource_monitor
     resource_monitor()

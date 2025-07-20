@@ -8,7 +8,7 @@
 from .main_tools.benchmark import benchmark, stress_cpu, stress_gpu
 from .main_tools.colors import ansi_of, ansi_to_hex, hex_of, hex_to_ansi
 from .main_tools.extern import call_cs_kernel
-from .main_tools.logging_jsonl import load_records, log_record
+from .main_tools.logging_jsonl import load_jsonl, log_json
 from .main_tools.manipulation import (
     BatchIterator,
     sample_from,
@@ -46,11 +46,11 @@ __all__ = [
     "hex_to_ansi",
     "host_mlflow",
     "load_checkpoint",
-    "load_records",
+    "load_jsonl",
     "log_checkpoint",
     "log_figure",
+    "log_json",
     "log_metrics",
-    "log_record",
     "parallel_for",
     "parallel_foreach",
     "plot_dist",
@@ -67,6 +67,7 @@ __all__ = [
     "stress_cpu",
     "stress_gpu",
 ]
+
 
 
 assert __all__ == sorted(__all__), "Modules are not sorted alphabetically"

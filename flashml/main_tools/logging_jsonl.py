@@ -4,14 +4,14 @@ from datetime import datetime
 from typing import Literal
 
 
-def log_record(
+def log_json(
     record: dict | str,
     path="flashml_logger.jsonl",
     add_timestamp=False,
     mode: str = "a",
     utf="utf-8",
 ):
-    """Records a dictionary as a json object in a jsonl file.
+    """Logs a dictionary as a json object in a jsonl file.
 
     Args:
         record (dict | str): A message or a dictionary
@@ -30,13 +30,17 @@ def log_record(
         f.write(json.dumps(new_dict) + "\n")
 
 
-def load_records(
+def load_jsonl(
     path="flashml_logger.jsonl",
-    as_df: Literal["pd", "pl"] = "list_of_dicts",
+    as_df: Literal["pd", "pl"] = False,
     utf="utf-8",
 ) -> list[dict]:
     """Loads the jsonl file and returns a polars/pandas dataframe.
 
+    Args:
+        path (str, optional): Path to the jsonl file. Defaults to "flashml_logger.jsonl".
+        as_df (Literal["pd", "pl"], optional): Return a dataframe. Defaults to False. If false, returns a list of dictionaries.
+        utf (str, optional): _description_. Defaults to "utf-8".
     Returns:
         list[dict] | polars/pandas df | **None** if file is empty.
     """
@@ -54,7 +58,7 @@ def load_records(
     if os.stat(path).st_size == 0:
         return None
 
-    if as_df == "list_of_dicts":
+    if as_df is False or as_df == "list_of_dicts":
         import pandas
 
         r = pandas.read_json(path, lines=True, encoding=utf)

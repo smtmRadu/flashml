@@ -32,7 +32,7 @@ The output .jsonl contains the following response format:
         
     def get_responses(self, file_name = "openai_sync_req_output.jsonl", custom_ids: list= None,):
         from tqdm import tqdm
-        from flashml import log_record
+        from flashml import log_json
         with open(file_name, "w") as f:
             f.write("")
             
@@ -51,7 +51,7 @@ The output .jsonl contains the following response format:
                     response_format = self.output_structure
                 )
             elm = {"custom_id" : f"sync-req-{idx+1}" if custom_ids is None else str(custom_ids[idx]), "message": resp.choices[0].message}
-            log_record(record=elm, path=file_name, add_timestamp=True)
+            log_json(record=elm, path=file_name, add_timestamp=True)
             responses.append(elm) 
 
         return responses
@@ -86,7 +86,7 @@ for r in resps:
         self.output_structure = output_structure
         
     def step_1_build_batch_file(self, file_name = "openai_batch_req_file.jsonl", custom_ids: list = None):
-        from flashml import log_record
+        from flashml import log_json
         
         
         with open(file_name, "w") as f:
@@ -119,7 +119,7 @@ for r in resps:
                     "function": {"name": schema["title"]}
                 }
                 req["body"]["response_format"] = {"type": "json_object"}
-            log_record(record=req, path=file_name, add_timestamp=False)
+            log_json(record=req, path=file_name, add_timestamp=False)
             
         print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[38;2;0;128;128m{file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
 
