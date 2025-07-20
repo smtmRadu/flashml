@@ -1,7 +1,7 @@
 from typing import Literal, Union, Collection
 
 def plot_dist(
-    data: Union[dict, Collection[float], Collection[int], Collection[bool]],
+    data: Union[dict, Collection[float], Collection[int], Collection[bool], Collection[str]],
     sort: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     title: str = "Distribution",
@@ -30,7 +30,7 @@ def plot_dist(
             percent = y / total * 100 if total > 0 else 0
             if y >= min_height_for_percent:
                 fig.add_annotation(
-                    x=x,
+                    x=i,  # Use index position instead of string value
                     y=y / 2,
                     text=f"{percent:.1f}%",
                     showarrow=False,
@@ -40,6 +40,7 @@ def plot_dist(
                     yanchor="middle",
                     align="center",
                 )
+    
     # If data is dict
     if isinstance(data, dict):
         freq_dict = data
@@ -119,25 +120,91 @@ def plot_dist(
         return fig
 
     # If data is a collection
-    try:
-        arr = np.array(list(data))
-    except Exception as e:
-        raise TypeError("If not a dict, data must be a collection of numbers.") from e
-
-    if arr.size == 0:
+    data_list = list(data)
+    
+    if len(data_list) == 0:
         print("Warning: Data is empty. Nothing to plot.")
         return
 
+    # Count None values separately
+    none_count = sum(1 for x in data_list if x is None)
+    non_none_data = [x for x in data_list if x is not None]
+    
+    # If all data is None
+    if len(non_none_data) == 0:
+        keys = ["None"]
+        values = [none_count]
+        total = none_count
+        percentages = [100.0]
+        customdata = np.array(percentages).reshape(-1, 1)
+
+        fig = go.Figure(
+            data=go.Bar(
+                x=keys,
+                y=values,
+                marker_color=bar_color,
+                text=values if draw_details else None,
+                textposition="outside" if draw_details else None,
+                texttemplate="%{text}",
+                customdata=customdata,
+                hovertemplate=(
+                    "Item: %{x}<br>"
+                    "No. samples: %{y}<br>"
+                    "Percentage: %{customdata[0]:.1f}%<extra></extra>"
+                )
+            )
+        )
+        fig.update_layout(
+            title=f"{title} ({len(data_list)} elements, 1 unique)",
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            width=800,
+            height=500,
+            showlegend=False,
+            xaxis=dict(showgrid=grid),
+            yaxis=dict(showgrid=grid),
+            margin=dict(l=50, r=50, t=80, b=50),
+        )
+        if draw_details:
+            add_percentage_annotations(fig, keys, values)
+        return fig
+
+    # Process non-None data
+    try:
+        arr = np.array(non_none_data)
+    except Exception as e:
+        raise TypeError("If not a dict, data must be a collection of numbers.") from e
+
     unique_vals = np.unique(arr)
-    if len(unique_vals) < bins:
+    
+    # Check if data should be treated as discrete values
+    # Use discrete mode if:
+    # 1. Number of unique values is reasonable (< 50 by default)
+    # 2. OR data consists of integers/booleans/strings (not continuous floats)
+    # 3. OR we have None values (mixed discrete case)
+    is_discrete = (len(unique_vals) <= 50 or 
+                   all(isinstance(x, (int, bool, str, np.integer)) for x in arr) or
+                   all(float(x).is_integer() for x in arr if isinstance(x, (int, float))) or
+                   none_count > 0)
+    
+    if is_discrete:
+        # Discrete mode - treat each unique value as a separate bar
         unique_counts = {val: int(np.sum(arr == val)) for val in unique_vals}
+        
+        # Add None count if present
+        if none_count > 0:
+            unique_counts[None] = none_count
+        
         def sort_key(x):
-            if isinstance(x[0], bool):
+            if x[0] is None:
+                return (-1, 0)  # None comes first
+            elif isinstance(x[0], bool):
                 return (0, x[0])
             else:
                 return (1, x[0])
+        
         sorted_items = sorted(unique_counts.items(), key=sort_key)
-        keys = [str(k) for k, _ in sorted_items]
+        keys = [str(k) if k is not None else "None" for k, _ in sorted_items]
         values = [v for _, v in sorted_items]
         total = sum(values)
         percentages = [v / total * 100 if total > 0 else 0 for v in values]
@@ -163,8 +230,9 @@ def plot_dist(
         num_items = len(keys)
         width = max(1100, min(1200, num_items * 40))
         height = max(500, min(800, 300 + num_items * 5))
+        unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
         fig.update_layout(
-            title=f"{title} ({len(arr)} elements, {len(keys)} unique)",
+            title=f"{title} ({len(data_list)} elements, {unique_count} unique)",
             xaxis_title=x_label,
             yaxis_title=y_label,
             width=width,
@@ -189,12 +257,18 @@ def plot_dist(
             add_percentage_annotations(fig, keys, values)
         return fig
 
-    # Histogram mode
+    # Histogram mode for continuous data (no None values here since we filtered them out)
     import math
     bins_to_use = bins if bins and bins > 0 else min(10, math.ceil(len(arr)/5))
     hist, edges = np.histogram(arr, bins=bins_to_use)
     x_labels = [f"{edges[i]:.2f}-{edges[i+1]:.2f}" for i in range(len(edges) - 1)]
-    values = hist
+    values = list(hist)
+    
+    # Add None as a separate bar if present
+    if none_count > 0:
+        x_labels.append("None")
+        values.append(none_count)
+    
     total = sum(values)
     percentages = [v / total * 100 if total > 0 else 0 for v in values]
     customdata = np.array(percentages).reshape(-1, 1)
@@ -220,7 +294,7 @@ def plot_dist(
     width = max(1100, min(1200, num_items * 40))
     height = max(500, min(800, 300 + num_items * 5))
     fig.update_layout(
-        title=f"{title} ({len(arr)} elements)",
+        title=f"{title} ({len(data_list)} elements)",
         xaxis_title=x_label,
         yaxis_title=y_label,
         width=width,

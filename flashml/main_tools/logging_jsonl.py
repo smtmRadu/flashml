@@ -42,6 +42,8 @@ def load_records(
     """
     # check file is empty
     if not os.path.exists(path):
+        from flashml import bell
+        bell()
         print(
             f"\033[93mThe file at path {path} couldn't be found, the returned object is None.\033[0m"
         )

@@ -15,6 +15,7 @@ from .main_tools.manipulation import (
     sample_elementwise,
     shuffle_df,
     shuffle_tensor,
+    reorder_columns_df
 )
 from .main_tools.mlflow_logging import (
     get_metrics_at_step,
@@ -57,6 +58,7 @@ __all__ = [
     "plot_rt_graph",
     "plot_tensor",
     "plot_tsne",
+    "reorder_columns_df",
     "resource_monitor",
     "sample_elementwise",
     "sample_from",
