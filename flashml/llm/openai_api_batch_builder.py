@@ -1,9 +1,8 @@
-from pydantic import BaseModel
-from typing import Type
+
 
 
 class OpenAISyncRequest():
-    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, output_structure:Type[BaseModel]=None):
+    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, format=None):
         """Initializes a SyncronizedRequest client.
 The output .jsonl contains the following response format:
 ```
@@ -27,7 +26,7 @@ The output .jsonl contains the following response format:
         self.max_tokens = max_tokens
         self.messages_batch= messages_batch
         self.temperature= temperature
-        self.output_structure= output_structure
+        self.output_structure= format
         self.client = client
         
     def get_responses(self, file_name = "openai_sync_req_output.jsonl", custom_ids: list= None,):
@@ -58,8 +57,8 @@ The output .jsonl contains the following response format:
     
 
 class OpenAIBatchRequest():
-    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, output_structure:Type[BaseModel]=None):
-        """Initializes the BatchedRequest client.
+    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, format=None):
+        """Initializes the BatchedRequest client. Call the each function in step order.
         
 Note that when doing structured output in batched inference, the output is extracted directly as a json as follows:
 ```python
@@ -83,7 +82,7 @@ for r in resps:
         self.temperature= temperature
 
         self.client = client
-        self.output_structure = output_structure
+        self.output_structure = format
         
     def step_1_build_batch_file(self, file_name = "openai_batch_req_file.jsonl", custom_ids: list = None):
         from flashml import log_json

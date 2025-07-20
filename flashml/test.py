@@ -53,7 +53,6 @@ def test_train_info():
             log_metrics(
                 {"loss": loss_, "acc": acc},
                 # step=(epoch, batches * epochs),
-                hyperparams=HYPERPARAMS,
                 # experiment_name=None,
             )
             loss -= 1e-2
@@ -405,4 +404,4 @@ def test_plot_func():
     
 if __name__ == "__main__":
     from flashml import resource_monitor
-    resource_monitor()
+    test_train_info()

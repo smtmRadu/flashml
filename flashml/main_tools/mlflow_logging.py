@@ -4,6 +4,7 @@ from typing import Any, Tuple
 def log_metrics(
     metrics: dict[str, Any],
     step: Tuple[int, int] | int = None,
+    hyperparams: dict[str, Any] = None,
     run_name: str = None,  # if default generates a funny name
     experiment_name: str = None,  # let it Default instead of flashml because Default cannot be removed and is selected first..
 ) -> None:
@@ -21,11 +22,14 @@ def log_metrics(
     Args:
         metrics (dict[str, Any]): metrics dict
         step (Tuple[int, int]): the current step and total steps. It is incremented automatically if none
+        hyperparams (dict[str, Any]): hyperparams dict. If not provided, it will be taken from the global variable (if possible)
+        run_name (str): If None, it will initialize a new run and will log only to it. You can have multiple runs in a single python call (e.g. for grid search/parallel coords)
         experiment_name (str): The tab where to log the experiment (even with that, you can merge them inside mlflow when comparing results)
     """
     _TrainingLogger.log_metrics(
         metrics,
         step=step,
+        hyperparams=hyperparams,
         run_name=run_name,
         experiment_name=experiment_name,
     )
@@ -98,22 +102,7 @@ def load_checkpoint(run_id: str, version: int, experiment_name: str = None) -> A
 
     artifact_path = f"mlruns/{experiment_id}"
 
-    # if want to search by run name. Note that some runs might have similar names, so this will fuck up.
-
-    # with os.scandir(artifact_path) as entries:
-    #    runs_ids = [entry.name for entry in entries if entry.is_dir()]
-
-    # run_id = None
-    # for i in runs_ids:
-    #     run_name_ = mlflow.get_run(i).info.run_name
-    #     if run_name_ == run_name:
-    #         run_id = i
-    #         break
-    #
-    # if run_id is None:
-    #     raise ValueError(
-    #         f"The run `{run_name}` doesn't exist, or the correct experiment name was not provided."
-    #     )
+    # if want to search by run name. Note that some runs might have similar names, so this will mess up.
 
     artifact_path = f"mlruns/{experiment_id}/{run_id}/artifacts/checkpoint_v{version}"
 
@@ -162,13 +151,20 @@ class _TrainingLogger:
     def __new__(
         cls, num_steps: int = None, run_name: str = None, experiment_name: str = None
     ):
+        """Ensure that a new instance is created only when the parameters change."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+        else:
+            if (cls._instance.run_name != run_name or cls._instance.experiment_name != experiment_name):
+                if hasattr(cls._instance, "display") and cls._instance.display is not None:
+                    cls._instance.display.close()  # close the tqdm bar
+                cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(
         self, num_steps: int = None, run_name: str = None, experiment_name: str = None
     ):
+        """Initialize MLFlow logging, creating or using an existing run."""
         if hasattr(self, "_initialized"):
             return
 
@@ -186,6 +182,8 @@ class _TrainingLogger:
         self._start_mlflow_ui(self.host, self.port)
 
         self.num_steps = num_steps
+        self.run_name = run_name
+        self.experiment_name = experiment_name  
         # mlflow.enable_system_metrics_logging()
 
         if experiment_name is not None:
@@ -195,23 +193,18 @@ class _TrainingLogger:
             mlflow.set_experiment(experiment_name)
 
         # now = datetime.now()
+        if mlflow.active_run():
+            mlflow.end_run()
         self.mlflow_op = mlflow.start_run(
             run_name=run_name,
             # run_name=f"run_{now.day:02d}{now.month:02d}_{now.time()}",
-            tags={
-                # "random.state": random.getstate(),
-                # "numpy.state": numpy.random.get_state(),
-                # "torch.state": torch.get_rng_state(),
-                # "torch.cuda_all.state": torch.cuda.get_rng_state_all(),
-                # "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark,
-                # "torch.backends.cudnn.deterministic": torch.backends.cudnn.deterministic,
-            },  # it doesn't worth to log states because they are modified before logging the first time. Instead the backends are fine.
+            tags={},
         )  # (log_system_metrics=True)
 
         print(
             f"\033[90mAccess MLFlow run at:\033[0m \033[94mhttp://{self.host}:{self.port}\033[0m \033[95m({self.mlflow_op.info.run_name})\033[0m"
         )
-        self.display = tqdm(desc="Step", total=num_steps, leave=False)
+        self.display = tqdm(desc="Step", total=num_steps, leave=True)
 
         atexit.register(self._end_mlflow_ui)
         self.display.reset()
@@ -252,7 +245,6 @@ class _TrainingLogger:
                 text=True,
                 shell=False,
             )
-            # time.sleep(3)  # Wait for server to start
             if process.poll() is None:
                 print("\033[90mMLFlow UI started.\033[0m", end=" ")
             else:
@@ -269,16 +261,26 @@ class _TrainingLogger:
         if mlflow.active_run():
             mlflow.end_run()
 
+    def _get_run_id_by_name(self, run_name: str) -> str:
+        """Retrieve run ID by run name."""
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient()
+        experiment_id = mlflow.get_experiment_by_name(self.experiment_name).experiment_id
+        runs = client.search_runs(experiment_ids=[experiment_id], filter_string=f"tags.mlflow.runName = '{run_name}'")
+        return runs[0].info.run_id if runs else None
+
     @staticmethod
     def log_metrics(
         metrics: dict[str, Any],
         step: Tuple[int, int] | int = None,
+        hyperparams: dict[str, Any] = None,
         run_name: str = None,
         experiment_name: str = None,
     ):
-        import mlflow  # the import overhead is minimal (2ms per 100k calls)
-
-        assert metrics is not None, "You logged no metric"
+        """Log metrics to MLFlow."""
+        import mlflow
+        assert metrics, "You logged no metric"
         assert len(metrics) > 0, "Metric log is empty"
         logger = _TrainingLogger(
             num_steps=None if step is None or isinstance(step, int) else step[1],
@@ -291,7 +293,11 @@ class _TrainingLogger:
         step = step if isinstance(step, (int, float)) else step[0]
 
         mlflow.log_metrics(metrics, step=step, synchronous=False)
-        if _TrainingLogger._instance._hyperparams_logged is False:
+        
+        if hyperparams and not _TrainingLogger._instance._hyperparams_logged:
+            mlflow.log_params(hyperparams, synchronous=False)
+            _TrainingLogger._instance._hyperparams_logged = True
+        elif not _TrainingLogger._instance._hyperparams_logged:
             for var_name in globals():
                 if var_name.lower() in [
                     "hyperparam",
@@ -307,8 +313,8 @@ class _TrainingLogger:
                     "hparams",
                 ]:
                     mlflow.log_params(globals()[var_name], synchronous=False)
+                    
             _TrainingLogger._instance._hyperparams_logged = True
-
         logger.display.set_postfix(metrics)
         logger.display.n = step
         logger.display.update(0)
@@ -321,10 +327,8 @@ class _TrainingLogger:
         save_over_last_checkpoint: bool = False,
         experiment_name: str = None,
     ):
-        from datetime import datetime
-
+        """Log checkpoint to MLFlow."""
         import mlflow
-
         logger = _TrainingLogger(None, run_name=None, experiment_name=experiment_name)
 
         if not save_over_last_checkpoint:
@@ -334,15 +338,15 @@ class _TrainingLogger:
             state_dict=state_dict,
             artifact_path=f"checkpoint_v{logger.ckpt_version}",
         )
-
+        import datetime
         __info_dict = {
             "timestamp": datetime.now(),
             "step": logger.internal_step,
-        }  # or maybe sometimes +1 idk..
+        }
 
-        if info is not None:
+        if info:
             __info_dict["_"] = info
-
+        
         mlflow.log_dict(
             __info_dict,
             artifact_file=f"checkpoint_v{logger.ckpt_version}/~info.json",
@@ -350,11 +354,11 @@ class _TrainingLogger:
 
     @staticmethod
     def log_figure(figure, figure_name: str = None, experiment_name: str = None):
-        import mlflow
-
+        """Log figure to MLFlow."""
         _ = _TrainingLogger(
             None, run_name=None, experiment_name=experiment_name
-        )  # initialize if needed
+        )
+        import mlflow
         mlflow.log_figure(
             figure=figure,
             artifact_file=figure_name
