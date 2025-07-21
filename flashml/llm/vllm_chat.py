@@ -7,7 +7,7 @@ def vllm_chat(
     messages:list[dict] | list[list[dict]],
     
     max_model_len:int= 4096,
-    batch_size=64,
+    max_num_seqs=256,
     gpu_memory_utilization=0.9,
     # sampling
     temperature:float=1,
@@ -30,8 +30,8 @@ def vllm_chat(
             with fields like 'role' and 'content'.
         max_model_len (int, optional): 
             Maximum number of tokens per chat. VLLM backend prefills the VRAM memory for KV caches so it must know your limit. Defaults to 4096.
-        batch_size (int, optional): 
-            Increase this as much as you can until the VLLM fails to initialize. Decrease if VLLM fails to initialize. Defaults to 64.
+        max_num_seqs(int):
+            Decrease this if the engine fails to init.
         temperature (float, optional): 
             Sampling temperature. Higher values produce more random outputs. Defaults to 1.
         top_k (int, optional): 
@@ -81,13 +81,13 @@ def vllm_chat(
         tokenizer=tokenizer_name,
         quantization=quantization,
         max_model_len=max_model_len,
-        max_num_seqs= batch_size,
+        max_num_seqs= max_num_seqs,
         gpu_memory_utilization = gpu_memory_utilization
     )
         
     return VLLMCore.llm.chat(
         messages=messages,
-        sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format)),
+        sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
         use_tqdm=True
     )
 

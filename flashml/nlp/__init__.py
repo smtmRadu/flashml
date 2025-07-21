@@ -22,8 +22,11 @@ from .text_special_prepreocessing import (
     lemmatize,
 )
 
+from .text_extractors import extract_text_within_tags
+
 __all__ = [
     "expand_contractions",
+    "extract_text_within_tags",
     "lemmatize",
     "lowercase",
     "remove_double_spacing",

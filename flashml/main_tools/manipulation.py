@@ -1,4 +1,4 @@
-from typing import List, Literal, Sequence, Tuple, Any
+from typing import List, Literal, Sequence, Tuple, Any, Optional
 
 def sample_elementwise(*sequences: Sequence, num_samples: int, with_replacement: bool = False) -> Tuple[List[Any], ...]:
     """
@@ -108,8 +108,8 @@ def shuffle_tensor(torch_tensor, axis):
 
 def reorder_columns_df(
     df,
-    columns_to_put_first: List[str],
-    columns_to_put_last: List[str] | None = None
+    columns_to_put_first: Optional[List[str]] = None,
+    columns_to_put_last: Optional[List[str]] = None
 ):
     """
     Reorders the columns of a Polars or Pandas DataFrame.
@@ -118,7 +118,7 @@ def reorder_columns_df(
       Ensure no overlap between first and last lists.
     Args:
         df (pl.DataFrame or pd.DataFrame): DataFrame to reorder.
-        columns_to_put_first (List[str]): Columns to appear first.
+        columns_to_put_first (List[str], optional): Columns to appear first.
         columns_to_put_last (List[str], optional): Columns to appear last.
     Returns:
         DataFrame with reordered columns (same type as input).
@@ -128,11 +128,17 @@ def reorder_columns_df(
     else:
         raise TypeError("The input must be a Polars or Pandas DataFrame.")
 
+    columns_to_put_first = columns_to_put_first or []
+    columns_to_put_last = columns_to_put_last or []
+
+    # If no changes requested, return original
+    if not columns_to_put_first and not columns_to_put_last:
+        return df
+
     for col in columns_to_put_first:
         if col not in all_cols:
             raise ValueError(f"Column '{col}' does not exist in the DataFrame.")
 
-    columns_to_put_last = columns_to_put_last or []
     for col in columns_to_put_last:
         if col not in all_cols:
             raise ValueError(f"Column '{col}' does not exist in the DataFrame.")
