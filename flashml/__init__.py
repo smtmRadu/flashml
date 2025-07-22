@@ -9,6 +9,7 @@ from .main_tools.benchmark import benchmark, stress_cpu, stress_gpu
 from .main_tools.colors import ansi_of, ansi_to_hex, hex_of, hex_to_ansi
 from .main_tools.extern import call_cs_kernel
 from .main_tools.logging_jsonl import load_jsonl, log_json
+from .main_tools.lorem_ipsum import lorem_ipsum, lorem_ipsum_en
 from .main_tools.manipulation import (
     BatchIterator,
     sample_from,
@@ -51,6 +52,8 @@ __all__ = [
     "log_figure",
     "log_json",
     "log_metrics",
+    "lorem_ipsum",
+    "lorem_ipsum_en",
     "parallel_for",
     "parallel_foreach",
     "plot_dist",

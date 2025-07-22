@@ -4,13 +4,13 @@ def plot_dist(
     data: Union[dict, Collection[float], Collection[int], Collection[bool], Collection[str]],
     sort: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
-    bins: int = None,  # Changed: Now nullable, None means no binning
+    bins: int = None,
     title: str = "Distribution",
     x_label: str = "Item",
     y_label: str = "Frequency",
     bar_color: str = "skyblue",
-    rotation: int = 60, # rotation of the x_labels
-    draw_details: bool = True, # draws grid, count elem for each bar, percentages
+    rotation: int = 60,
+    draw_details: bool = True,
     renderer='notebook'
 ):
     import plotly.graph_objects as go
@@ -23,13 +23,12 @@ def plot_dist(
     def add_percentage_annotations(fig, x_vals, y_vals):
         total = sum(y_vals)
         y_max = max(y_vals)
-        min_height_for_percent = y_max * 0.15  # Only annotate if bar is at least 15% of max height (let it 15, it is the best)
-
+        min_height_for_percent = y_max * 0.15
         for i, (x, y) in enumerate(zip(x_vals, y_vals)):
             percent = y / total * 100 if total > 0 else 0
             if y >= min_height_for_percent:
                 fig.add_annotation(
-                    x=i,  # Use index position instead of string value
+                    x=i,
                     y=y / 2,
                     text=f"{percent:.1f}%",
                     showarrow=False,
@@ -39,61 +38,57 @@ def plot_dist(
                     yanchor="middle",
                     align="center",
                 )
-    
-    # If data is dict
+
+    def is_number(x):
+        try:
+            float(x)
+            return True
+        except Exception:
+            return False
+
+    # --- Handle dict input ---
     if isinstance(data, dict):
         freq_dict = data
         if not freq_dict:
             print("Warning: freq_dict is empty. Nothing to plot.")
             return
-
         items = list(freq_dict.items())
-
         if sort:
             if sort.lower() == "descending":
-                items.sort(key=lambda x: x[1], reverse=True)
+                items.sort(key=lambda x: (-x[1], str(x[0])))
             elif sort.lower() == "ascending":
-                items.sort(key=lambda x: x[1])
+                items.sort(key=lambda x: (x[1], str(x[0])))
             else:
-                raise ValueError("sort_values must be 'ascending', 'descending', or None.")
-
+                raise ValueError("sort must be 'ascending', 'descending', or None.")
         if top_n is not None:
             if not isinstance(top_n, int) or top_n <= 0:
                 raise ValueError("top_n must be a positive integer.")
             items = items[:top_n]
-
         if not items:
             print("Warning: No items to plot after filtering.")
             return
-
         keys, values = zip(*items)
         str_keys = [str(k) for k in keys]
-        
-        # Handle None values in dictionary data - filter them out and count them
         valid_values = []
         none_count_dict = 0
         for v in values:
             if v is None:
                 none_count_dict += 1
-                valid_values.append(0)  # Placeholder for None values
+                valid_values.append(0)
             else:
                 valid_values.append(v)
-        
         total = sum(v for v in values if v is not None) + none_count_dict
         percentages = [v / total * 100 if total > 0 and v is not None else (1 / total * 100 if v is None else 0) for v in values]
         customdata = np.array(percentages).reshape(-1, 1)
-        
-        # Create colors array - gray for None values, regular color for others
         colors = []
         display_values = []
         for i, v in enumerate(values):
             if v is None:
                 colors.append("gray")
-                display_values.append(1)  # Show 1 for None values
+                display_values.append(1)
             else:
                 colors.append(bar_color)
                 display_values.append(v)
-
         fig = go.Figure(
             data=go.Bar(
                 x=str_keys,
@@ -115,7 +110,7 @@ def plot_dist(
         width = max(1100, min(1200, num_items * 40))
         height = max(500, min(800, 300 + num_items * 5))
         fig.update_layout(
-            title=f"{title} ({len(freq_dict)} elements{f", displayed {top_n}" if top_n else ""}{f", sorted {sort}" if sort else ""})",
+            title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''})",
             xaxis_title=x_label,
             yaxis_title=y_label,
             width=width,
@@ -141,24 +136,20 @@ def plot_dist(
         fig.show(renderer=renderer)
         return
 
-    # If data is a collection
+    # --- Handle sequence input (list, set, etc) ---
     data_list = list(data)
-    
     if len(data_list) == 0:
         print("Warning: Data is empty. Nothing to plot.")
         return
-
     none_count = sum(1 for x in data_list if x is None)
     non_none_data = [x for x in data_list if x is not None]
-    
-    # If all data is None
+
     if len(non_none_data) == 0:
         keys = ["None"]
         values = [none_count]
         total = none_count
         percentages = [100.0]
         customdata = np.array(percentages).reshape(-1, 1)
-
         fig = go.Figure(
             data=go.Bar(
                 x=keys,
@@ -191,60 +182,36 @@ def plot_dist(
         fig.show(renderer=renderer)
         return
 
-    # Process non-None data
-    try:
-        arr = np.array(non_none_data)
-    except Exception as e:
-        raise TypeError("If not a dict, data must be a collection of numbers.") from e
+    all_numeric = all(is_number(x) for x in non_none_data)
 
-    unique_vals = np.unique(arr)
-    
-    # Changed logic: Use discrete mode only if bins is None AND conditions are met
-    # If bins is specified (not None), always use histogram mode
-    if bins is None:
-        # Check if we have too many unique values (excluding None)
-        if len(unique_vals) > 50:
-            # Too many unique values - force histogram mode with automatic binning
-            is_discrete = False
-            bins = 10  # Set automatic binning to 10
-        else:
-            # Use discrete mode if number of unique values is reasonable
-            is_discrete = True
-    else:
-        # If bins is specified, force histogram mode
-        is_discrete = False
-    
-    if is_discrete:
-        # Discrete mode - treat each unique value as a separate bar
-        unique_counts = {val: int(np.sum(arr == val)) for val in unique_vals}
-        
-        # Add None count if present
+    # --- Discrete/categorical plot (for non-numeric or numeric with few uniques) ---
+    if not all_numeric or (bins is None and len(set(non_none_data)) <= 50):
+        if not all_numeric and bins is not None:
+            print("Warning: bins parameter ignored for non-numeric (categorical) data.")
+
+        # Build frequency counts
+        unique_vals, counts = np.unique(non_none_data, return_counts=True)
+        unique_counts = dict(zip(unique_vals, counts))
         if none_count > 0:
             unique_counts[None] = none_count
-        
-        def sort_key(x):
-            if x[0] is None:
-                return (-1, 0)  # None comes first
-            elif isinstance(x[0], bool):
-                return (0, x[0])
+
+        # SORTING BY BAR COUNT!
+        if sort:
+            if sort.lower() == "descending":
+                sorted_items = sorted(unique_counts.items(), key=lambda x: (-x[1], str(x[0])))
+            elif sort.lower() == "ascending":
+                sorted_items = sorted(unique_counts.items(), key=lambda x: (x[1], str(x[0])))
             else:
-                return (1, x[0])
-        
-        sorted_items = sorted(unique_counts.items(), key=sort_key)
+                raise ValueError("sort must be 'ascending', 'descending', or None.")
+        else:
+            sorted_items = sorted(unique_counts.items(), key=lambda x: str(x[0]))  # fallback: label sort
+
         keys = [str(k) if k is not None else "None" for k, _ in sorted_items]
         values = [v for _, v in sorted_items]
         total = sum(values)
         percentages = [v / total * 100 if total > 0 else 0 for v in values]
         customdata = np.array(percentages).reshape(-1, 1)
-        
-        # Create colors array - gray for None, regular color for others
-        colors = []
-        for key in keys:
-            if key == "None":
-                colors.append("gray")
-            else:
-                colors.append(bar_color)
-
+        colors = ["gray" if k == "None" else bar_color for k in keys]
         fig = go.Figure(
             data=go.Bar(
                 x=keys,
@@ -276,7 +243,7 @@ def plot_dist(
             xaxis=dict(
                 tickangle=-rotation if rotation > 0 else 0,
                 showticklabels=len(keys) <= MAX_XTICKS,
-                showgrid = draw_details,
+                showgrid=draw_details,
             ),
             yaxis=dict(
                 showgrid=draw_details,
@@ -293,37 +260,29 @@ def plot_dist(
         fig.show(renderer=renderer)
         return
 
-    # Histogram mode for continuous data or when bins is explicitly specified
-    import math
-    # Changed: Use the provided bins value, or default to 10 if somehow None gets here
+    # --- Numeric histogram mode (with bins) ---
+    arr = np.array(non_none_data)
     bins_to_use = bins if bins and bins > 0 else 10
     hist, edges = np.histogram(arr, bins=bins_to_use)
-    # Create explicit inclusive/exclusive labels
     x_labels = []
     for i in range(len(edges) - 1):
-        if i == len(edges) - 2:  # Last bin - inclusive on both ends
+        if i == len(edges) - 2:
             x_labels.append(f"[{edges[i]:.2f}, {edges[i+1]:.2f}]")
-        else:  # Regular bins - inclusive left, exclusive right
+        else:
             x_labels.append(f"[{edges[i]:.2f}, {edges[i+1]:.2f})")
     values = list(hist)
-    
-    # Add None as a separate bar if present (at the beginning)
     if none_count > 0:
-        x_labels.insert(0, "None")  # Insert at the beginning
+        x_labels.insert(0, "None")
         values.insert(0, none_count)
-    
     total = sum(values)
     percentages = [v / total * 100 if total > 0 else 0 for v in values]
     customdata = np.array(percentages).reshape(-1, 1)
-    
-    # Create colors array - gray for None, regular color for others
     colors = []
     for label in x_labels:
         if label == "None":
             colors.append("gray")
         else:
             colors.append(bar_color)
-
     fig = go.Figure(
         data=go.Bar(
             x=x_labels,
@@ -368,6 +327,5 @@ def plot_dist(
     )
     if draw_details:
         add_percentage_annotations(fig, x_labels, values)
-        
     fig.show(renderer=renderer)
     return

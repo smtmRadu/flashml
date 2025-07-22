@@ -176,7 +176,7 @@ def inspect_tokenizer(tokenizer):
         nonlocal token_colors
         token_colors = {}  # Reset colors each time
 
-        text = input_hl_text.get("1.0", tk.END)
+        text = input_hl_text.get("1.0", "end-1c")
         # clear previous tags
         for tag in input_hl_text.tag_names():
             if tag.startswith("tok_"):

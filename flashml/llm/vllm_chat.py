@@ -1,20 +1,19 @@
-
+from flashml.llm.vllm_engine import VLLMCore
 from typing import Literal
 def vllm_chat(
+    messages:list[dict] | list[list[dict]],
     model_name:str,
     tokenizer_name:str,
     quantization:Literal["awq", "gptq", "awq_marlin"],
-    messages:list[dict] | list[list[dict]],
-    
     max_model_len:int= 4096,
     max_num_seqs=256,
-    gpu_memory_utilization=0.9,
+    gpu_memory_utilization=0.8,
     # sampling
     temperature:float=1,
     top_k=-1, 
     top_p=1,
+    format:dict[str, any]=None,
     max_tokens=131_072,
-    format:dict[str, any]=None
 ):
     """
     (WSL or Linux only) Runs chat inference on a VLLM backend.
@@ -73,25 +72,22 @@ def vllm_chat(
             print(i.outputs[0].text)
         ```
     """  
-    from vllm import LLM, SamplingParams
+    from vllm import SamplingParams
     from vllm.sampling_params import GuidedDecodingParams
-    if VLLMCore.llm is None:
-        VLLMCore.llm = LLM(
-        model= model_name,
-        tokenizer=tokenizer_name,
+    llm = VLLMCore.initialize(
+        model_name=model_name,
+        tokenizer_name=tokenizer_name,
         quantization=quantization,
-        max_model_len=max_model_len,
-        max_num_seqs= max_num_seqs,
-        gpu_memory_utilization = gpu_memory_utilization
-    )
+        max_model_len=max_model_len, 
+        max_num_seqs=max_num_seqs,
+        gpu_memory_utilization=gpu_memory_utilization)
         
-    return VLLMCore.llm.chat(
+    return llm.chat(
         messages=messages,
         sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
         use_tqdm=True
     )
 
-class VLLMCore():
-    llm = None
+
         
 

@@ -1,16 +1,18 @@
 from typing import Literal, List
+from flashml.llm.vllm_engine import VLLMCore
 
-def vllm_get_token_logprobs(
+def vllm_compute_logprobs(
+    texts: List[str],
     model_name: str,
     tokenizer_name: str,
     quantization: Literal["awq", "gptq", "awq_marlin"],
-    texts: List[str],
     max_model_len: int = 4096,
     max_num_seqs: int = 256,
-    gpu_memory_utilization: float = 0.9,
+    gpu_memory_utilization: float = 0.85,
+    return_with_tokens:bool=False
 ) -> List[List[float]]:
     """
-    Gets logprobs of the actual tokens that appear in each text using VLLM.
+    Gets logprobs of the actual tokens of the text using VLLM and a local LLM.
     
     Args:
         model_name (str): The name or path of the model to use.
@@ -21,7 +23,7 @@ def vllm_get_token_logprobs(
         max_model_len (int): Maximum context length.
         max_num_seqs (int): Maximum number of sequences to process in parallel.
         gpu_memory_utilization (float): GPU memory utilization ratio.
-    
+        return_with_tokens (bool): if False, returns only the logprobs. If True, returns both logprobs and tokens.
     Returns:
         List[List[float]]: List of log probability lists, one per input text.
                           Each inner list contains the log probability of each token in that text.
@@ -40,72 +42,54 @@ def vllm_get_token_logprobs(
             print(f"Logprobs: {logprobs}")
         ```
     """
-    from vllm import LLM, SamplingParams
+    from vllm import SamplingParams
     
     # Initialize model if not already loaded
-    if VLLMCore.llm is None:
-        VLLMCore.llm = LLM(
-            model=model_name,
-            tokenizer=tokenizer_name,
-            quantization=quantization,
-            max_model_len=max_model_len,
-            max_num_seqs=max_num_seqs,
-            gpu_memory_utilization=gpu_memory_utilization
-        )
+    llm = VLLMCore.initialize(
+        model_name=model_name,
+        tokenizer_name=tokenizer_name,
+        quantization=quantization,
+        max_model_len=max_model_len, 
+        max_num_seqs=max_num_seqs,
+        gpu_memory_utilization=gpu_memory_utilization)
     
     # Get tokenizer for processing
-    tokenizer = VLLMCore.llm.get_tokenizer()
+    tokenizer = llm.get_tokenizer()
     
     # Set up sampling params to get logprobs
     # We generate 0 tokens but request logprobs for the input tokens
     sampling_params = SamplingParams(
         max_tokens=1,  # Don't generate new tokens
         logprobs=1,  # We only need the actual token's logprob
-        prompt_logprobs=True  # Get logprobs for input tokens
+        prompt_logprobs=1  # Get logprobs for input tokens
     )
     
-    results = []
-    
+    log_probs_res = []
+    tokens = []
     # Process texts in batch
-    outputs = VLLMCore.llm.generate(
+    outputs = llm.generate(
         prompts=texts,
         sampling_params=sampling_params,
         use_tqdm=True
     )
     
-    for i, output in enumerate(outputs):
-        text = texts[i]
-        
-        # Get tokens and token IDs
-        input_ids = tokenizer.encode(text, add_special_tokens=True)
-        
-        # Extract logprobs from output - only the logprob of the actual token
-        token_logprobs = [0.0]
-        for j, logprob_dict in enumerate(output.prompt_logprobs[1:]):
-            idx = j + 1
-            if logprob_dict is not None and idx < len(input_ids):
-                actual_token_id = input_ids[idx]
-                key = actual_token_id
-                if key not in logprob_dict and isinstance(key, int):
-                    key = str(key)
-                if key in logprob_dict:
-                    token_logprobs.append(logprob_dict[key].logprob)
-                else:
-                    token_logprobs.append(0.0)
+    for output in outputs:
+        print(output)
+        input_ids = output.prompt_token_ids
+        token_logprobs = [None]  # No logprob for the first token
+        for i in range(1, len(input_ids)):
+            logprob_dict = output.prompt_logprobs[i]
+            token_id = input_ids[i]
+            key = token_id if token_id in logprob_dict else str(token_id)
+            logprob = logprob_dict.get(key)
+            if logprob is not None:
+                token_logprobs.append(logprob.logprob)
             else:
                 token_logprobs.append(0.0)
-        
-        # If we don't have enough logprobs, pad with 0.0
-        while len(token_logprobs) < len(input_ids):
-            token_logprobs.append(0.0)
-        
-        # Trim if we have too many
-        token_logprobs = token_logprobs[:len(input_ids)]
-        
-        results.append(token_logprobs)
+        log_probs_res.append(token_logprobs)
+        tokens.append(output.prompt_token_ids)
     
-    return results
-
-
-class VLLMCore:
-    llm = None
+    if return_with_tokens:
+        return log_probs_res, tokens
+    else:
+        return log_probs_res
