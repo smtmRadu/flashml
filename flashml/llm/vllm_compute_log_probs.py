@@ -8,7 +8,7 @@ def vllm_compute_logprobs(
     quantization: Literal["awq", "gptq", "awq_marlin"],
     max_model_len: int = 4096,
     max_num_seqs: int = 256,
-    gpu_memory_utilization: float = 0.85,
+    gpu_memory_utilization: float = 0.8,
     return_with_tokens:bool=False
 ) -> List[List[float]]:
     """
@@ -53,9 +53,6 @@ def vllm_compute_logprobs(
         max_num_seqs=max_num_seqs,
         gpu_memory_utilization=gpu_memory_utilization)
     
-    # Get tokenizer for processing
-    tokenizer = llm.get_tokenizer()
-    
     # Set up sampling params to get logprobs
     # We generate 0 tokens but request logprobs for the input tokens
     sampling_params = SamplingParams(
@@ -64,32 +61,74 @@ def vllm_compute_logprobs(
         prompt_logprobs=1  # Get logprobs for input tokens
     )
     
-    log_probs_res = []
-    tokens = []
-    # Process texts in batch
-    outputs = llm.generate(
-        prompts=texts,
-        sampling_params=sampling_params,
-        use_tqdm=True
-    )
-    
-    for output in outputs:
-        print(output)
-        input_ids = output.prompt_token_ids
-        token_logprobs = [None]  # No logprob for the first token
-        for i in range(1, len(input_ids)):
-            logprob_dict = output.prompt_logprobs[i]
-            token_id = input_ids[i]
-            key = token_id if token_id in logprob_dict else str(token_id)
-            logprob = logprob_dict.get(key)
-            if logprob is not None:
-                token_logprobs.append(logprob.logprob)
+
+    if isinstance(texts, list) and all(isinstance(i, list) for i in texts):
+        non_none_texts = [x for x in texts if x is not None]
+        
+        # Process texts in batch
+        outputs = llm.generate(
+            prompts=non_none_texts,
+            sampling_params=sampling_params,
+            use_tqdm=True
+        )
+        
+        log_probs_res = []
+        tokens = []
+        output_idx = 0
+        
+        for t in texts:
+            if t is None:
+                log_probs_res.append(None)
+                tokens.append(None)
             else:
-                token_logprobs.append(0.0)
-        log_probs_res.append(token_logprobs)
-        tokens.append(output.prompt_token_ids)
-    
-    if return_with_tokens:
-        return log_probs_res, tokens
+                output = outputs[output_idx]
+                output_idx += 1
+                input_ids = output.prompt_token_ids
+                token_logprobs = [None]  # No logprob for the first token
+                for i in range(1, len(input_ids)):
+                    logprob_dict = output.prompt_logprobs[i]
+                    token_id = input_ids[i]
+                    key = token_id if token_id in logprob_dict else str(token_id)
+                    logprob = logprob_dict.get(key)
+                    if logprob is not None:
+                        token_logprobs.append(logprob.logprob)
+                    else:
+                        token_logprobs.append(0.0)
+                log_probs_res.append(token_logprobs)
+                tokens.append(output.prompt_token_ids)
+        
+        if return_with_tokens:
+            return log_probs_res, tokens
+        else:
+            return log_probs_res
+        
     else:
-        return log_probs_res
+        log_probs_res = []
+        tokens = []
+        # Process texts in batch
+        outputs = llm.generate(
+            prompts=texts,
+            sampling_params=sampling_params,
+            use_tqdm=True
+        )
+        
+        for output in outputs:
+            print(output)
+            input_ids = output.prompt_token_ids
+            token_logprobs = [None]  # No logprob for the first token
+            for i in range(1, len(input_ids)):
+                logprob_dict = output.prompt_logprobs[i]
+                token_id = input_ids[i]
+                key = token_id if token_id in logprob_dict else str(token_id)
+                logprob = logprob_dict.get(key)
+                if logprob is not None:
+                    token_logprobs.append(logprob.logprob)
+                else:
+                    token_logprobs.append(0.0)
+            log_probs_res.append(token_logprobs)
+            tokens.append(output.prompt_token_ids)
+        
+        if return_with_tokens:
+            return log_probs_res, tokens
+        else:
+            return log_probs_res

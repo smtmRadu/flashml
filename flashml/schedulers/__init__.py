@@ -1,6 +1,5 @@
-from .LRCosineAnnealingWithLinearWarmup import LRConsineAnnealingWithLinearWarmup
-
-__all__ = ["LRConsineAnnealingWithLinearWarmup"]
+from .LRScheduler import LRScheduler
+__all__ = ["LRScheduler"]
 
 
 

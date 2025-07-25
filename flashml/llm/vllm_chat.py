@@ -17,6 +17,7 @@ def vllm_chat(
 ):
     """
     (WSL or Linux only) Runs chat inference on a VLLM backend.
+    It handles None messages (output will be None as well)
     Install FlashInfer for best performance.
 
     Args:
@@ -26,7 +27,7 @@ def vllm_chat(
             The quantization format to load the model weights with.
         messages (list[dict] | list[list[dict]]): 
             Chat history in OpenAI format (single or batch). Each message should be a dict
-            with fields like 'role' and 'content'.
+            with fields like 'role' and 'content'. May contain None values.. the model with not answer them.
         max_model_len (int, optional): 
             Maximum number of tokens per chat. VLLM backend prefills the VRAM memory for KV caches so it must know your limit. Defaults to 4096.
         max_num_seqs(int):
@@ -82,12 +83,31 @@ def vllm_chat(
         max_num_seqs=max_num_seqs,
         gpu_memory_utilization=gpu_memory_utilization)
         
-    return llm.chat(
-        messages=messages,
-        sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
-        use_tqdm=True
-    )
-
+    if isinstance(messages, list) and all(isinstance(i, list) for i in messages):
+        non_none_messages = [m for m in messages if m is not None]
+        
+        non_none_outputs = llm.chat(
+            messages=non_none_messages,
+            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            use_tqdm=True
+        )
+        
+        with_none_outputs = []
+        index_in_outp = 0
+        for  m in messages:
+            if m is None:
+                with_none_outputs.append(None)
+            else:
+                with_none_outputs.append(non_none_outputs[index_in_outp])
+                index_in_outp += 1
+                
+        return with_none_outputs
+    else:
+        return llm.chat(
+            messages=messages,
+            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            use_tqdm=True
+        )
 
         
 

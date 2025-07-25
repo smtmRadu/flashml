@@ -81,13 +81,13 @@ def test_conf_matrix():
 
 
 def test_scheduler():
-    from schedulers import LRConsineAnnealingWithLinearWarmup
+    from schedulers import LRScheduler
     import torch.optim as optim
     import torch
 
     optimizer = optim.Adam(torch.nn.Linear(10, 10).parameters(), lr=0.001)
-    sched = LRConsineAnnealingWithLinearWarmup(
-        optimizer, max_steps=10000, warmup_steps_ratio=0.03
+    sched = LRScheduler(
+        optimizer, max_steps=10000, warmup_steps_ratio=0.03, constant_steps=2500
     )
     print(sched.warmup_steps)
     print("done")
@@ -403,5 +403,4 @@ def test_plot_func():
     
     
 if __name__ == "__main__":
-    from flashml import resource_monitor
-    test_train_info()
+    test_scheduler()
