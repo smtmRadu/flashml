@@ -82,10 +82,10 @@ def test_conf_matrix():
 
 def test_scheduler():
     from schedulers import LRScheduler
-    import torch.optim as optim
     import torch
+    from optimi import AdamW
 
-    optimizer = optim.Adam(torch.nn.Linear(10, 10).parameters(), lr=0.001)
+    optimizer = AdamW(torch.nn.Linear(10, 10).parameters(), lr=0.001)
     sched = LRScheduler(
         optimizer, max_steps=10000, warmup_steps_ratio=0.03, constant_steps=2500
     )

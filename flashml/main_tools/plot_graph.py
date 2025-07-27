@@ -40,6 +40,11 @@ def plot_graph(
     # Create figure with dark theme
     fig = go.Figure()
 
+    fig.update_yaxes(
+        tickformat=".2e",         # 2 decimals in scientific notation
+        exponentformat="e"        # Forces e-notation, not SI prefixes
+    )
+    
     # Map matplotlib linestyles to plotly dash styles
     linestyle_map = {
         "-": "solid",
@@ -95,15 +100,14 @@ def plot_graph(
             dash_style = linestyle_map.get(styles[i], "solid")
             marker_symbol = marker_map.get(markers[i], None)
 
-            # Calculate line width (similar to matplotlib logic)
-            line_width = min(100 / len(values), 3)
+            # line_width = min(100 / len(values), 3)
 
             fig.add_trace(
                 go.Scatter(
                     x=steps,
                     y=each,
                     mode="lines+markers" if marker_symbol else "lines",
-                    line=dict(color=colors[i], dash=dash_style, width=line_width),
+                    line=dict(color=colors[i], dash=dash_style, width=2),
                     marker=dict(symbol=marker_symbol, size=6)
                     if marker_symbol
                     else None,
@@ -111,27 +115,23 @@ def plot_graph(
                 )
             )
     else:
-        # Single series
         if steps is None:
             steps = list(range(len(values)))
 
         dash_style = linestyle_map.get(linestyle, "solid")
         marker_symbol = marker_map.get(marker, None)
         line_color = "blue" if color is None else color
-        line_width = min(100 / len(values), 3)
 
         fig.add_trace(
             go.Scatter(
                 x=steps,
                 y=values,
                 mode="lines+markers" if marker_symbol else "lines",
-                line=dict(color=line_color, dash=dash_style, width=line_width),
+                line=dict(color=line_color, dash=dash_style, width=2),
                 marker=dict(symbol=marker_symbol, size=6) if marker_symbol else None,
                 showlegend=False,
             )
         )
-
-    # Update layout with dark theme and labels
     fig.update_layout(
         template="plotly_dark",
         title=f"{y_label} vs {x_label}",
@@ -143,7 +143,6 @@ def plot_graph(
         height=400,
     )
 
-    # Add grid
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="rgba(128,128,128,0.3)")
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="rgba(128,128,128,0.3)")
 

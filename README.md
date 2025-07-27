@@ -23,7 +23,7 @@ resource_monitor()
 
 ***
 
-### Model inspection
+### Model/Tokenizer inspection
 ```python
 from flashml import inspect_model, inspect_tokenizer
 
@@ -39,9 +39,27 @@ inspect_tokenizer(tokenizer)
 ### Tensor ploting
 ```python
 from flashml import plot_tensor
-plot_tensor(torch.randn(42, 121))
+plot_tensor(torch.randn(10, 8, device: 'cuda:0'))
 ```
 ![tp](https://github.com/smtmRadu/flashml/blob/main/doc/tensor_plot.jpg?raw=true)
+***
+
+### LR Scheduler
+```python
+from flashml import LRScheduler
+
+scheduler = LRScheduler(
+    optimizer=optim, 
+    max_steps=1000, 
+    warmup_steps=100, # linear warmup steps
+    constant_steps=200, # constant lr steps
+    min_lr=1e-8,
+    annealing_type='cosine', # ['linear', 'exponential', 'logarithmic']
+    num_cycles=3,
+    max_lr_decay_factor=0.6, # decay of max lr after each cycle
+)
+```
+![tp](https://github.com/smtmRadu/flashml/blob/main/doc/lr_scheduler.jpg?raw=true)
 ***
 ### Fast plot
 ```python
@@ -159,9 +177,6 @@ plot_tsne(x, labels=["A"] * 120 + ["B"] * 120 + ["C"] * 200)
 ***
 ### Architectures common implementations
 Enumerate **GQA**, **SwiGLU**, **FFN**, **MinGRU** ...
-***
-### Schedulers
-Enumerate **LRCosineAnnealingWithLinearWarmup** ...
 ***
 ## Standalone scripts with GUI
 - Color picker
