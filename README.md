@@ -46,7 +46,7 @@ plot_tensor(torch.randn(10, 8, device: 'cuda:0'))
 
 ### LR Scheduler
 ```python
-from flashml import LRScheduler
+from flashml.schedulers import LRScheduler
 
 scheduler = LRScheduler(
     optimizer=optim, 

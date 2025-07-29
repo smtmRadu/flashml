@@ -1,4 +1,5 @@
-from typing import List, Literal, Sequence, Tuple, Any, Optional
+from typing import List, Literal, Sequence, Tuple, Any, Optional, Sequence
+
 
 def sample_elementwise(*sequences: Sequence, num_samples: int, with_replacement: bool = False) -> Tuple[List[Any], ...]:
     """
@@ -31,8 +32,7 @@ def sample_elementwise(*sequences: Sequence, num_samples: int, with_replacement:
     sampled_lists = tuple([seq[i] for i in indices] for seq in sequences)
     return sampled_lists
 
-from typing import Sequence
-import random
+
 
 def sample_from(items: Sequence, num_samples, probs: Sequence = None, with_replacement=False):
     """
@@ -51,7 +51,7 @@ def sample_from(items: Sequence, num_samples, probs: Sequence = None, with_repla
         ValueError: If num_samples > list length when sampling without replacement,
                     or if probs is not the same length as items or doesn't sum to 1.
     """
-
+    import random
     assert items is not None and len(items) > 0, "Input list cannot be empty"
 
     if probs is not None:
@@ -337,12 +337,13 @@ class BatchIterator:
 
         if hasattr(self.df, "iloc"):
             selected_data = self.df.iloc[batch_indices]
-        elif hasattr(self.df, "__getitem__") and hasattr(batch_indices, "__iter__"):
-            selected_data = (
-                self.df[batch_indices]
-                if hasattr(self.df, "shape")
-                else [self.df[i] for i in batch_indices]
-            )
+        elif hasattr(self.df, "get_column"):
+            if len(batch_indices) > 2:
+                selected_data = self.df[batch_indices]
+            else:
+                import polars as pl
+                selected_data = pl.concat([self.df[i] for i in batch_indices])
+                
         else:
             selected_data = [self.df[i] for i in batch_indices]
 

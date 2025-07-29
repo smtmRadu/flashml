@@ -4,7 +4,7 @@ def vllm_chat(
     messages:list[dict] | list[list[dict]],
     model_name:str,
     tokenizer_name:str,
-    quantization:Literal["awq", "gptq", "awq_marlin"],
+    quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin'],
     max_model_len:int= 4096,
     max_num_seqs=256,
     gpu_memory_utilization=0.8,

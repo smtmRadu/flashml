@@ -4,7 +4,7 @@ import math
 class LRScheduler:
     """
         `step()` called after `optim.step()`\\
-        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** \\
+        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** or **len(BatchIterator)** \\
         `warmup_steps_ratio` = 3%-10% of max_steps (use warmup_steps_ratio instead of warmup_steps to set it)\\
         `constant_steps_ratio` = ~10% of max_steps (use constant_steps_ratio instead of constant_steps to set it)\\
         `cycles` = number of cycles to anneal over (default 1)\\
@@ -17,7 +17,7 @@ class LRScheduler:
         max_steps: int,
         warmup_steps: int = 0,
         constant_steps: int = 0,
-        annealing_type: Literal["linear", "cosine", "exponential", "logarithmic"] = "cosine",
+        annealing_type: Literal["linear", "cosine", "exponential", "logarithmic"] | None = "cosine",
         num_cycles: int = 1,
         max_lr_decay_factor: float = 1.0, 
         min_lr: float = 1e-8,
@@ -88,7 +88,9 @@ class LRScheduler:
 
             cur_max_lr = self.init_max_lr * (self.max_lr_decay_factor ** cycle_idx)
 
-            if self.annealing_type == "cosine":
+            if self.annealing_type is None:
+                lr = cur_max_lr
+            elif self.annealing_type == "cosine":
                 if steps_in_this_cycle > 1:
                     cosine_decay = 0.5 * (1 + math.cos(math.pi * cycle_step / (steps_in_this_cycle - 1)))
                 else:

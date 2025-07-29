@@ -200,7 +200,7 @@ class _TrainingLogger:
             # run_name=f"run_{now.day:02d}{now.month:02d}_{now.time()}",
             tags={},
         )  # (log_system_metrics=True)
-
+        mlflow.set_tracking_uri(f"http://{self.host}:{self.port}")
         print(
             f"\033[90mAccess MLFlow run at:\033[0m \033[94mhttp://{self.host}:{self.port}\033[0m \033[95m({self.mlflow_op.info.run_name})\033[0m"
         )
@@ -338,7 +338,7 @@ class _TrainingLogger:
             state_dict=state_dict,
             artifact_path=f"checkpoint_v{logger.ckpt_version}",
         )
-        import datetime
+        from datetime import datetime
         __info_dict = {
             "timestamp": datetime.now(),
             "step": logger.internal_step,
