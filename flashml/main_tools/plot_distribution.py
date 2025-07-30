@@ -6,19 +6,164 @@ def plot_dist(
     top_n: int = None,
     bins: int = None,
     title: str = "Distribution",
-    x_label: str = "Item",
-    y_label: str = "Frequency",
+    xlabel: str = "Item",
+    ylabel: str = "Frequency",
     bar_color: str = "skyblue",
-    rotation: int = 60,
+    xlabel_rotation: int | Literal["auto"] = "auto",
     draw_details: bool = True,
     renderer='notebook'
 ):
     import plotly.graph_objects as go
     import plotly.io as pio
     import numpy as np
-
     MAX_XTICKS: int = 100
     pio.templates.default = "plotly_dark"
+    
+
+    def add_quantile_boxes(fig, x_vals, y_vals, y_max):
+        """
+        Add transparent quantile boxes behind the bars to show data distribution.
+        
+        Args:
+            fig: Plotly figure object
+            x_vals: List of x-axis labels/positions
+            y_vals: List of y-axis values (frequencies)
+            y_max: Maximum y value for box height
+        """
+        if not y_vals or len(y_vals) <= 1:
+            return
+            
+        total_samples = sum(y_vals)
+        if total_samples == 0:
+            return
+            
+        # Calculate cumulative sample counts
+        cumulative_counts = []
+        running_sum = 0
+        for val in y_vals:
+            running_sum += val
+            cumulative_counts.append(running_sum)
+        
+        # Define all possible quantile thresholds
+        all_quantiles = [
+            (total_samples * 0.25, '25%', 'rgba(255, 100, 100, 0.15)'),
+            (total_samples * 0.50, '50%', 'rgba(100, 150, 255, 0.15)'),
+            (total_samples * 0.75, '75%', 'rgba(100, 255, 150, 0.15)'),
+            (total_samples, '100%', 'rgba(200, 200, 0, 0.2)')
+        ]
+        
+        # Find which bars contain each quantile
+        quantile_bars = []
+        for threshold, name, color in all_quantiles:
+            for j, cum_count in enumerate(cumulative_counts):
+                if cum_count >= threshold:
+                    # Calculate precise position within the bar
+                    if j == 0:
+                        bar_start_count = 0
+                    else:
+                        bar_start_count = cumulative_counts[j-1]
+                    
+                    bar_total_samples = y_vals[j]
+                    samples_needed_from_bar = threshold - bar_start_count
+                    
+                    if bar_total_samples > 0:
+                        position_in_bar = samples_needed_from_bar / bar_total_samples
+                        position = j - 0.5 + position_in_bar
+                    else:
+                        position = j - 0.5
+                    
+                    quantile_bars.append((position, name, color, threshold))
+                    break
+        
+        # Group quantiles that fall in the same or adjacent bars
+        if not quantile_bars:
+            return
+            
+        # Sort by position
+        quantile_bars.sort(key=lambda x: x[0])
+        
+        # Merge quantiles that are too close together
+        merged_boxes = []
+        current_start = -0.5
+        current_end = quantile_bars[0][0]
+        current_names = [quantile_bars[0][1]]
+        current_color = quantile_bars[0][2]
+        
+        for i in range(1, len(quantile_bars)):
+            next_pos = quantile_bars[i][0]
+            next_name = quantile_bars[i][1]
+            next_color = quantile_bars[i][2]
+            
+            # If the next quantile is very close (less than 0.8 bar widths away), merge them
+            if next_pos - current_end < 0.8:
+                current_end = next_pos
+                current_names.append(next_name)
+                # Use the color of the highest quantile in the group
+                current_color = next_color
+            else:
+                # Finalize current box
+                if current_end > current_start + 0.05:
+                    # Calculate the percentage this box represents
+                    if len(current_names) == 1:
+                        label = "25%"  # Each quartile represents 25%
+                    else:
+                        # Multiple quartiles merged - calculate total percentage
+                        quartile_count = len(current_names)
+                        total_percentage = quartile_count * 25
+                        label = f"{total_percentage}%"
+                    
+                    merged_boxes.append((current_start, current_end, label, current_color))
+                
+                # Start new box
+                current_start = current_end
+                current_end = next_pos
+                current_names = [next_name]
+                current_color = next_color
+        
+        # Add the final box
+        if current_end > current_start + 0.05:
+            # Calculate the percentage this box represents
+            if len(current_names) == 1:
+                label = "25%"  # Each quartile represents 25%
+            else:
+                # Multiple quartiles merged - calculate total percentage
+                quartile_count = len(current_names)
+                total_percentage = quartile_count * 25
+                label = f"{total_percentage}%"
+            
+            merged_boxes.append((current_start, current_end, label, current_color))
+        
+        # Draw the merged boxes
+        for start_pos, end_pos, label, color in merged_boxes:
+            # Ensure we don't go beyond the data
+            end_pos = min(end_pos, len(x_vals) - 0.5)
+            
+            if end_pos > start_pos:
+                # Add transparent rectangle
+                fig.add_shape(
+                    type="rect",
+                    x0=start_pos,
+                    y0=0,
+                    x1=end_pos,
+                    y1=y_max * 1.1,
+                    fillcolor=color,
+                    line=dict(width=0),
+                    layer="below"
+                )
+                
+                # Add quantile label at the top
+                fig.add_annotation(
+                    x=(start_pos + end_pos) / 2,
+                    y=y_max * 1.05,
+                    text=label,
+                    showarrow=False,
+                    font=dict(size=11, color='rgba(255, 255, 255, 0.8)'),
+                    xanchor="center",
+                    yanchor="middle",
+                    bgcolor='rgba(0, 0, 0, 0.4)',
+                    bordercolor='rgba(255, 255, 255, 0.3)',
+                    borderwidth=1
+                )
 
     def add_percentage_annotations(fig, x_vals, y_vals):
         total = sum(y_vals)
@@ -48,6 +193,10 @@ def plot_dist(
 
     # --- Handle dict input ---
     if isinstance(data, dict):
+        if xlabel_rotation == "auto":
+            xlabel_rotation = min(len(data) * 2, 90)
+            if xlabel_rotation <= 10:
+                xlabel_rotation = 0
         freq_dict = data
         if not freq_dict:
             print("Warning: freq_dict is empty. Nothing to plot.")
@@ -111,13 +260,13 @@ def plot_dist(
         height = max(500, min(800, 300 + num_items * 5))
         fig.update_layout(
             title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''})",
-            xaxis_title=x_label,
-            yaxis_title=y_label,
+            xaxis_title=xlabel,
+            yaxis_title=ylabel,
             width=width,
             height=height,
             showlegend=False,
             xaxis=dict(
-                tickangle=-rotation if rotation > 0 else 0,
+                tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
                 showticklabels=len(str_keys) <= MAX_XTICKS,
                 showgrid=draw_details,
             ),
@@ -132,6 +281,7 @@ def plot_dist(
             ),
         )
         if draw_details:
+            add_quantile_boxes(fig, str_keys, values, max(display_values) if display_values else 1)
             add_percentage_annotations(fig, str_keys, values)
         fig.show(renderer=renderer)
         return
@@ -168,8 +318,8 @@ def plot_dist(
         )
         fig.update_layout(
             title=f"{title} ({len(data_list)} elements, 1 unique)",
-            xaxis_title=x_label,
-            yaxis_title=y_label,
+            xaxis_title=xlabel,
+            yaxis_title=ylabel,
             width=800,
             height=500,
             showlegend=False,
@@ -178,6 +328,7 @@ def plot_dist(
             margin=dict(l=50, r=50, t=80, b=50),
         )
         if draw_details:
+            # No quantile boxes for single value
             add_percentage_annotations(fig, keys, values)
         fig.show(renderer=renderer)
         return
@@ -209,6 +360,10 @@ def plot_dist(
         keys = [str(k) if k is not None else "None" for k, _ in sorted_items]
         values = [v for _, v in sorted_items]
         total = sum(values)
+        if xlabel_rotation == "auto":
+            xlabel_rotation = min(len(keys) * 2, 90)
+            if xlabel_rotation <= 10:
+                xlabel_rotation = 0
         percentages = [v / total * 100 if total > 0 else 0 for v in values]
         customdata = np.array(percentages).reshape(-1, 1)
         colors = ["gray" if k == "None" else bar_color for k in keys]
@@ -235,13 +390,13 @@ def plot_dist(
         unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
         fig.update_layout(
             title=f"{title} ({len(data_list)} elements, {unique_count} unique)",
-            xaxis_title=x_label,
-            yaxis_title=y_label,
+            xaxis_title=xlabel,
+            yaxis_title=ylabel,
             width=width,
             height=height,
             showlegend=False,
             xaxis=dict(
-                tickangle=-rotation if rotation > 0 else 0,
+                tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
                 showticklabels=len(keys) <= MAX_XTICKS,
                 showgrid=draw_details,
             ),
@@ -256,6 +411,7 @@ def plot_dist(
             ),
         )
         if draw_details:
+            add_quantile_boxes(fig, keys, values, max(values) if values else 1)
             add_percentage_annotations(fig, keys, values)
         fig.show(renderer=renderer)
         return
@@ -303,15 +459,19 @@ def plot_dist(
     num_items = len(x_labels)
     width = max(1100, min(1200, num_items * 40))
     height = max(500, min(800, 300 + num_items * 5))
+    if xlabel_rotation == "auto":
+        xlabel_rotation = min(len(x_labels) * 2, 90)
+        if xlabel_rotation <= 10:
+            xlabel_rotation = 0
     fig.update_layout(
         title=f"{title} ({len(data_list)} elements)",
-        xaxis_title=x_label,
-        yaxis_title=y_label,
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
         width=width,
         height=height,
         showlegend=False,
         xaxis=dict(
-            tickangle=-rotation if rotation > 0 else 0,
+            tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
             showticklabels=len(x_labels) <= MAX_XTICKS,
             showgrid=draw_details,
         ),
@@ -326,6 +486,7 @@ def plot_dist(
         ),
     )
     if draw_details:
+        add_quantile_boxes(fig, x_labels, values, max(values) if values else 1)
         add_percentage_annotations(fig, x_labels, values)
     fig.show(renderer=renderer)
     return

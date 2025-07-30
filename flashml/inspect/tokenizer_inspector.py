@@ -73,6 +73,7 @@ def inspect_tokenizer(tokenizer):
         "Tokenizer Class": tokenizer.__class__.__name__,
         "Name or Path": getattr(tokenizer, "name_or_path", "N/A"),
         "Vocabulary Size": tokenizer.vocab_size,
+        "Tokenizer Length": len(tokenizer),
         "Model Max Length": getattr(tokenizer, "model_max_length", "N/A"),
         "Padding Side": getattr(tokenizer, "padding_side", "N/A"),
         "Truncation Side": getattr(tokenizer, "truncation_side", "N/A"),
@@ -99,7 +100,7 @@ def inspect_tokenizer(tokenizer):
     # --- Special Tokens Table (taller now) ---
     special_frame = ttk.Frame(left_pane)
     special_frame.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
-    add_section_heading(special_frame, "Special Tokens")
+    add_section_heading(special_frame, f"Special Tokens ({len(tokenizer) - tokenizer.vocab_size})")
     cols = ("Token", "ID")
     table = ttk.Treeview(
         special_frame, columns=cols, show="headings", height=18, style="Dark.Treeview"
@@ -125,7 +126,7 @@ def inspect_tokenizer(tokenizer):
         table.insert("", "end", values=("No special tokens found", ""))
     else:
         for t, i in sorted(uniq.items(), key=lambda x: (x[1], x[0])):
-            table.insert("", "end", values=(t, i))
+            table.insert("", "end", values=(repr(t)[1:-1], i))
 
     # --- Right: Live Tokenization & Finder ---
 
@@ -177,6 +178,7 @@ def inspect_tokenizer(tokenizer):
         token_colors = {}  # Reset colors each time
 
         text = input_hl_text.get("1.0", "end-1c")
+        # text = text.replace("\\n", "\n")
         # clear previous tags
         for tag in input_hl_text.tag_names():
             if tag.startswith("tok_"):
@@ -291,7 +293,7 @@ def inspect_tokenizer(tokenizer):
     # --- Find Token (one-line, auto-update, no button) ---
     finder_frame = ttk.Frame(right_pane)
     finder_frame.grid(row=1, column=0, sticky="ew", pady=(10,0))
-    add_section_heading(finder_frame, "Find Token (ID or Text, inline)")
+    add_section_heading(finder_frame, "Find Token (ID or Text)")
     finder_row = ttk.Frame(finder_frame)
     finder_row.pack(fill=tk.X, padx=(0,0))
     ttk.Label(finder_row, text="ID or Text:").pack(side=tk.LEFT, padx=(0, 5))
@@ -311,20 +313,20 @@ def inspect_tokenizer(tokenizer):
                     text = f"ID {tid}: "
                     try:
                         dec = tokenizer.decode([tid])
-                        text += f"'{dec}' | "
+                        text += f"{repr(dec)} | "
                     except:
                         text += "(dec err) | "
                     try:
                         tok = tokenizer.convert_ids_to_tokens([tid])[0]
-                        text += f"token '{tok}'"
+                        text += f"token {repr(tok)}"
                     except:
                         text += "(tok err)"
                 else:
                     tid = tokenizer.convert_tokens_to_ids(q)
                     if tid == tokenizer.unk_token_id and q not in getattr(tokenizer, "vocab", {}):
-                        text = f"Text '{q}': Not a known token"
+                        text = f"Text {repr(q)}: Not a known token"
                     else:
-                        text = f"Text '{q}': ID {tid}"
+                        text = f"Text {repr(q)}: ID {tid}"
                 tf_output.config(text=text)
             except Exception as e:
                 tf_output.config(text=f"Error: {str(e)[:90]}...")
