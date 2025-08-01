@@ -25,6 +25,7 @@ from .main_tools.mlflow_logging import (
     log_checkpoint,
     log_figure,
     log_metrics,
+    load_run_state
 )
 from .main_tools.parallel import parallel_for, parallel_foreach
 from .main_tools.plot_distribution import plot_dist
@@ -48,6 +49,7 @@ __all__ = [
     "host_mlflow",
     "load_checkpoint",
     "load_jsonl",
+    "load_run_state",
     "log_checkpoint",
     "log_figure",
     "log_json",

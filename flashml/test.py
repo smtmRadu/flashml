@@ -403,4 +403,4 @@ def test_plot_func():
     
     
 if __name__ == "__main__":
-    test_scheduler()
+    test_plot_func()

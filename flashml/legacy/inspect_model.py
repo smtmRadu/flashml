@@ -662,10 +662,10 @@ def inspect_model(model, input_data=None, renderer="vscode", view_uint8_as_int4=
                         1.25,
                         2.0,
                         0.75,
-                        1.5,
                         1.25,
+                        1.15,
                         0.75,
-                        0.5,
+                        0.6,
                     ],  # Adjusted widths
                 ),
                 row=2,

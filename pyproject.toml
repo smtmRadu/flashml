@@ -54,9 +54,9 @@ dependencies = [
     "sphinx",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
-    # "bitblas", #maybe required for vllm to run mamba
-    # vllm but for linux
-     # "windows-curses",
+    "vllm",
+    "bitblas",
+    "windows-curses",
 ]
 
 

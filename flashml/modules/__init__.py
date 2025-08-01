@@ -1,5 +1,5 @@
 from .FFN import FFN
-from .MHA import MHA
+from .GQA import GQA
 from .MinGRU import MinGRU
 from .MinLSTM import MinLSTM
 from .OrnsteinUhlenbeckProcess import OrnsteinUhlenbeckProcess
@@ -12,7 +12,7 @@ from .VAE import VAE
 
 __all__ = [
     "FFN",
-    "MHA",
+    "GQA",
     "MinGRU",
     "MinLSTM",
     "OrnsteinUhlenbeckProcess",

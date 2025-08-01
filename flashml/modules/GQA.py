@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchtune.modules import RotaryPositionalEmbeddings
 
-
-class MHA(nn.Module):
+class GQA(nn.Module):
     """
     Grouped Query Attention with Rotary Positional Embeddings.
     """
