@@ -49,7 +49,7 @@ def load_jsonl(
         from flashml import bell
         bell()
         print(
-            f"\033[93mThe file at path {path} couldn't be found, the returned object is None.\033[0m"
+            f"\033[93mWARNING: The file at path {path} couldn't be found, the returned object is None.\033[0m"
         )
 
         return None

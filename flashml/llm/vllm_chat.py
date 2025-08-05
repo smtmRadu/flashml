@@ -83,7 +83,7 @@ def vllm_chat(
         max_num_seqs=max_num_seqs,
         gpu_memory_utilization=gpu_memory_utilization)
         
-    if isinstance(messages, list) and all(isinstance(i, list) for i in messages):
+    if isinstance(messages, list) and all(isinstance(i, list) or i == None for i in messages):
         non_none_messages = [m for m in messages if m is not None]
         
         non_none_outputs = llm.chat(

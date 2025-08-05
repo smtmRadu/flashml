@@ -62,7 +62,7 @@ def vllm_compute_logprobs(
     )
     
 
-    if isinstance(texts, list) and all(isinstance(i, list) for i in texts):
+    if isinstance(texts, list) and all(isinstance(i, list) or i is None for i in texts):
         non_none_texts = [x for x in texts if x is not None]
         
         # Process texts in batch
