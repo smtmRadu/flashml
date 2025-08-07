@@ -4,7 +4,7 @@ def vllm_chat(
     messages:list[dict] | list[list[dict]],
     model_name:str,
     tokenizer_name:str,
-    quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin'],
+    quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"],
     max_model_len:int= 4096,
     max_num_seqs=256,
     gpu_memory_utilization=0.8,
@@ -12,6 +12,7 @@ def vllm_chat(
     temperature:float=1,
     top_k=-1, 
     top_p=1,
+    min_p=0,
     format:dict[str, any]=None,
     max_tokens=131_072,
 ):
@@ -63,7 +64,7 @@ def vllm_chat(
         ]] # two parallel conversations
         
         response = vllm_chat(
-            model_name="Qwen/Qwen3-4B-AWQ",
+            model_name="warshanks/Qwen3-4B-Thinking-2507-AWQ",
             tokenizer_name="Qwen/Qwen3-4B",
             quantization="awq_marlin",
             messages=messages
@@ -88,7 +89,7 @@ def vllm_chat(
         
         non_none_outputs = llm.chat(
             messages=non_none_messages,
-            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, min_p=min_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
             use_tqdm=True
         )
         
@@ -105,7 +106,7 @@ def vllm_chat(
     else:
         return llm.chat(
             messages=messages,
-            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, min_p=min_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
             use_tqdm=True
         )
 

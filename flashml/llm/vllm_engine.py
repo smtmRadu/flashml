@@ -1,12 +1,21 @@
 from typing import Literal
 
+def vllm_close():
+    import gc
+    '''
+    Stops the vllm instance.
+    '''
+    del VLLMCore._instance
+    VLLMCore._instance = None
+    gc.collect()
+    
 class VLLMCore():
     _instance = None
     _instance_current_args = None
     def initialize(
         model_name:str, 
         tokenizer_name:str, 
-        quantization:Literal["awq", "gptq", "awq_marlin"],
+        quantization:Literal["awq", "gptq", "awq_marlin", "gptq_marlin", "bitsandbytes"],
         max_model_len:int= 4096,
         max_num_seqs=256,
         gpu_memory_utilization=0.8):
