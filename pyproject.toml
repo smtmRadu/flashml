@@ -60,8 +60,6 @@ dependencies = [
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
     "vllm",
-    "bitblas",
-    "windows-curses",
 ]
 
 

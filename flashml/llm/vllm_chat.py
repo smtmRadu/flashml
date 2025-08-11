@@ -1,18 +1,19 @@
 from flashml.llm.vllm_engine import VLLMCore
-from typing import Literal
+from typing import Literal, List
 def vllm_chat(
     messages:list[dict] | list[list[dict]],
     model_name:str,
-    tokenizer_name:str,
-    quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"],
+    tokenizer_name:str = None,
+    quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"] = None,
     max_model_len:int= 4096,
     max_num_seqs=256,
-    gpu_memory_utilization=0.8,
+    gpu_memory_utilization=0.85,
     # sampling
     temperature:float=1,
     top_k=-1, 
     top_p=1,
     min_p=0,
+    stop: List[str] | List[int] = None, 
     format:dict[str, any]=None,
     max_tokens=131_072,
 ):
@@ -23,7 +24,7 @@ def vllm_chat(
 
     Args:
         model_name (str): The name or path of the model to use.
-        tokenizer_name (str): The name or path of the tokenizer to use.
+        tokenizer_name (str): The name or path of the tokenizer to use. If None, it is set as the model_name,
         quantization (Literal["awq", "gptq", "awq_marlin"]): 
             The quantization format to load the model weights with.
         messages (list[dict] | list[list[dict]]): 
@@ -39,6 +40,8 @@ def vllm_chat(
             Number of top tokens to sample from. Set to -1 to disable top-k sampling. Defaults to -1.
         top_p (float, optional): 
             Cumulative probability for nucleus sampling. Defaults to 1 (no filtering).
+        stop (list[int], list[str]):
+            The strings the model will stop from generating or the indices of the tokens to stop from generating. These are not included in the output.
         max_tokens (int, optional): 
             Maximum number of tokens to generate in the output. Defaults to 65,536.
         format (dict[str, any], optional): 
@@ -89,7 +92,15 @@ def vllm_chat(
         
         non_none_outputs = llm.chat(
             messages=non_none_messages,
-            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, min_p=min_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            sampling_params=SamplingParams(
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_k=top_k, 
+                top_p=top_p,
+                min_p=min_p, 
+                stop=stop if stop is not None and isinstance(stop[0], str) else None,
+                stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
+                guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
             use_tqdm=True
         )
         
@@ -106,7 +117,15 @@ def vllm_chat(
     else:
         return llm.chat(
             messages=messages,
-            sampling_params=SamplingParams(max_tokens=max_tokens,temperature=temperature, top_k=top_k, top_p=top_p, min_p=min_p, guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+            sampling_params=SamplingParams(
+                max_tokens=max_tokens,
+                temperature=temperature, 
+                top_k=top_k,
+                top_p=top_p, 
+                min_p=min_p, 
+                stop=stop if stop is not None and isinstance(stop[0], str) else None,
+                stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
+                guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
             use_tqdm=True
         )
 

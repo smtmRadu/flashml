@@ -4,8 +4,8 @@ from flashml.llm.vllm_engine import VLLMCore
 def vllm_compute_logprobs(
     texts: List[str],
     model_name: str,
-    tokenizer_name: str,
-    quantization: Literal["awq", "gptq", "awq_marlin"],
+    tokenizer_name: str = None,
+    quantization: Literal["awq", "gptq", "awq_marlin"] = None,
     max_model_len: int = 4096,
     max_num_seqs: int = 256,
     gpu_memory_utilization: float = 0.8,

@@ -32,6 +32,8 @@ class VLLMCore():
             Returns:
                 _type_: _description_
             """
+            if tokenizer_name is None:
+                tokenizer_name = model_name
             from vllm import LLM, SamplingParams
             from vllm.sampling_params import GuidedDecodingParams
             
