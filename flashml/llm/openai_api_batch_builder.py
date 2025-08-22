@@ -1,5 +1,5 @@
 
-
+from typing import Literal
 
 class OpenAISyncRequest():
     def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, format=None):
@@ -57,7 +57,7 @@ The output .jsonl contains the following response format:
     
 
 class OpenAIBatchRequest():
-    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, format=None):
+    def __init__(self, client, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, reasoning_effort: Literal["minimal", "low", "medium", "high"] = None,format=None):
         """Initializes the BatchedRequest client. Call the each function in step order.
         
 Note that when doing structured output in batched inference, the output is extracted directly as a json as follows:
@@ -80,7 +80,7 @@ for r in resps:
         self.max_tokens = max_tokens
         self.messages_batch= messages_batch
         self.temperature= temperature
-
+        self.reasoning_effort = reasoning_effort
         self.client = client
         self.output_structure = format
         
@@ -100,7 +100,8 @@ for r in resps:
                     "model": self.model_name,
                     "messages": mess,
                     "max_tokens":self.max_tokens,
-                    "temperature": self.temperature
+                    "temperature": self.temperature,
+                    "reasoning_effort": self.reasoning_effort
                     }
                 }
 

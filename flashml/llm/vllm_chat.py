@@ -6,8 +6,10 @@ def vllm_chat(
     tokenizer_name:str = None,
     quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"] = None,
     max_model_len:int= 4096,
-    max_num_seqs=256,
+    max_num_seqs:int=256,
+    tensor_parallel_size:int=1,
     gpu_memory_utilization=0.85,
+    
     # sampling
     temperature:float=1,
     top_k=-1, 
@@ -85,6 +87,7 @@ def vllm_chat(
         quantization=quantization,
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,
+        tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=gpu_memory_utilization)
         
     if isinstance(messages, list) and all(isinstance(i, list) or i == None for i in messages):
@@ -98,6 +101,7 @@ def vllm_chat(
                 top_k=top_k, 
                 top_p=top_p,
                 min_p=min_p, 
+                
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
                 stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
                 guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),

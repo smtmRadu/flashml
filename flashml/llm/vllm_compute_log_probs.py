@@ -8,6 +8,7 @@ def vllm_compute_logprobs(
     quantization: Literal["awq", "gptq", "awq_marlin"] = None,
     max_model_len: int = 4096,
     max_num_seqs: int = 256,
+    tensor_parallel_size=1,
     gpu_memory_utilization: float = 0.8,
     return_with_tokens:bool=False
 ) -> List[List[float]]:
@@ -51,6 +52,7 @@ def vllm_compute_logprobs(
         quantization=quantization,
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,
+        tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=gpu_memory_utilization)
     
     # Set up sampling params to get logprobs

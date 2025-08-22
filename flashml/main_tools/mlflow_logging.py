@@ -134,7 +134,7 @@ def host_mlflow(host="127.0.0.1", port="5000"):
     """Hosts MLFlow server.
     
     To connect to runpod runtime from local machine, open a wsl terminal and run:\\
-    ssh -L 1234:127.0.0.1:5000 [SSH over exposed TCP w\o ssh]\\
+    ssh -L 1234:127.0.0.1:5000 [SSH over exposed TCP w/o ssh]\\
     Then connect in local browser to 127.0.0.1:1234\\
     Args:
         host (str, optional): _description_. Defaults to "127.0.0.1".
