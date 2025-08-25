@@ -346,7 +346,7 @@ def plot_dist(
         if none_count > 0:
             unique_counts[None] = none_count
 
-        # SORTING BY BAR COUNT!
+        # SORTING BY BAR COUNT OR LABEL!
         if sort:
             if sort.lower() == "descending":
                 sorted_items = sorted(unique_counts.items(), key=lambda x: (-x[1], str(x[0])))
@@ -355,7 +355,14 @@ def plot_dist(
             else:
                 raise ValueError("sort must be 'ascending', 'descending', or None.")
         else:
-            sorted_items = sorted(unique_counts.items(), key=lambda x: str(x[0]))  # fallback: label sort
+            # Fixed fallback sorting: sort numerically if all non-None values are numeric
+            non_none_keys = [k for k in unique_counts.keys() if k is not None]
+            if non_none_keys and all(is_number(k) for k in non_none_keys):
+                # Sort numerically for numeric keys
+                sorted_items = sorted(unique_counts.items(), key=lambda x: (x[0] is None, x[0] if x[0] is not None else float('inf')))
+            else:
+                # Sort as strings for non-numeric keys
+                sorted_items = sorted(unique_counts.items(), key=lambda x: str(x[0]))
 
         keys = [str(k) if k is not None else "None" for k, _ in sorted_items]
         values = [v for _, v in sorted_items]
