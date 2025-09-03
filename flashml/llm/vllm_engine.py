@@ -19,7 +19,7 @@ class VLLMCore():
         max_model_len:int= 4096,
         max_num_seqs=256,
         tensor_parallel_size=1,
-        gpu_memory_utilization=0.8):
+        gpu_memory_utilization=0.85):
             """Returns a vllm instance LLM class.
 
             Args:
@@ -45,7 +45,8 @@ class VLLMCore():
                     max_model_len=max_model_len,
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
-                    gpu_memory_utilization = gpu_memory_utilization
+                    gpu_memory_utilization = gpu_memory_utilization,
+                    trust_remote_code=True, 
                 )
                 VLLMCore._instance_current_args = {
                     "model_name": model_name,
@@ -92,7 +93,8 @@ class VLLMCore():
                     max_model_len=max_model_len,
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
-                    gpu_memory_utilization = gpu_memory_utilization
+                    gpu_memory_utilization = gpu_memory_utilization,
+                    trust_remote_code=True, 
                 )
             VLLMCore._instance_current_args = {
                     "model_name": model_name,

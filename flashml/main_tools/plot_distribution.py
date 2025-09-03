@@ -2,10 +2,10 @@ from typing import Literal, Union, Collection
 
 def plot_dist(
     data: Union[dict, Collection[float], Collection[int], Collection[bool], Collection[str]],
+    title: str = "Distribution",
     sort: Literal["ascending", "descending"] | None = None,
     top_n: int = None,
     bins: int = None,
-    title: str = "Distribution",
     xlabel: str = "Item",
     ylabel: str = "Frequency",
     bar_color: str = "skyblue",
