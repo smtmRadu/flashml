@@ -18,6 +18,7 @@ def vllm_chat(
     stop: List[str] | List[int] = None, 
     format:dict[str, any]=None,
     max_tokens=131_072,
+    ignore_patterns=["original/**", "metal/**"],
 ):
     """
     (WSL or Linux only) Runs chat inference on a VLLM backend.
@@ -88,7 +89,8 @@ def vllm_chat(
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,
         tensor_parallel_size=tensor_parallel_size,
-        gpu_memory_utilization=gpu_memory_utilization)
+        gpu_memory_utilization=gpu_memory_utilization,
+        ignore_patterns=ignore_patterns)
         
     if isinstance(messages, list) and all(isinstance(i, list) or i == None for i in messages):
         non_none_messages = [m for m in messages if m is not None]

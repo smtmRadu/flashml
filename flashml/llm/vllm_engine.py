@@ -19,7 +19,8 @@ class VLLMCore():
         max_model_len:int= 4096,
         max_num_seqs=256,
         tensor_parallel_size=1,
-        gpu_memory_utilization=0.85):
+        gpu_memory_utilization=0.8,
+        ignore_patterns=None):
             """Returns a vllm instance LLM class.
 
             Args:
@@ -46,7 +47,7 @@ class VLLMCore():
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
                     gpu_memory_utilization = gpu_memory_utilization,
-                    trust_remote_code=True, 
+                    ignore_patterns=ignore_patterns,
                 )
                 VLLMCore._instance_current_args = {
                     "model_name": model_name,
@@ -55,7 +56,8 @@ class VLLMCore():
                     "max_model_len": max_model_len,
                     "max_num_seqs": max_num_seqs,
                     "tensor_parallel_size": tensor_parallel_size,
-                    "gpu_memory_utilization": gpu_memory_utilization
+                    "gpu_memory_utilization": gpu_memory_utilization,
+                    "ignore_patterns": ignore_patterns
                 }
                 return VLLMCore._instance
             
@@ -77,6 +79,8 @@ class VLLMCore():
                     similar_core = False
                 if VLLMCore._instance_current_args["tensor_parallel_size"]!= tensor_parallel_size:
                     similar_core = False
+                if VLLMCore._instance_current_args["ignore_patterns"]!= ignore_patterns:
+                    similar_core = False
                     
             if similar_core:
                 return VLLMCore._instance
@@ -94,7 +98,7 @@ class VLLMCore():
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
                     gpu_memory_utilization = gpu_memory_utilization,
-                    trust_remote_code=True, 
+                    ignore_patterns=ignore_patterns,
                 )
             VLLMCore._instance_current_args = {
                     "model_name": model_name,
@@ -103,7 +107,8 @@ class VLLMCore():
                     "max_model_len": max_model_len,
                     "max_num_seqs": max_num_seqs,
                     "tensor_parallel_size": tensor_parallel_size,
-                    "gpu_memory_utilization": gpu_memory_utilization
+                    "gpu_memory_utilization": gpu_memory_utilization,
+                    "ignore_patterns": ignore_patterns
                 }
             
             return VLLMCore._instance   

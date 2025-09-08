@@ -10,7 +10,8 @@ def vllm_compute_logprobs(
     max_num_seqs: int = 256,
     tensor_parallel_size=1,
     gpu_memory_utilization: float = 0.8,
-    return_with_tokens:bool=False
+    return_with_tokens:bool=False,
+    ignore_patterns=["original/**", "metal/**"]
 ) -> List[List[float]]:
     """
     Gets logprobs of the actual tokens of the text using VLLM and a local LLM.
@@ -53,7 +54,8 @@ def vllm_compute_logprobs(
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,
         tensor_parallel_size=tensor_parallel_size,
-        gpu_memory_utilization=gpu_memory_utilization)
+        gpu_memory_utilization=gpu_memory_utilization,
+        ignore_patterns=ignore_patterns)
     
     # Set up sampling params to get logprobs
     # We generate 0 tokens but request logprobs for the input tokens
