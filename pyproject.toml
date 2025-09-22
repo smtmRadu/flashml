@@ -44,7 +44,7 @@ dependencies = [
     "torch-optimi",
     "gymnasium",
     "transformers",
-    "trl==1.11.1",
+    "trl",
     "weave",
     "wandb",
     "evaluate",

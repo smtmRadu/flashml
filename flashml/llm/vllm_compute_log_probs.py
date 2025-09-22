@@ -6,7 +6,7 @@ def vllm_compute_logprobs(
     model_name: str,
     tokenizer_name: str = None,
     quantization: Literal["awq", "gptq", "awq_marlin"] = None,
-    max_model_len: int = 4096,
+    max_model_len: int = 32_768,
     max_num_seqs: int = 256,
     tensor_parallel_size=1,
     gpu_memory_utilization: float = 0.8,

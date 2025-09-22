@@ -92,7 +92,7 @@ def sample_from(items: Sequence, num_samples, probs: Sequence = None, with_repla
 
 
 
-def shuffle_tensor(torch_tensor, axis):
+def shuffle_tensor(torch_tensor, axis:int):
     import random
 
     size = torch_tensor.size(axis)  # Get size along the axis
@@ -106,7 +106,7 @@ def shuffle_tensor(torch_tensor, axis):
 
     return torch_tensor.index_select(axis, perm_tensor)
 
-def reorder_columns_df(
+def reorder_df_columns(
     df,
     columns_to_put_first: Optional[List[str]] = None,
     columns_to_put_last: Optional[List[str]] = None

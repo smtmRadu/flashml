@@ -18,7 +18,7 @@ def vllm_chat(
     stop: List[str] | List[int] = None, 
     format:dict[str, any]=None,
     max_tokens=131_072,
-    ignore_patterns=["original/**", "metal/**"],
+    ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
 ):
     """
     (WSL or Linux only) Runs chat inference on a VLLM backend.
@@ -26,7 +26,7 @@ def vllm_chat(
     Install FlashInfer for best performance.
 
     Args:
-        model_name (str): The name or path of the model to use.
+        model_name (str): The name or path (if local) of the model to use.
         tokenizer_name (str): The name or path of the tokenizer to use. If None, it is set as the model_name,
         quantization (Literal["awq", "gptq", "awq_marlin"]): 
             The quantization format to load the model weights with.
