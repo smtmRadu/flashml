@@ -15,12 +15,14 @@ class VLLMCore():
     def initialize(
         model_name:str, 
         tokenizer_name:str, 
+        tokenizer_mode:str,
         quantization:Literal["awq", "gptq", "awq_marlin", "gptq_marlin", "bitsandbytes"],
         max_model_len:int= 4096,
         max_num_seqs=256,
         tensor_parallel_size=1,
-        gpu_memory_utilization=0.8,
-        ignore_patterns=None):
+        gpu_memory_utilization=0.9,
+        ignore_patterns=None,
+        **kwargs):
             """Returns a vllm instance LLM class.
 
             Args:
@@ -42,12 +44,14 @@ class VLLMCore():
                 VLLMCore._instance = LLM(
                     model= model_name,
                     tokenizer=tokenizer_name,
+                    tokenizer_mode=tokenizer_mode,
                     quantization=quantization,
                     max_model_len=max_model_len,
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
                     gpu_memory_utilization = gpu_memory_utilization,
                     ignore_patterns=ignore_patterns,
+                    **kwargs
                 )
                 VLLMCore._instance_current_args = {
                     "model_name": model_name,
@@ -93,12 +97,14 @@ class VLLMCore():
             VLLMCore._instance = LLM(
                     model= model_name,
                     tokenizer=tokenizer_name,
+                    tokenizer_mode=tokenizer_mode,
                     quantization=quantization,
                     max_model_len=max_model_len,
                     max_num_seqs= max_num_seqs,
                     tensor_parallel_size=tensor_parallel_size,
                     gpu_memory_utilization = gpu_memory_utilization,
                     ignore_patterns=ignore_patterns,
+                    **kwargs
                 )
             VLLMCore._instance_current_args = {
                     "model_name": model_name,

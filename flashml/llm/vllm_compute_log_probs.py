@@ -5,6 +5,7 @@ def vllm_compute_logprobs(
     texts: List[str],
     model_name: str,
     tokenizer_name: str = None,
+    tokenizer_mode:str = 'auto',
     quantization: Literal["awq", "gptq", "awq_marlin"] = None,
     max_model_len: int = 32_768,
     max_num_seqs: int = 256,
@@ -50,6 +51,7 @@ def vllm_compute_logprobs(
     llm = VLLMCore.initialize(
         model_name=model_name,
         tokenizer_name=tokenizer_name,
+        tokenizer_mode=tokenizer_mode,
         quantization=quantization,
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,

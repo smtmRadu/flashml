@@ -4,6 +4,7 @@ def vllm_chat(
     messages:list[dict] | list[list[dict]],
     model_name:str,
     tokenizer_name:str = None,
+    tokenizer_mode:str = 'auto',
     quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"] = None,
     max_model_len:int= 4096,
     max_num_seqs:int=256,
@@ -19,6 +20,7 @@ def vllm_chat(
     format:dict[str, any]=None,
     max_tokens=131_072,
     ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
+    **kwargs,
 ):
     """
     (WSL or Linux only) Runs chat inference on a VLLM backend.
@@ -85,12 +87,14 @@ def vllm_chat(
     llm = VLLMCore.initialize(
         model_name=model_name,
         tokenizer_name=tokenizer_name,
+        tokenizer_mode=tokenizer_mode,
         quantization=quantization,
         max_model_len=max_model_len, 
         max_num_seqs=max_num_seqs,
         tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=gpu_memory_utilization,
-        ignore_patterns=ignore_patterns)
+        ignore_patterns=ignore_patterns,
+        **kwargs)
         
     if isinstance(messages, list) and all(isinstance(i, list) or i == None for i in messages):
         non_none_messages = [m for m in messages if m is not None]
