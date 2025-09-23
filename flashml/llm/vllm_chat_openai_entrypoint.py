@@ -3,40 +3,32 @@ import tempfile
 import json
 import subprocess
 import os
+from typing import Literal
 
-def openai_vllm_chat(
+def vllm_chat_openai_entrypoint(
     messages:list[str] | list[list[str]],
+    model:Literal["openai/gpt-oss-120b", "openai/gpt-oss-20b"]="openai/gpt-oss-120b",
+    max_model_len = 131072,
+    max_completion_tokens = 40960,
     temperature=1.0,
-    top_p = 0.95,
-    gpu_memory_utilization=0.8,
-    max_completion_tokens = 4096,
+    top_k=-1,
+    top_p = 1.0,
+    gpu_memory_utilization=0.95,
+    
+    tensor_parallel_size:int=1,
     reasoning_effort="high",
-    format=None,
-    openai_api_key = "EMPTY",
-    openai_api_base = "http://localhost:8000/v1"):
+    ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
+    format=None,):
     """
-    Initialize vllm first as follows:
-    vllm serve openai/gpt-oss-120b
-    
-    
     Retrieve the output texts as follows:
     outputs= openai_vllm_chat(...)
     for outp in outputs:
-        outp['response']['body']['choices'][0]['message']['content']
+        response = outp['response']['body']['choices'][0]['message']['content']
+        reasoning = outp['response']['body']['choices'][0]['message']['reasoning_content']
     """
     
-    BATCH_BUILDING_FILE = "openai_batchbuild_flashml.jsonl"
-    RESULTS_FILE = "openai_batchresponse_flashml.jsonl"
-    from openai import OpenAI
-    client =  OpenAI(
-        api_key=openai_api_key,
-        base_url=openai_api_base
-    )
-    
-    models = client.models.list()
-    model = models.data[0].id
-    
-    # 1. Build json request batch
+    # check all options here: https://docs.vllm.ai/en/latest/cli/run-batch.html?utm_source=chatgpt.com#schedulerconfig
+
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
         messages = [messages]
         
@@ -53,6 +45,7 @@ def openai_vllm_chat(
                         "max_completion_tokens": max_completion_tokens,
                         "temperature": temperature,
                         "top_p": top_p,
+                        "top_k": top_k,
                         "reasoning_effort": reasoning_effort
                         
                     }
@@ -91,11 +84,15 @@ def openai_vllm_chat(
             "--input-file", input_file_path,
             "--output-file", output_file_path,
             "--model", model,
-            "--gpu-memory-utilization", str(gpu_memory_utilization)
+            "--gpu-memory-utilization", str(gpu_memory_utilization),
+            "--max-model-len", str(max_model_len),
+            "--tensor-parallel-size", str(tensor_parallel_size),
+            "--ignore_patterns"
         ]
+        cmd.extend(ignore_patterns)
         
         result = subprocess.run(cmd, text=True, check=True)
-        print("Batch processing completed successfully")
+        print(f"\033[92m============== 100% Completed | {len(requests)}/{len(requests)} ==============\033[0m")
         
         # Read results
         responses = []
