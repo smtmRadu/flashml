@@ -53,7 +53,7 @@ def get_4bit_quantization_config():
         bnb_4bit_compute_dtype=torch.bfloat16
     )
     
-def get_boxed_answer(text: str) -> str:
+def get_boxed_answer(text: str) -> str | None:
     '''
     Return the <answer> from the last \\boxed{<answer>} in an LLM response.
     If no \\boxed{} is found, returns None

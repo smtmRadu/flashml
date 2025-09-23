@@ -16,9 +16,10 @@ class VLLMCore():
         model_name:str, 
         tokenizer_name:str, 
         tokenizer_mode:str,
-        enforce_eager:bool|None=None,
-        disable_custom_all_reduce:bool=False,
+        
         quantization:Literal["awq", "gptq", "awq_marlin", "gptq_marlin", "bitsandbytes"],
+        enforce_eager:bool|None=False,
+        disable_custom_all_reduce:bool=False,
         max_model_len:int= 4096,
         max_num_seqs=256,
         tensor_parallel_size=1,

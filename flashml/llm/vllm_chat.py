@@ -5,7 +5,7 @@ def vllm_chat(
     model_name:str,
     tokenizer_name:str = None,
     tokenizer_mode:str = 'auto',
-    enforce_eager:bool|None=None,
+    enforce_eager:bool|None=False,
     disable_custom_all_reduce:bool=False,
     quantization:Literal["awq", "gptq", "awq_marlin", 'gptq_marlin', "bitsandbytes"] = None,
     max_model_len:int= 4096,
