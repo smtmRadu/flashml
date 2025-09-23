@@ -5,6 +5,13 @@ import subprocess
 import os
 from typing import Literal
 
+### MAGISTRAL ARGS
+# model = "mistralai/Magistral-Small-2506"
+# temperature = 0.7
+# top_p = 0.95
+# max_model_len = 40_960
+# max_completion_tokens = 20480
+# other_args = ["--tokenizer-mode", "auto", "--load_format", "mistral", "--tool-call-parser", "mistral", "--enable-auto-tool-choice"]
 def vllm_chat_openai_entrypoint(
     messages:list[str] | list[list[str]],
     model:Literal["openai/gpt-oss-120b", "openai/gpt-oss-20b"]="openai/gpt-oss-120b",
@@ -14,12 +21,13 @@ def vllm_chat_openai_entrypoint(
     top_k=-1,
     top_p = 1.0,
     gpu_memory_utilization=0.95,
-    
     tensor_parallel_size:int=1,
     reasoning_effort="high",
     ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
-    format=None,):
+    format=None,
+    other_args:list[str] = ["--max-num-seqs", 256]):
     """
+    Check other_args here: https://docs.vllm.ai/en/latest/cli/run-batch.html?utm_source=chatgpt.com#schedulerconfig
     Retrieve the output texts as follows:
     outputs= openai_vllm_chat(...)
     for outp in outputs:
@@ -27,8 +35,6 @@ def vllm_chat_openai_entrypoint(
         reasoning = outp['response']['body']['choices'][0]['message']['reasoning_content']
     """
     
-    # check all options here: https://docs.vllm.ai/en/latest/cli/run-batch.html?utm_source=chatgpt.com#schedulerconfig
-
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
         messages = [messages]
         
@@ -87,11 +93,11 @@ def vllm_chat_openai_entrypoint(
             "--gpu-memory-utilization", str(gpu_memory_utilization),
             "--max-model-len", str(max_model_len),
             "--tensor-parallel-size", str(tensor_parallel_size),
-            "--ignore_patterns"
+            *[str(x) for x in other_args],
+            "--ignore_patterns", *ignore_patterns
         ]
-        cmd.extend(ignore_patterns)
-        
-        result = subprocess.run(cmd, text=True, check=True)
+
+        _ = subprocess.run(cmd, text=True, check=True)
         print(f"\033[92m============== 100% Completed | {len(requests)}/{len(requests)} ==============\033[0m")
         
         # Read results
