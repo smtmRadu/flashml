@@ -5,13 +5,50 @@ import subprocess
 import os
 from typing import Literal
 
+QWEN3_06B_DEFAULT_ARGS = {
+    "model": "Qwen/Qwen3-0.6B",
+    "max_model_len": 8192,
+    "max_completion_tokens": 4096,
+    "gpu_memory_utilization": 0.8,
+    "tensor_parallel_size": 1,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "other_args": ["--quantization", "bitsandbytes"],
+}
+GPT_OSS_120B_DEFAULT_ARGS = {
+    "model": "openai/gpt-oss-120b",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "gpu_memory_utilization": 0.95,
+    "tensor_parallel_size": 1,
+    "temperature": 1,
+    "top_p": 1,
+    "top_k": -1,
+    "reasoning_effort": "high",
+    "ignore_patterns": ["original/**", "metal/**"]
+}
+
+MAGISTRAL_SMALL_2506_DEFAULT_ARGS = {
+    "model": "mistralai/Magistral-Small-2506",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "gpu_memory_utilization": 0.95,
+    "tensor_parallel_size": 1,
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "reasoning_effort": "high",
+    "ignore_patterns": ["original/**", "metal/**"],
+    "other_args": ["--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral"]
+}
+
 ### MAGISTRAL ARGS
 # model = "mistralai/Magistral-Small-2506"
 # temperature = 0.7
 # top_p = 0.95
 # max_model_len = 40_960
 # max_completion_tokens = 20480
-# other_args = ["--tokenizer-mode", "auto", "--load_format", "mistral", "--tool-call-parser", "mistral", "--enable-auto-tool-choice"]
+# other_args = ["--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral"]
 def vllm_chat_openai_entrypoint(
     messages:list[str] | list[list[str]],
     model:Literal["openai/gpt-oss-120b", "openai/gpt-oss-20b"]="openai/gpt-oss-120b",
@@ -27,12 +64,25 @@ def vllm_chat_openai_entrypoint(
     format=None,
     other_args:list[str] = ["--max-num-seqs", 256]):
     """
-    Check other_args here: https://docs.vllm.ai/en/latest/cli/run-batch.html?utm_source=chatgpt.com#schedulerconfig
+    Check other_args here: 
+    https://docs.vllm.ai/en/latest/cli/run-batch.html?utm_source=chatgpt.com#schedulerconfig
+    
+    If model is not downloaded, run this script first:
+    ```python
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id=model_id,
+            ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
+            local_dir_use_symlinks=False,  # optional: avoids symlinks
+        )
+    ```
     Retrieve the output texts as follows:
+     ```python
     outputs= openai_vllm_chat(...)
     for outp in outputs:
         response = outp['response']['body']['choices'][0]['message']['content']
         reasoning = outp['response']['body']['choices'][0]['message']['reasoning_content']
+    ```
     """
     
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
