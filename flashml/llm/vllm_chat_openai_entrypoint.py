@@ -16,7 +16,7 @@ QWEN3_06B_DEFAULT_ARGS = {
     "top_k": 20,
     "other_args": ["--quantization", "bitsandbytes"],
 }
-GPT_OSS_120B_DEFAULT_ARGS = {
+GPT_OSS_120B_HIGH_DEFAULT_ARGS = {
     "model": "openai/gpt-oss-120b",
     "max_model_len": 40_960,
     "max_completion_tokens": 30_720,
@@ -26,6 +26,18 @@ GPT_OSS_120B_DEFAULT_ARGS = {
     "top_p": 1,
     "top_k": -1,
     "reasoning_effort": "high",
+    "ignore_patterns": ["original/**", "metal/**"]
+}
+GPT_OSS_20B_LOW_DEFAULT_ARGS = {
+    "model": "openai/gpt-oss-20b",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "gpu_memory_utilization": 0.95,
+    "tensor_parallel_size": 1,
+    "temperature": 1,
+    "top_p": 1,
+    "top_k": -1,
+    "reasoning_effort": "low",
     "ignore_patterns": ["original/**", "metal/**"]
 }
 
@@ -83,13 +95,16 @@ def vllm_chat_openai_entrypoint(
         response = outp['response']['body']['choices'][0]['message']['content']
         reasoning = outp['response']['body']['choices'][0]['message']['reasoning_content']
     ```
+    
+    Messages may contain None values.
     """
     
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
         messages = [messages]
-        
+    
+    non_none_messages = [i for i in messages if i is not None]
     requests = []
-    for idx, conv in enumerate(messages):
+    for idx, conv in enumerate(non_none_messages):
         req = {
                 "custom_id": f"request-{idx+1}",
                 "method": "POST",
@@ -151,14 +166,23 @@ def vllm_chat_openai_entrypoint(
         print(f"\033[92m============== 100% Completed | {len(requests)}/{len(requests)} ==============\033[0m")
         
         # Read results
-        responses = []
+        without_none_responses = []
         with open(output_file_path, 'r') as f:
             for line in f:
                 if line.strip():
                     response_data = json.loads(line)
-                    responses.append(response_data)
+                    without_none_responses.append(response_data)
         
-        return responses
+        with_none_responses = []
+        index_in_outp = 0
+        for m in messages:
+            if m is None:
+                with_none_responses.append(None)
+            else:
+                with_none_responses.append(without_none_responses[index_in_outp])
+                index_in_outp += 1
+                
+        return with_none_responses
         
     except subprocess.CalledProcessError as e:
         print(f"Error running batch processing: {e}")
