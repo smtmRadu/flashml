@@ -19,7 +19,7 @@ def vllm_chat(
     top_p=1,
     min_p=0,
     stop: List[str] | List[int] = None, 
-    format:dict[str, any]=None,
+    format=None,
     max_tokens=131_072,
     ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
     **kwargs,
@@ -114,7 +114,7 @@ def vllm_chat(
                 
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
                 stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
-                guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+                guided_decoding=GuidedDecodingParams(json=format.model_json_schema()) if format is not None else None),
             use_tqdm=True
         )
         

@@ -60,7 +60,11 @@ dependencies = [
     "sphinx",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
+    "auto-gptq",
+    "autoawq",
+    "llmcompressor",
     "vllm",
+    
 ]
 
 

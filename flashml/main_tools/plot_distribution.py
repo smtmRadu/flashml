@@ -11,7 +11,8 @@ def plot_dist(
     bar_color: str = "skyblue",
     xlabel_rotation: int | Literal["auto"] = "auto",
     draw_details: bool = True,
-    renderer='notebook'
+    size: Literal["small", "big"] = "big",
+    renderer='notebook',
 ):
     import plotly.graph_objects as go
     import plotly.io as pio
@@ -19,6 +20,7 @@ def plot_dist(
     MAX_XTICKS: int = 100
     pio.templates.default = "plotly_dark"
     
+    scale = 1.0 if size == "big" else 0.66
 
     def add_quantile_boxes(fig, x_vals, y_vals, y_max):
         """
@@ -201,6 +203,16 @@ def plot_dist(
         if not freq_dict:
             print("Warning: freq_dict is empty. Nothing to plot.")
             return
+        
+        # Calculate statistics if all values are numeric
+        dict_mean = None
+        dict_std = None
+        if all(isinstance(v, (int, float)) and v is not None for v in freq_dict.values()):
+            values_for_stats = [v for v in freq_dict.values() if v is not None]
+            if values_for_stats:
+                dict_mean = np.mean(values_for_stats)
+                dict_std = np.std(values_for_stats)
+        
         items = list(freq_dict.items())
         if sort:
             if sort.lower() == "descending":
@@ -256,10 +268,12 @@ def plot_dist(
             )
         )
         num_items = len(str_keys)
-        width = max(1100, min(1200, num_items * 40))
-        height = max(500, min(800, 300 + num_items * 5))
+        width = int(max(1100, min(1200, num_items * 40)) * scale)
+        height = int(max(500, min(800, 300 + num_items * 5)) * scale)
+        
+        title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}" if dict_mean is not None else ""
         fig.update_layout(
-            title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''})",
+            title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''}{title_suffix})",
             xaxis_title=xlabel,
             yaxis_title=ylabel,
             width=width,
@@ -293,6 +307,14 @@ def plot_dist(
         return
     none_count = sum(1 for x in data_list if x is None)
     non_none_data = [x for x in data_list if x is not None]
+    
+    # Calculate statistics for numeric data
+    mean_val = None
+    std_val = None
+    if non_none_data and all(is_number(x) for x in non_none_data):
+        numeric_data = [float(x) for x in non_none_data]
+        mean_val = np.mean(numeric_data)
+        std_val = np.std(numeric_data)
 
     if len(non_none_data) == 0:
         keys = ["None"]
@@ -320,8 +342,8 @@ def plot_dist(
             title=f"{title} ({len(data_list)} elements, 1 unique)",
             xaxis_title=xlabel,
             yaxis_title=ylabel,
-            width=800,
-            height=500,
+            width=int(800 * scale),
+            height=int(500 * scale),
             showlegend=False,
             xaxis=dict(showgrid=draw_details),
             yaxis=dict(showgrid=draw_details),
@@ -392,11 +414,13 @@ def plot_dist(
             )
         )
         num_items = len(keys)
-        width = max(1100, min(1200, num_items * 40))
-        height = max(500, min(800, 300 + num_items * 5))
+        width = int(max(1100, min(1200, num_items * 40)) * scale)
+        height = int(max(500, min(800, 300 + num_items * 5)) * scale)
         unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
+        
+        title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
         fig.update_layout(
-            title=f"{title} ({len(data_list)} elements, {unique_count} unique)",
+            title=f"{title} ({len(data_list)} elements, {unique_count} unique{title_suffix})",
             xaxis_title=xlabel,
             yaxis_title=ylabel,
             width=width,
@@ -464,14 +488,16 @@ def plot_dist(
         )
     )
     num_items = len(x_labels)
-    width = max(1100, min(1200, num_items * 40))
-    height = max(500, min(800, 300 + num_items * 5))
+    width = int(max(1100, min(1200, num_items * 40)) * scale)
+    height = int(max(500, min(800, 300 + num_items * 5)) * scale)
     if xlabel_rotation == "auto":
         xlabel_rotation = min(len(x_labels) * 2, 90)
         if xlabel_rotation <= 10:
             xlabel_rotation = 0
+    
+    title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
     fig.update_layout(
-        title=f"{title} ({len(data_list)} elements)",
+        title=f"{title} ({len(data_list)} elements{title_suffix})",
         xaxis_title=xlabel,
         yaxis_title=ylabel,
         width=width,
