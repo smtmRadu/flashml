@@ -35,6 +35,7 @@ from .main_tools.plot_tensor import plot_tensor
 from .main_tools.plot_tsne import plot_tsne
 from .main_tools.resource_monitor import resource_monitor
 from .main_tools.sound_effects import bell
+from .main_tools.load_yaml_configs import load_yaml_configs
 
 __all__ = [
     "BatchIterator",
@@ -50,6 +51,7 @@ __all__ = [
     "load_checkpoint",
     "load_jsonl",
     "load_run_state",
+    "load_yaml_configs",
     "log_checkpoint",
     "log_figure",
     "log_json",

@@ -5,15 +5,6 @@ import subprocess
 import os
 from typing import Literal
 
-
-
-### MAGISTRAL ARGS
-# model = "mistralai/Magistral-Small-2506"
-# temperature = 0.7
-# top_p = 0.95
-# max_model_len = 40_960
-# max_completion_tokens = 20480
-# other_args = ["--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral"]
 def vllm_chat_openai_entrypoint(
     messages:list[str] | list[list[str]],
     model:Literal["openai/gpt-oss-120b", "openai/gpt-oss-20b"]="openai/gpt-oss-120b",

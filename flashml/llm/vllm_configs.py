@@ -1,6 +1,6 @@
 QWEN3_06B_DEFAULT_ARGS = {
     "model": "unsloth/Qwen3-0.6B-bnb-4bit",
-    "max_model_len": 8192,
+    "max_model_len": 10240,
     "max_completion_tokens": 4096,
     "gpu_memory_utilization": 0.8,
     "tensor_parallel_size": 1,
@@ -80,26 +80,26 @@ MISTRAL_SMALL_2506_DEFAULT_ARGS = {
     "other_args": ["--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral"]
 }
 
-MAGISTRAL_SMALL_2506_DEFAULT_ARGS = {
-    "model": "mistralai/Magistral-Small-2506",
-    "max_model_len": 131_072,
-    "max_completion_tokens": 81_920,
+MAGISTRAL_SMALL_2509_DEFAULT_ARGS = {
+    "model": "mistralai/Magistral-Small-2509",
+    "max_model_len": 40_960,
+    "max_completion_tokens":30_720,
     "gpu_memory_utilization": 0.95,
     "tensor_parallel_size": 1,
     "temperature": 0.7, # recommmended by them
     "top_p": 0.95, # recommended by them
     "reasoning_effort": "high",
     "ignore_patterns": ["original/**", "metal/**"],
-    "other_args": ["--reasoning-parser", "mistral", "--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral", "--enable-auto-tool-choice"]
+    "other_args": [ "--tokenizer-mode", "mistral","--config_format", "mistral", "--load_format", "mistral"]
 }
 
 GEMMA3_27B_IT_DEFAULT_ARGS = {
-    "model": "google/gemma-3-27b-it",
-    "max_model_len": 81_920,
-    "max_completion_tokens": 61_440,
-    "temperature": 1.0,
+    "model": "unsloth/gemma-3-27b-it-bnb-4bit",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "temperature": 0.7,
     "gpu_memory_utilization": 0.95,
-    "tensor_parallel_size": 0.7,
+    "tensor_parallel_size": 1,
     "top_k": 64,
     "top_p": 0.95
 }
