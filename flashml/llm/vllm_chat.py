@@ -100,6 +100,9 @@ def vllm_chat(
         ignore_patterns=ignore_patterns,
         **kwargs)
         
+    if len(messages) == 0: # keep this because vllm with 0 inputs just freezes
+        raise Exception("Input messages list has length 0.")
+    
     if isinstance(messages, list) and all(isinstance(i, list) or i == None for i in messages):
         non_none_messages = [m for m in messages if m is not None]
         

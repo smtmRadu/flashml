@@ -1,4 +1,4 @@
-def inspect_tokenizer(tokenizer):
+def inspect_tokenizer_window(tokenizer):
     import tkinter as tk
     from tkinter import ttk
     import random

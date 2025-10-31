@@ -128,7 +128,7 @@ def draw_partition_bar(
     canvas, width, height, data_percentages, colors, label_prefix="", icon_map=None
 ):
     import tkinter as tk
-    from tkinter import ttk as tkFont
+    from tkinter import font as tkFont  # Fixed: Import font module, not ttk
 
     canvas.delete("all")
     current_x = 0
@@ -244,7 +244,6 @@ def draw_partition_bar(
         (bar_y1 + max_text_height + 20) if legend_items_on_canvas > 0 else (bar_y1 + 5)
     )
     canvas.config(height=final_canvas_height)
-
 
 def apply_dark_theme(
     root,
@@ -714,7 +713,7 @@ def _repopulate_ui_with_data(
     root.update_idletasks()
 
 
-def inspect_model(model):
+def inspect_model_window(model):
     import inspect as py_inspect
     import tkinter as tk
     from tkinter import ttk

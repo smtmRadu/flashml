@@ -42,7 +42,7 @@ def load_jsonl(
         as_df (Literal["pd", "pl"], optional): Return a dataframe. Defaults to False. If false, returns a list of dictionaries.
         utf (str, optional): File encoding. Defaults to "utf-8".
     Returns:
-        list[dict] | polars/pandas df | None if file is empty.
+        list[dict] | polars/pandas df | None if file is empty or it doesn't exist.
     """
     import os, json
 

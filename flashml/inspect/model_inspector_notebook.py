@@ -142,7 +142,7 @@ def create_pie_chart(data_percentages, colors, title, icon_map=None):
     return fig
 
 
-def inspect_model(model, input_data=None, renderer="vscode", view_uint8_as_int4=True):
+def inspect_model_notebook(model, input_data=None, renderer="vscode", view_uint8_as_int4=True):
     """
     Inspect PyTorch model with interactive Plotly visualizations
 

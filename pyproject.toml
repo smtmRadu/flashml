@@ -22,6 +22,8 @@ dependencies = [
     "pyautogui",
     "pyperclip",
     "tkinterdnd2",
+    "PyQt6",
+    "openpyxl",
     "joblib",
     "polars",
     "pandas",

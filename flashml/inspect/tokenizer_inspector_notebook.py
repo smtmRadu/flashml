@@ -1,4 +1,4 @@
-def inspect_tokenizer(tokenizer, renderer="vscode"):
+def inspect_tokenizer_notebook(tokenizer, renderer="vscode"):
     """
     Analyzes a Hugging Face tokenizer and generates a sleek, comprehensive Plotly dashboard.
 
