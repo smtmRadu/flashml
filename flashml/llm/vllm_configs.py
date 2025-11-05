@@ -55,6 +55,20 @@ GPT_OSS_120B_MEDIUM_DEFAULT_ARGS = {
     "ignore_patterns": ["original/**", "metal/**"]
 }
 
+GPT_OSS_120B_LOW_DEFAULT_ARGS = {
+    "model": "openai/gpt-oss-120b",
+    "max_model_len": 81_920, # the model reasons even 12.5k samples
+    "max_completion_tokens": 61_440,
+    "gpu_memory_utilization": 0.95,
+    "tensor_parallel_size": 1,
+    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "top_p": 1,
+    "top_k": -1,
+    "reasoning_effort": "low",
+    "ignore_patterns": ["original/**", "metal/**"]
+}
+
+
 GPT_OSS_20B_LOW_DEFAULT_ARGS = {
     "model": "openai/gpt-oss-20b",
     "max_model_len": 40_960,
