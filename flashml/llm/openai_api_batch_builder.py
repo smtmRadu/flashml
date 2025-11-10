@@ -3,12 +3,12 @@ from typing import Literal
 import os
 class OpenAISyncRequest():
     def __init__(self, api_key:str, messages_batch:list[list[dict]], model_name:str,
-                 max_tokens:int, temperature:float,
+                 max_completion_tokens:int = None, temperature:float = None,
                  reasoning_effort: Literal["minimal", "low", "medium", "high"] = None,
                  format=None):
         from openai import Client
         self.model_name = model_name
-        self.max_tokens = max_tokens
+        self.max_tokens = max_completion_tokens
         self.messages_batch = messages_batch
         self.temperature = temperature
         self.output_structure = format
@@ -68,15 +68,15 @@ class OpenAISyncRequest():
     
 
 class OpenAIBatchRequest():
-    def __init__(self, api_key:str, messages_batch:list[list[dict]], model_name:str,max_tokens:int, temperature:float, reasoning_effort: Literal["minimal", "low", "medium", "high"] = None,format=None):
-        """Initializes the BatchedRequest client. Call the each function in step order.
+    def __init__(self, api_key:str, messages_batch:list[list[dict]], model_name:str,max_tokens:int = None, temperature:float = None, reasoning_effort: Literal["minimal", "low", "medium", "high"] = None,format=None):
+        """Initializes the BatchedRequest client. Call the each function in step order. (_step1_(), _step2_(), _step3_() and _step4_())
         
 Note that when doing structured output in batched inference, the output is extracted directly as a json as follows:
 ```python
 resps = load_records(BATCH_OUTPUT_FILE_NAME)
 jsons = []
 for r in resps:
-    js = json.loads(r["response"]["body"]['choices'][0]['message']["tool_calls"][0]["function"]["arguments"])
+    js = json.loads(r["response"]["body"]['choices'][0]['message']["content"])
     jsons.append(js)
 ```
         Args:
@@ -124,12 +124,14 @@ for r in resps:
                 "body":{
                     "model": self.model_name,
                     "messages": mess,
-                    "max_tokens":self.max_tokens,
-                    "temperature": self.temperature,
                     "reasoning_effort": self.reasoning_effort
                     }
                 }
-
+            if self.max_tokens:
+                req["body"]["max_completion_tokens"] = self.max_tokens
+            if self.temperature:
+                req["body"]["temperature"] = self.temperature    
+            
             if self.output_structure is not None:
                 schema = self.output_structure.model_json_schema()
                 req["body"]["tools"] = [{
@@ -146,7 +148,7 @@ for r in resps:
                 req["body"]["response_format"] = {"type": "json_object"}
             log_json(record=req, path=file_name, add_timestamp=False)
             
-        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[38;2;0;128;128m{file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
+        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[32m{file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
 
     def step_2_upload_batch_file(self, file_name = "current"):
         if file_name == "current":
@@ -160,7 +162,7 @@ for r in resps:
                 purpose="batch"
         )
         self.CURRENT__file_id = input_file.id
-        print(f"[2] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File ID: \033[38;2;0;128;128m{input_file.id}\033[38;2;189;252;201m) uploaded.\033[37m")
+        print(f"[2] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File ID: \033[32m{input_file.id}\033[38;2;189;252;201m) uploaded.\033[37m")
         
     def step_3_create_batch(self, file_id:str="current", metadata:dict = {}):
         from flashml import bell
@@ -172,20 +174,18 @@ for r in resps:
             output_structure (Type[BaseModel], optional): _description_. Defaults to None.
         """
         bell()
-        if input(f"This will create the batch (of size {len(self.messages_batch)} elements) and will start to process. Are you sure you want to continue? (y/n)").lower() == "y":
+        # if input(f"This will create the batch (of size {len(self.messages_batch)} elements) and will start to process. Are you sure you want to continue? (y/n)").lower() == "y":
 
-            self.CURRENT__batch = self.client.batches.create(
+        self.CURRENT__batch = self.client.batches.create(
                 input_file_id=self.CURRENT__file_id if file_id=="current" else file_id,
                 endpoint="/v1/chat/completions",
                 completion_window="24h",
                 metadata=metadata
             )
-        else:
-            print("The batch was not created! Nothing is going to be processed")
-            return 
-        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m).\n\033[38;2;189;252;201m\tView progress and retrieve results at at https://platform.openai.com/batches.\033[37m")
+
+        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m).\033[38;2;189;252;201m\tSee: https://platform.openai.com/batches.\033[37m")
     
-    def step_4_poll_batch(self, batch_id = "current", check_every_s: int = 3):
+    def step_4_poll_batch(self, batch_id = "current", check_every_s: float = 5):
         """
         This function makes requests to the api and checks the progress of the batch. It retrieves the batch output when is ready. You can also download it from from the web.
         Args:
@@ -199,13 +199,14 @@ for r in resps:
         from time import sleep
         while True:
             batch = self.client.batches.retrieve(self.CURRENT__batch.id if batch_id=="current" else batch_id)
-            print("\033[32mOpenAI\033[37m |",
-                  datetime.now(), "|",
-                  f" status: {batch.status}", "|", 
-                  f"({batch.request_counts.completed} completed" ,"|",
-                  f"{batch.request_counts.failed} failed" , "|",
-                  f"{batch.request_counts.total} total) ",  "|", 
-                  f"Batch ID: \033[38;2;189;252;201m{batch.id}\033[37m")
+            total = batch.request_counts.total if batch.request_counts.total > 0 else 1
+            print("[4] \033[32mOpenAI\033[37m |",
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "|",
+                  f" status: \033[38;2;189;252;201m{batch.status}\033[0m (\033[38;2;0;128;128m{(batch.request_counts.completed + batch.request_counts.failed) * 100/total:.2f}%\033[0m)", "|", 
+                  f"({batch.request_counts.completed} \033[38;5;10mcompleted\033[0m" ,"|",
+                  f"{batch.request_counts.failed} \033[38;5;9mfailed\033[0m" , "|",
+                  f"{batch.request_counts.total} \033[38;5;12mtotal\033[0m) ",  "|", 
+                  f" Batch ID: \033[38;2;189;252;201m{batch.id}\033[37m")
             if batch.status == "completed":
                 bell()
                 break

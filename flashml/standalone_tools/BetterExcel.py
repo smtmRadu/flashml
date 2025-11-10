@@ -1,13 +1,7 @@
-# datasheet_diff_app.py
-# Single-file desktop app using PyQt6 and pandas.
-# Run locally:
-#   pip install PyQt6 pandas openpyxl
-#   python datasheet_diff_app.py
-
 from pathlib import Path
 import sys
 import typing as t
-import difflib
+import re
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 
@@ -42,13 +36,13 @@ def apply_light_palette(app: QtWidgets.QApplication):
 
 # Subtle column zebra shading
 def column_shade_color(is_dark: bool, index: int) -> QtGui.QColor:
-    if is_dark:
-        base = 35 if index % 2 else 40
-        return QtGui.QColor(base, base, base)
-    else:
-        base = 246 if index % 2 else 240
-        return QtGui.QColor(base, base, base)
-
+    """FINAL VERSION – subtle tinted whites"""
+    cycle_len = 12
+    step = index % cycle_len
+    hue = int((step / cycle_len) * 360)
+    saturation = 100  # visible but not garish
+    lightness = 30
+    return QtGui.QColor.fromHsl(hue, saturation, lightness)
 
 # -------------------- Data Model for DataFrame --------------------
 class DataFrameModel(QtCore.QAbstractTableModel):
@@ -62,6 +56,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self.replace_term: str = ""
         self._is_dark = True
         self._matches: list[QtCore.QModelIndex] = []   # cached matches
+        self.case_sensitive: bool = False
 
     @property
     def df(self) -> pd.DataFrame:
@@ -132,7 +127,12 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     #  SEARCH & MATCH LOGIC
     # --------------------------------------------------------------------- #
     def set_search_term(self, term: str):
-        term = term.strip()
+        # Allow spaces, but treat empty or whitespace-only as empty search
+        if not term:  # if term is empty string
+            term = ""
+        # Optional: if you want to treat pure-whitespace as no search:
+        # if not term.strip():
+        #     term = ""
         if term == self.search_term:
             return
         self.search_term = term
@@ -144,14 +144,27 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._matches = []
         if not self.search_term:
             return
-        st = self.search_term.lower()
-        for r in range(self.rowCount()):
-            for c in range(self.columnCount()):
-                val = self._df.iat[r, c]
-                if pd.isna(val):
-                    continue
-                if st in str(val).lower():
-                    self._matches.append(self.index(r, c))
+        
+        if self.case_sensitive:
+            # Case-sensitive search
+            st = self.search_term
+            for r in range(self.rowCount()):
+                for c in range(self.columnCount()):
+                    val = self._df.iat[r, c]
+                    if pd.isna(val):
+                        continue
+                    if st in str(val):
+                        self._matches.append(self.index(r, c))
+        else:
+            # Original case-insensitive search
+            st = self.search_term.lower()
+            for r in range(self.rowCount()):
+                for c in range(self.columnCount()):
+                    val = self._df.iat[r, c]
+                    if pd.isna(val):
+                        continue
+                    if st in str(val).lower():
+                        self._matches.append(self.index(r, c))
 
     def match_at(self, pos: int) -> t.Optional[QtCore.QModelIndex]:
         if 0 <= pos < len(self._matches):
@@ -234,22 +247,40 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         doc.setDefaultFont(option.widget.font() if option.widget else option.font)
         doc.setPlainText(text)
         doc.setTextWidth(option.rect.width())
-        return QtCore.QSize(int(doc.idealWidth()), int(doc.size().height()))
+        
+        # Add vertical margins to match paint() method's adjusted rect
+        # paint() uses: rect = option.rect.adjusted(4, 2, -4, -2)
+        # So vertical margin = 2px top + 2px bottom = 4px
+        content_height = doc.size().height()
+        total_height = int(content_height + 6)  # +4px margin + round up
+        
+        return QtCore.QSize(int(doc.idealWidth()), total_height)
+
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):
         painter.save()
-
+        
+        # --- 1. Draw column-tinted background from the model ---
+        bg_brush = index.data(QtCore.Qt.ItemDataRole.BackgroundRole)
+        if bg_brush:
+            painter.fillRect(option.rect, bg_brush)
+        elif option.state & QtWidgets.QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+        
+        # --- 2. Now draw the content ---
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
         st = self.model.search_term
-        has_term = st and st.lower() in text.lower()
-
-        # Draw default item background (includes row/cell highlights from model)
-        style = QtWidgets.QApplication.style()
-        style.drawControl(QtWidgets.QStyle.ControlElement.CE_ItemViewItem, option, painter)
-
+        if st:
+            if self.model.case_sensitive:
+                has_term = st in text
+            else:
+                has_term = st.lower() in text.lower()
+        else:
+            has_term = False
+        
         rect = option.rect.adjusted(4, 2, -4, -2)
-
-        # Create document for text
+        
+        # Create document for text (rest of your existing logic)
         doc = QtGui.QTextDocument()
         doc.setDefaultFont(option.font)
         text_option = QtGui.QTextOption()
@@ -258,41 +289,47 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         doc.setDefaultTextOption(text_option)
         doc.setPlainText(text)
         doc.setTextWidth(rect.width())
-
-        # Highlight only the matching word(s) in green
+        
+        # Highlight matching words (existing logic unchanged)
         if has_term:
-            lower = text.lower()
             start = 0
-            st_lower = st.lower()
             highlights = []
+            
+            if self.model.case_sensitive:
+                search_text = st
+                search_in = text
+            else:
+                search_text = st.lower()
+                search_in = text.lower()
+            
+            text_len = len(st)
+            
             while True:
-                i = lower.find(st_lower, start)
+                i = search_in.find(search_text, start)
                 if i == -1:
                     break
-                highlights.append((i, len(st)))
-                start = i + len(st)
-
+                highlights.append((i, text_len))
+                start = i + text_len
+            
             if highlights:
                 layout = doc.documentLayout()
-
                 for pos, length in highlights:
                     cursor = QtGui.QTextCursor(doc)
                     cursor.setPosition(pos)
                     cursor.setPosition(pos + length, QtGui.QTextCursor.MoveMode.KeepAnchor)
-
                     block_rect = layout.blockBoundingRect(cursor.block())
                     selection_rect = QtCore.QRectF(block_rect)
                     selection_rect.translate(QtCore.QPointF(rect.topLeft()))
-
-                    painter.fillRect(selection_rect, QtGui.QColor(0, 200, 0, 140))  # green word
-
-        # Draw the text itself
+                    painter.fillRect(selection_rect, QtGui.QColor(0, 200, 0, 140))
+        
+        # Draw the text
         painter.translate(rect.topLeft())
         clip = QtCore.QRectF(0, 0, rect.width(), rect.height())
         doc.drawContents(painter, clip)
-
+        
         painter.restore()
-
+        
+        
     def createEditor(self, parent, option, index):
         editor = QtWidgets.QPlainTextEdit(parent)
         editor.setWordWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
@@ -322,7 +359,7 @@ class DragDropWidget(QtWidgets.QFrame):
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.icon = QtWidgets.QLabel("🗂️\\nDrop a CSV / XLS / XLSX / JSONL file here")
+        self.icon = QtWidgets.QLabel("🗂️Drop a CSV / XLS / XLSX / JSONL file here (open file if WSL)")
         self.icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.icon.setStyleSheet("font-size: 22px;")
         layout.addWidget(self.icon)
@@ -391,7 +428,80 @@ class WindowControls(QtWidgets.QWidget):
         # Right side: window controls
         for b in (self.min_btn, self.max_btn, self.close_btn):
             layout.addWidget(b)
+class AnimatedScrollBar(QtWidgets.QScrollBar):
+    """A scrollbar that animates value changes for buttery-smooth scrolling"""
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self._animation = QtCore.QPropertyAnimation(self, b"value")
+        self._animation.setDuration(300)  # 180ms for smooth but responsive feel
+        self._animation.setEasingCurve(QtCore.QEasingCurve.Type.OutQuad)  # Natural deceleration
+        self._is_dragging = False
+        
+    def setValue(self, value):
+        # If user is dragging the handle, update instantly for immediate feedback
+        if self._is_dragging:
+            super().setValue(value)
+            return
+            
+        # If same value, nothing to do
+        if value == self.value():
+            return
+            
+        # Stop any ongoing animation before starting new one
+        if self._animation.state() == QtCore.QPropertyAnimation.State.Running:
+            self._animation.stop()
+            
+        # Animate from current to target value
+        self._animation.setStartValue(self.value())
+        self._animation.setEndValue(value)
+        self._animation.start()
+        
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._is_dragging = True
+            self._animation.stop()  # Stop animation when user grabs handle
+        super().mousePressEvent(event)
+        
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._is_dragging = False
+        super().mouseReleaseEvent(event)
 
+
+class SmoothScrollTableView(QtWidgets.QTableView):
+    """QTableView with smooth animated scrolling for both wheel and scrollbar interactions"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Enable per-pixel scrolling (already smooth for drag operations)
+        self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        
+        # Replace default scrollbars with animated versions
+        v_scrollbar = AnimatedScrollBar(QtCore.Qt.Orientation.Vertical, self)
+        h_scrollbar = AnimatedScrollBar(QtCore.Qt.Orientation.Horizontal, self)
+        
+        self.setVerticalScrollBar(v_scrollbar)
+        self.setHorizontalScrollBar(h_scrollbar)
+        
+    def wheelEvent(self, event):
+        # Animate mouse wheel scrolling for vertical movement
+        if event.modifiers() == QtCore.Qt.KeyboardModifier.NoModifier:
+            delta = event.angleDelta().y()
+            scrollbar = self.verticalScrollBar()
+            
+            # Calculate scroll distance (3 lines per wheel step for reasonable speed)
+            single_step = scrollbar.singleStep()
+            if delta > 0:
+                target_value = max(scrollbar.minimum(), scrollbar.value() - single_step * 0.75)
+            else:
+                target_value = min(scrollbar.maximum(), scrollbar.value() + single_step * 0.75)
+                
+            # Animate to target value (this triggers AnimatedScrollBar.setValue)
+            scrollbar.setValue(target_value)
+            event.accept()
+        else:
+            # Handle horizontal scrolling or Ctrl+wheel (zoom) normally
+            super().wheelEvent(event)
 class DataViewerPage(QtWidgets.QWidget):
     backRequested = QtCore.pyqtSignal()
 
@@ -449,10 +559,37 @@ class DataViewerPage(QtWidgets.QWidget):
         # --- Search Field ---
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText("Search keyword…")
-        self.search_edit.setMinimumWidth(200)
+        self.search_edit.setMinimumWidth(150)
         self.search_edit.returnPressed.connect(self.on_search_return_pressed)
         
         toolbar.addWidget(self.search_edit)
+        
+        # --- Search Button (magnifier) ---
+        self.search_btn = QtWidgets.QToolButton()
+        self.search_btn.setText("🔍")
+        self.search_btn.setToolTip("Search")
+        self.search_btn.clicked.connect(self.on_search_return_pressed)
+        toolbar.addWidget(self.search_btn)
+
+
+        # --- Case Sensitive Toggle ---
+        # --- Case Sensitive Toggle ---
+        self.case_sensitive_btn = QtWidgets.QToolButton()
+        self.case_sensitive_btn.setText("Aa")
+        self.case_sensitive_btn.setCheckable(True)
+        self.case_sensitive_btn.setChecked(False)
+        self.case_sensitive_btn.setToolTip("Case sensitive search (off)")
+        self.case_sensitive_btn.toggled.connect(self.on_case_sensitive_toggled)
+
+        # Add blue background when checked
+        self.case_sensitive_btn.setStyleSheet("""
+            QToolButton:checked {
+                background-color: rgb(60, 100, 160);
+                border: 1px solid rgb(80, 130, 200);
+            }
+        """)
+
+        toolbar.addWidget(self.case_sensitive_btn)
 
         # --- Navigation Buttons ---
         self.btn_prev = QtWidgets.QToolButton()
@@ -529,17 +666,49 @@ class DataViewerPage(QtWidgets.QWidget):
         toolbar.addAction(self.btn_autosize)
 
         # --- Table View ---
-        self.table = QtWidgets.QTableView()
+        self.table = SmoothScrollTableView()
         self.table.setAlternatingRowColors(False)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Interactive)
-        self.table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Interactive)
+        
+        # === KEY CHANGE: Set vertical header to Fixed mode for manual management ===
+        self.table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Fixed)
         self.table.setWordWrap(True)
-        self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self.table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
-
-        # --- Drop Zone (improved) ---
+        
+        # === NEW: Enable column dragging ===
+        self.table.horizontalHeader().setSectionsMovable(True)
+        self.table.horizontalHeader().setDragEnabled(True)
+        self.table.horizontalHeader().setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.InternalMove)
+        self.table.horizontalHeader().sectionMoved.connect(self._on_column_moved)
+        
+                # === NEW: Visual feedback for column dragging ===
+        self.table.horizontalHeader().setDragDropOverwriteMode(False)
+        self.table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        
+        self._apply_scrollbar_style()
+        
+        # === NEW: Debounced row resizing system ===
+        # Timer to debounce rapid column resize events
+        self._row_resize_timer = QtCore.QTimer()
+        self._row_resize_timer.setSingleShot(True)
+        self._row_resize_timer.setInterval(120)  # 120ms debounce for responsiveness
+        self._row_resize_timer.timeout.connect(self._resize_visible_rows)
+        
+        # Track which columns were resized since last update
+        self._columns_resized = set()
+        
+        # Connect column resize signal
+        self.table.horizontalHeader().sectionResized.connect(self._on_column_resized)
+        
+        # === NEW: Track scroll position for on-demand row sizing ===
+        self._last_scroll_value = 0
+        self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        
+        # === NEW: Handle cell edits ===
+        # This will be connected after model is created
+        
+        # --- Drop Zone ---
         self.dd = DragDropWidget()
         self.dd.fileDropped.connect(self.load_path)
         
@@ -568,12 +737,108 @@ class DataViewerPage(QtWidgets.QWidget):
         outer.addWidget(self.status)
         
         self.table.hide()
-
+    def on_case_sensitive_toggled(self, checked: bool):
+        """Toggle case sensitivity and refresh search"""
+        if self.model:
+            self.model.case_sensitive = checked
+            self.case_sensitive_btn.setToolTip(f"Case sensitive search ({'on' if checked else 'off'})")
+            
+            # Re-run search with new setting
+            search_text = self.search_edit.text()
+            if search_text:
+                current_term = self.model.search_term
+                self.model.set_search_term("")
+                self.model.set_search_term(current_term)
+                self.table.viewport().update()  # 👈 Force immediate repaint
+    def _on_column_moved(self, logical_index, old_visual_index, new_visual_index):
+        """Reorder DataFrame columns when user drags column header"""
+        if not self.model or old_visual_index == new_visual_index:
+            return
+        
+        try:
+            # Get current visual order
+            header = self.table.horizontalHeader()
+            visual_order = [header.logicalIndex(i) for i in range(header.count())]
+            
+            # Use layout change signals for efficient update (no flicker)
+            self.model.layoutAboutToBeChanged.emit()
+            
+            # Reorder DataFrame to match visual order
+            new_columns = [self.model.df.columns[i] for i in visual_order]
+            self.model.df = self.model.df[new_columns]
+            
+            self.model.layoutChanged.emit()
+            
+            # Reapply search highlights (column indices changed)
+            search_text = self.search_edit.text()
+            if search_text:
+                self.model.set_search_term("")
+                self.model.set_search_term(search_text)
+            
+            # Resize rows (column widths are preserved by the header)
+            self._autosize_all_rows()
+            
+            # Update status
+            col_name = new_columns[new_visual_index]
+            self.status.showMessage(f"Moved column '{col_name}' to position {new_visual_index + 1}")
+            
+        except Exception as e:
+            print(f"Error moving column: {e}")
+            self.status.showMessage("Error moving column")
+            
     def _toggle_max_restore(self):
         if self.window().isMaximized() or self.window().isFullScreen():
             self.window().showNormal()
         else:
             self.window().showMaximized()
+            
+    def _apply_scrollbar_style(self):
+        """Apply custom scrollbar styling with gray sliders"""
+        scrollbar_style = """
+            QScrollBar:vertical {
+                border: none;
+                background: rgb(30, 30, 30);
+                width: 14px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgb(120, 120, 120);
+                min-height: 30px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgb(140, 140, 140);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            
+            QScrollBar:horizontal {
+                border: none;
+                background: rgb(30, 30, 30);
+                height: 14px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background: rgb(120, 120, 120);
+                min-width: 30px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: rgb(140, 140, 140);
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+                background: none;
+            }
+        """
+        self.table.setStyleSheet(self.table.styleSheet() + scrollbar_style)
+                             
     def on_search_return_pressed(self):
         """Triggered when Enter is pressed in the search field."""
         search_text = self.search_edit.text()
@@ -585,6 +850,10 @@ class DataViewerPage(QtWidgets.QWidget):
         self._update_replace_buttons()
         
     def load_path(self, path: Path):
+        original_text = self.dd.icon.text()
+        self.dd.icon.setText("Loading…")
+        QtWidgets.QApplication.processEvents()  # Ensure UI updates immediately
+    
         try:
             if path.suffix.lower() == ".csv":
                 df = pd.read_csv(path, low_memory=False)
@@ -598,34 +867,44 @@ class DataViewerPage(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
             return
-
         self.current_path = path
         self.model = DataFrameModel(df)
         self.model._is_dark = self.mode_toggle.isChecked()
         self.model.dataChangedHard.connect(self.table.viewport().update)
         self.model.matchesChanged.connect(self._on_matches_changed)
-
+        
+        # === NEW: Connect dataChanged for cell edit handling ===
+        self.model.dataChanged.connect(self._on_cell_data_changed)
+        
         self.table.setModel(self.model)
         self.table.setItemDelegate(HighlightDelegate(self.model))
-
+        
+        # Style setup
         if self.model._is_dark:
             self.table.setStyleSheet("QTableView { gridline-color: rgb(80, 80, 80); }")
+            self._apply_scrollbar_style()
         else:
             self.table.setStyleSheet("QTableView { gridline-color: rgb(0, 0, 0); }")
-
+            self._apply_scrollbar_style()
+        
+        # === NEW: Efficient initialization ===
         self.table.show()
         self.dd.hide()
         self.status.showMessage(f"Loaded: {path}  |  {df.shape[0]} rows × {df.shape[1]} cols")
+        
+        # Size columns and rows efficiently
         self.autosize_columns(force=True)
-        self.autosize_rows()
-
+        self._autosize_all_rows()  # Full sizing on load
+        
         # Reset search state
         self.current_match_pos = -1
-        self.base_font_size = 10  # Default base font size
-        self.font_scale = 1.0  # 100% scale
-
+        self.base_font_size = 10
+        self.font_scale = 1.0
         self.model.set_search_term("")
         self._on_matches_changed(0)
+
+        # Enter full screen AFTER file is loaded
+        self.window().showFullScreen()
 
     def open_file_dialog(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -633,6 +912,7 @@ class DataViewerPage(QtWidgets.QWidget):
         )
         if path:
             self.load_path(Path(path))
+            
     def change_font_size(self, delta: int):
         # Adjust scale by 10% per step
         self.font_scale += delta * 0.1
@@ -649,7 +929,8 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Refresh table to apply changes
         self.table.viewport().update()
-        self.autosize_rows()
+        self._autosize_all_rows()  # Recalculate all rows after font change
+        
     def save_file(self):
         if not self.model or not self.current_path:
             QtWidgets.QMessageBox.information(self, "Nothing to save", "Open a file first.")
@@ -760,44 +1041,175 @@ class DataViewerPage(QtWidgets.QWidget):
     def autosize_columns(self, force=False):
         if not self.model:
             return
+        
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
         min_w, max_w = 80, 650
-        for c in range(self.model.columnCount()):
+        
+        # Process in batches for large column counts
+        col_count = self.model.columnCount()
+        for c in range(col_count):
             header = str(self.model.df.columns[c])
             col = self.model.df.iloc[:, c]
             sample = col.dropna().astype(str).head(1000)
             avg_len = sample.str.len().mean() if not sample.empty else 5
-            base = 8 if "id" in header.strip().lower() and avg_len <= 16 else avg_len
+            
+            # Special handling for ID columns
+            is_id_col = "id" in header.strip().lower() and avg_len <= 16
+            base = 8 if is_id_col else avg_len
+            
+            # Calculate width based on header and content
             w = int(metrics.averageCharWidth() * (base + len(header) * 0.15)) + 28
             w = max(min_w, min(max_w, w))
-            self.table.setColumnWidth(c, w)
+            
+            # Set width without triggering multiple resize events
+            self.table.horizontalHeader().resizeSection(c, w)
 
-    def autosize_rows(self):
+    # === NEW: Column resize handler (debounced) ===
+    def _on_column_resized(self, logical_index: int, old_size: int, new_size: int):
+        """Triggered when any column is resized. Starts debounced row update."""
+        # Ignore tiny adjustments (less than 5 pixels) to avoid micro-calculations
+        if abs(new_size - old_size) > 5:
+            self._columns_resized.add(logical_index)
+            self._row_resize_timer.start()
+
+    # === NEW: Efficient row height updater for visible area ===
+    def _resize_visible_rows(self):
+        """Recalculates row heights for visible area based on resized columns."""
+        if not self.model or not self._columns_resized:
+            return
+        
+        # Get viewport boundaries for visible rows
+        viewport = self.table.viewport()
+        top_row = self.table.rowAt(0)
+        bottom_row = self.table.rowAt(viewport.height())
+        
+        # Handle edge cases
+        if top_row == -1: 
+            top_row = 0
+        if bottom_row == -1: 
+            bottom_row = self.model.rowCount() - 1
+        
+        # Add buffer rows for smoother scrolling (25 rows above/below)
+        BUFFER_ROWS = 25
+        top_row = max(0, top_row - BUFFER_ROWS)
+        bottom_row = min(self.model.rowCount() - 1, bottom_row + BUFFER_ROWS)
+        
+        # Calculate new heights only for rows in visible+buffer zone
+        for row in range(top_row, bottom_row + 1):
+            self.table.resizeRowToContents(row)
+        
+        # Clear the tracking set
+        self._columns_resized.clear()
+        
+        # Background full update for very large tables (>1000 rows)
+        if self.model.rowCount() > 1000:
+            QtCore.QTimer.singleShot(800, self._background_resize_rows)
+
+    # === NEW: Background processing for off-screen rows ===
+    def _background_resize_rows(self):
+        """Low-priority update for rows outside viewport (runs after idle)."""
         if not self.model:
             return
-        delegate = self.table.itemDelegate()
+        
+        total_rows = self.model.rowCount()
+        
+        # Process in batches of 50 to maintain UI responsiveness
+        BATCH_SIZE = 50
+        delay = 15  # milliseconds between batches
+        
+        # Use closure to maintain state
+        def create_batch_processor():
+            current_row = 0
+            def process_next_batch():
+                nonlocal current_row
+                if not self.model:  # Safety check
+                    return
+                    
+                end_row = min(current_row + BATCH_SIZE, total_rows)
+                for row in range(current_row, end_row):
+                    self.table.resizeRowToContents(row)
+                
+                current_row = end_row
+                if current_row < total_rows:
+                    QtCore.QTimer.singleShot(delay, process_next_batch)
+            
+            return process_next_batch
+        
+        # Start processing from first row
+        processor = create_batch_processor()
+        processor()
+
+    # === NEW: Handle cell data changes ===
+    def _on_cell_data_changed(self, top_left, bottom_right, roles):
+        """Recalculate row height when cell data changes via editing."""
+        if not roles or QtCore.Qt.ItemDataRole.DisplayRole in roles:
+            # Recalculate just the changed rows
+            for row in range(top_left.row(), bottom_right.row() + 1):
+                self.table.resizeRowToContents(row)
+
+    # === NEW: Handle scrolling for on-demand row sizing ===
+    def _on_scroll(self, value):
+        """Precalculate rows as they come into view during scrolling."""
+        if not self.model:
+            return
+        
+        # Only check every ~80 pixels of scrolling to avoid overhead
+        if abs(value - self._last_scroll_value) < 80:
+            return
+        
+        self._last_scroll_value = value
+        
+        # Get rows at viewport edges
+        viewport = self.table.viewport()
+        top_row = self.table.rowAt(0)
+        bottom_row = self.table.rowAt(viewport.height())
+        
+        if top_row == -1 or bottom_row == -1:
+            return
+        
+        # Add buffer
+        BUFFER_ROWS = 30
+        top_row = max(0, top_row - BUFFER_ROWS)
+        bottom_row = min(self.model.rowCount() - 1, bottom_row + BUFFER_ROWS)
+        
+        # Quick check: if rows already have reasonable height, skip
+        # This prevents re-processing already-sized rows
         font_metrics = QtGui.QFontMetrics(self.table.font())
-        default_height = font_metrics.lineSpacing() + 8
-        for row in range(self.model.rowCount()):
-            max_height = default_height
-            for col in range(self.model.columnCount()):
-                index = self.model.index(row, col)
-                text = str(self.model.data(index, QtCore.Qt.ItemDataRole.DisplayRole) or "")
-                layout = QtGui.QTextLayout(text, self.table.font())
-                layout.beginLayout()
-                height = 0
-                while True:
-                    line = layout.createLine()
-                    if not line.isValid():
-                        break
-                    line.setLineWidth(self.table.columnWidth(col))
-                    height += font_metrics.lineSpacing()
-                layout.endLayout()
-                max_height = max(max_height, height + 8)
-            current_height = self.table.rowHeight(row)
-            if current_height != max_height:
-                self.table.setRowHeight(row, int(max_height))
+        min_expected_height = font_metrics.lineSpacing() + 8
+        
+        for row in range(top_row, bottom_row + 1):
+            if self.table.rowHeight(row) < min_expected_height:
+                self.table.resizeRowToContents(row)
+
+    # === NEW: Full recalculation on initial load ===
+    def _autosize_all_rows(self):
+        """Full recalculation of all row heights - called only on file load."""
+        if not self.model:
+            return
+        
+        row_count = self.model.rowCount()
+        
+        # For large tables, show wait cursor and use batching
+        if row_count > 500:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            QtWidgets.QApplication.processEvents()
+            
+            # Batched processing for very large tables
+            batch_size = 100
+            for start in range(0, row_count, batch_size):
+                end = min(start + batch_size, row_count)
+                for row in range(start, end):
+                    self.table.resizeRowToContents(row)
+                # Allow UI to remain responsive
+                if start % 500 == 0:
+                    QtWidgets.QApplication.processEvents()
+        else:
+            # Fast path for smaller tables
+            self.table.resizeRowsToContents()
+        
+        if row_count > 500:
+            QtWidgets.QApplication.restoreOverrideCursor()
 
     def toggle_mode(self, checked: bool):
         if self.model:
@@ -806,11 +1218,71 @@ class DataViewerPage(QtWidgets.QWidget):
             apply_dark_palette(QtWidgets.QApplication.instance())
             self.mode_toggle.setText("Dark")
             self.table.setStyleSheet("QTableView { gridline-color: rgb(80, 80, 80); }")
+            self._apply_scrollbar_style()
+            # Dark mode style for case-sensitive button
+            self.case_sensitive_btn.setStyleSheet("""
+                QToolButton:checked {
+                    background-color: rgb(60, 100, 160);
+                    border: 1px solid rgb(80, 130, 200);
+                }
+            """)
         else:
             apply_light_palette(QtWidgets.QApplication.instance())
             self.mode_toggle.setText("Light")
-            self.table.setStyleSheet("QTableView { gridline-color: rgb(0, 0, 0); }")
+            # Light mode style for case-sensitive button
+            self.case_sensitive_btn.setStyleSheet("""
+                QToolButton:checked {
+                    background-color: rgb(0, 122, 204);
+                    border: 1px solid rgb(0, 100, 180);
+                }
+            """)
+            light_scrollbar_style = """
+                QTableView { gridline-color: rgb(0, 0, 0); }
+                QScrollBar:vertical {
+                    border: none;
+                    background: rgb(240, 240, 240);
+                    width: 14px;
+                    margin: 0px;
+                }
+                QScrollBar::handle:vertical {
+                    background: rgb(150, 150, 150);
+                    min-height: 30px;
+                    border-radius: 7px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background: rgb(120, 120, 120);
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                    background: none;
+                }
+                
+                QScrollBar:horizontal {
+                    border: none;
+                    background: rgb(240, 240, 240);
+                    height: 14px;
+                    margin: 0px;
+                }
+                QScrollBar::handle:horizontal {
+                    background: rgb(150, 150, 150);
+                    min-width: 30px;
+                    border-radius: 7px;
+                }
+                QScrollBar::handle:horizontal:hover {
+                    background: rgb(120, 120, 120);
+                }
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                    width: 0px;
+                }
+                QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+                    background: none;
+                }
+            """
+            self.table.setStyleSheet(light_scrollbar_style)
         self.table.viewport().update()
+            
         
         
 class DiffTextEdit(QtWidgets.QTextEdit):
@@ -818,7 +1290,32 @@ class DiffTextEdit(QtWidgets.QTextEdit):
         super().__init__()
         self.setAcceptRichText(False)
         self.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.WidgetWidth)
+        self._unescaping = False
+        self.textChanged.connect(self._auto_unescape)
 
+    def _auto_unescape(self):
+        """Convert literal \n, \t, \\, etc. into real control characters."""
+        if self._unescaping:
+            return
+            
+        text = self.toPlainText()
+        if '\\' not in text:  # Fast exit if nothing to do
+            return
+            
+        # Only convert these specific escape sequences
+        pattern = re.compile(r'\\([ntr\\"\'])')
+        escape_map = {'n': '\n', 't': '\t', 'r': '\r', '\\': '\\', '"': '"', "'": "'"}
+        
+        unescaped = pattern.sub(lambda m: escape_map.get(m.group(1), m.group(0)), text)
+        
+        if unescaped != text:
+            self._unescaping = True
+            cursor = self.textCursor()
+            scroll_pos = self.verticalScrollBar().value()
+            self.setPlainText(unescaped)
+            self.setTextCursor(cursor)
+            self.verticalScrollBar().setValue(scroll_pos)
+            self._unescaping = False
 
 class DiffPage(QtWidgets.QWidget):
     backRequested = QtCore.pyqtSignal()
@@ -1119,7 +1616,12 @@ class MainWindow(QtWidgets.QMainWindow):
         
     def enter_viewer(self):
         self.centralWidget().setCurrentWidget(self.viewer)
-        self.showFullScreen()
+        if self.viewer.model is not None:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+            self.resize(520, 320)
+            self.center_on_screen()
 
     def enter_diff(self):
         self.centralWidget().setCurrentWidget(self.diff)
