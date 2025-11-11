@@ -21,7 +21,7 @@ def plot_dist(
     pio.templates.default = "plotly_dark"
     
     scale = 1.0 if size == "big" else 0.66
-
+    title_font_size = 18 if size == "big" else 12
     def add_quantile_boxes(fig, x_vals, y_vals, y_max):
         """
         Add transparent quantile boxes behind the bars to show data distribution.
@@ -274,6 +274,7 @@ def plot_dist(
         title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}" if dict_mean is not None else ""
         fig.update_layout(
             title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''}{title_suffix})",
+            title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
             width=width,
@@ -340,6 +341,7 @@ def plot_dist(
         )
         fig.update_layout(
             title=f"{title} ({len(data_list)} elements, 1 unique)",
+            title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
             width=int(800 * scale),
@@ -421,6 +423,7 @@ def plot_dist(
         title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
         fig.update_layout(
             title=f"{title} ({len(data_list)} elements, {unique_count} unique{title_suffix})",
+            title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
             width=width,
@@ -498,6 +501,7 @@ def plot_dist(
     title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
     fig.update_layout(
         title=f"{title} ({len(data_list)} elements{title_suffix})",
+        title_font_size=title_font_size,  # ADD THIS LINE
         xaxis_title=xlabel,
         yaxis_title=ylabel,
         width=width,

@@ -1370,7 +1370,7 @@ class DiffPage(QtWidgets.QWidget):
                       (self.right_edit, "Right text (modified)…")]:
             e.setPlaceholderText(ph)
             e.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.WidgetWidth)
-            e.textChanged.connect(self.schedule_compare)  # 🔥 debounced compare
+            e.textChanged.connect(self.schedule_compare)
         hl.addWidget(self.left_edit)
         hl.addWidget(self.right_edit)
 
@@ -1384,30 +1384,111 @@ class DiffPage(QtWidgets.QWidget):
 
         # Store base font size for zooming
         self.base_font_size = self.left_edit.font().pointSize()
-        self.zoom_factor = 1.0  # Start at 100%
+        self.zoom_factor = 1.0
 
         # Timer for debounced comparison
         self.compare_timer = QtCore.QTimer()
         self.compare_timer.setSingleShot(True)
-        self.compare_timer.setInterval(100)  # 500ms delay
+        self.compare_timer.setInterval(100)
         self.compare_timer.timeout.connect(self.run_compare)
 
         # Set up keyboard shortcuts for undo/redo
         self.set_up_shortcuts()
+
+        # Selection synchronization
+        self._syncing_selection = False
+        self.left_edit.cursorPositionChanged.connect(lambda: self._sync_selection(self.left_edit, self.right_edit))
+        self.right_edit.cursorPositionChanged.connect(lambda: self._sync_selection(self.right_edit, self.left_edit))
+
+    def _sync_selection(self, source_edit: QtWidgets.QTextEdit, target_edit: QtWidgets.QTextEdit):
+        """Synchronize text selection from source to target editor with vertical alignment"""
+        if self._syncing_selection:
+            return
+        
+        # Always clear target selection first
+        self._clear_selection(target_edit)
+        
+        cursor = source_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+        
+        selected_text = cursor.selectedText()
+        if not selected_text:
+            return
+
+        # Detect if selection is in diff-only region
+        start_cursor = QtGui.QTextCursor(cursor)
+        start_cursor.setPosition(cursor.selectionStart())
+        char_format = start_cursor.charFormat()
+        bg_color = char_format.background().color()
+        
+        # Check if background is red (deleted) or green (inserted)
+        is_red = bg_color.red() > 150 and bg_color.green() < 80 and bg_color.blue() < 80
+        is_green = bg_color.green() > 120 and bg_color.red() < 80 and bg_color.blue() < 80
+        
+        if is_red or is_green:
+            # Don't sync diff-only text - just keep cleared state
+            return
+        
+        # Find and highlight matching text in target
+        target_doc = target_edit.document()
+        find_cursor = target_doc.find(selected_text, 0)
+        
+        if find_cursor.isNull():
+            return
+            
+        self._syncing_selection = True
+        
+        # Calculate relative position for scroll alignment
+        source_rect = source_edit.cursorRect(cursor)
+        source_viewport_height = source_edit.viewport().height()
+        
+        if source_viewport_height > 0:
+            source_rel_y = source_rect.center().y() / source_viewport_height
+            source_rel_y = max(0.0, min(1.0, source_rel_y))
+            
+            target_edit.setTextCursor(find_cursor)
+            target_rect = target_edit.cursorRect(find_cursor)
+            target_viewport_height = target_edit.viewport().height()
+            
+            if target_viewport_height > 0:
+                target_scrollbar = target_edit.verticalScrollBar()
+                current_scroll = target_scrollbar.value()
+                desired_viewport_y = source_rel_y * target_viewport_height
+                delta_y = target_rect.top() - desired_viewport_y
+                new_scroll = current_scroll + delta_y
+                new_scroll = max(0, min(new_scroll, target_scrollbar.maximum()))
+                target_scrollbar.setValue(int(new_scroll))
+        
+        # Create and apply new highlight
+        selection = QtWidgets.QTextEdit.ExtraSelection()
+        selection.cursor = find_cursor
+        selection.format.setBackground(QtGui.QColor(0, 150, 255, 100))
+        selection.format.setProperty(QtGui.QTextFormat.Property.FullWidthSelection, False)
+        
+        target_edit.setExtraSelections([selection])
+        target_edit.viewport().update()
+        
+        self._syncing_selection = False
+
+    def _clear_selection(self, edit: QtWidgets.QTextEdit):
+        """Clear extra selection highlights in the given editor"""
+        self._syncing_selection = True
+        edit.setExtraSelections([])
+        edit.viewport().update()  # Force immediate repaint
+        self._syncing_selection = False
 
     def set_up_shortcuts(self):
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Undo, self, self.undo_text)
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Redo, self, self.redo_text)
 
     def undo_text(self):
-        # Undo for the focused editor
         focused = QtWidgets.QApplication.focusWidget()
         if focused in (self.left_edit, self.right_edit):
             if focused.isUndoAvailable():
                 focused.undo()
 
     def redo_text(self):
-        # Redo for the focused editor
         focused = QtWidgets.QApplication.focusWidget()
         if focused in (self.left_edit, self.right_edit):
             if focused.isRedoAvailable():
@@ -1418,15 +1499,12 @@ class DiffPage(QtWidgets.QWidget):
         self.compare_timer.start()
 
     def wheelEvent(self, event: QtGui.QWheelEvent):
-        # Zoom in/out with Ctrl + mouse wheel
         if event.modifiers() == QtCore.Qt.KeyboardModifier.ControlModifier:
-            delta = event.angleDelta().y() / 120  # +1 or -1
+            delta = event.angleDelta().y() / 120
             
-            # Adjust zoom factor (10% per step)
             self.zoom_factor += delta * 0.1
-            self.zoom_factor = max(0.5, min(3.0, self.zoom_factor))  # 50% to 300%
+            self.zoom_factor = max(0.5, min(3.0, self.zoom_factor))
             
-            # Apply zoom to both editors
             new_size = int(self.base_font_size * self.zoom_factor)
             font = self.left_edit.font()
             font.setPointSize(new_size)
@@ -1441,7 +1519,6 @@ class DiffPage(QtWidgets.QWidget):
         from html import escape as esc
         import difflib, re
 
-        # Get plain text versions (NOT the HTML)
         left = self.left_edit.toPlainText()
         right = self.right_edit.toPlainText()
         
@@ -1450,7 +1527,6 @@ class DiffPage(QtWidgets.QWidget):
             self.stats_lbl.setText("Δ: —")
             return
 
-        # Save cursor positions and scroll positions
         left_cursor = self.left_edit.textCursor()
         right_cursor = self.right_edit.textCursor()
         left_scroll = self.left_edit.verticalScrollBar().value()
@@ -1487,23 +1563,18 @@ class DiffPage(QtWidgets.QWidget):
         left_html = "<div style='font-family: Consolas, monospace; white-space: pre-wrap;'>" + "".join(left_html_parts) + "</div>"
         right_html = "<div style='font-family: Consolas, monospace; white-space: pre-wrap;'>" + "".join(right_html_parts) + "</div>"
 
-        # Block signals to prevent recursive textChanged
         self.left_edit.blockSignals(True)
         self.right_edit.blockSignals(True)
         
-        # Set HTML content
         self.left_edit.setHtml(left_html)
         self.right_edit.setHtml(right_html)
         
-        # Restore cursor positions
         self.left_edit.setTextCursor(left_cursor)
         self.right_edit.setTextCursor(right_cursor)
         
-        # Restore scroll positions
         self.left_edit.verticalScrollBar().setValue(left_scroll)
         self.right_edit.verticalScrollBar().setValue(right_scroll)
         
-        # Re-enable signals
         self.left_edit.blockSignals(False)
         self.right_edit.blockSignals(False)
 
@@ -1515,8 +1586,7 @@ class DiffPage(QtWidgets.QWidget):
         if self.window().isMaximized() or self.window().isFullScreen():
             self.window().showNormal()
         else:
-            self.window().showMaximized() 
-        
+            self.window().showMaximized()
 class StartPage(QtWidgets.QWidget):
     viewRequested = QtCore.pyqtSignal()
     compareRequested = QtCore.pyqtSignal()
