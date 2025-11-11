@@ -391,6 +391,7 @@ class WindowControls(QtWidgets.QWidget):
 
     def __init__(self, title: str = ""):
         super().__init__()
+        self._drag_start_pos = None
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         
@@ -428,6 +429,24 @@ class WindowControls(QtWidgets.QWidget):
         # Right side: window controls
         for b in (self.min_btn, self.max_btn, self.close_btn):
             layout.addWidget(b)
+            
+    def mousePressEvent(self, event: QtGui.QMouseEvent):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.globalPosition().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+        if self._drag_start_pos and event.buttons() & QtCore.Qt.MouseButton.LeftButton:
+            delta = event.globalPosition().toPoint() - self._drag_start_pos
+            self.window().move(self.window().pos() + delta)
+            self._drag_start_pos = event.globalPosition().toPoint()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+        
 class AnimatedScrollBar(QtWidgets.QScrollBar):
     """A scrollbar that animates value changes for buttery-smooth scrolling"""
     def __init__(self, orientation, parent=None):
@@ -1284,7 +1303,6 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.viewport().update()
             
         
-        
 class DiffTextEdit(QtWidgets.QTextEdit):
     def __init__(self):
         super().__init__()
@@ -1505,20 +1523,39 @@ class StartPage(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
+        
+        # Main layout with no margins/spacing for the window controls
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Add window controls bar - hide back button on start page
+        self.controls = WindowControls("Better Excel")
+        self.controls.back_btn.hide()
+        self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
+        self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
+        self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
+        
+        # Content container for centered elements
+        content = QtWidgets.QWidget()
+        content_layout = QtWidgets.QVBoxLayout(content)
+        content_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
+        # Welcome label
         lbl = QtWidgets.QLabel("Welcome")
         lbl.setStyleSheet("font-size: 20px; font-weight: 600;")
         lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-
+        
+        # Buttons container
         btns = QtWidgets.QWidget()
         h = QtWidgets.QHBoxLayout(btns)
         h.setSpacing(20)
+        
         view = QtWidgets.QPushButton("View File")
         diff = QtWidgets.QPushButton("Compare Texts")
         
-        # Style the buttons with larger size and rounded corners
-        button_style = button_style = """
+        # Style the buttons
+        button_style = """
             QPushButton {
                 min-height: 80px;
                 font-size: 16px;
@@ -1537,25 +1574,32 @@ class StartPage(QtWidgets.QWidget):
         
         view.clicked.connect(self.viewRequested.emit)
         diff.clicked.connect(self.compareRequested.emit)
-
+        
         h.addWidget(view)
         h.addWidget(diff)
+        
+        # Assemble content
+        content_layout.addWidget(lbl)
+        content_layout.addWidget(btns)
+        content_layout.addSpacing(10)
+        
+        # Add to main layout
+        layout.addWidget(self.controls)
+        layout.addWidget(content, 1)  # Stretch factor for content
 
-        #hint = QtWidgets.QLabel("Tip: You can drag & drop your file after choosing 'View File'.")
-        #hint.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-
-        layout.addWidget(lbl)
-        layout.addWidget(btns)
-        layout.addSpacing(10)
-        #layout.addWidget(hint)
-
+    def _toggle_max_restore(self):
+        """Toggle between maximized and normal window state"""
+        if self.window().isMaximized():
+            self.window().showNormal()
+        else:
+            self.window().showMaximized()
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QtGui.QIcon())
-
+        self.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint)
         central = QtWidgets.QStackedWidget()
         self.setCentralWidget(central)
 

@@ -183,7 +183,7 @@ for r in resps:
                 metadata=metadata
             )
 
-        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m).\033[38;2;189;252;201m\tSee: https://platform.openai.com/batches.\033[37m")
+        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m). \033[38;2;189;252;201mSee: https://platform.openai.com/batches.\033[37m")
     
     def step_4_poll_batch(self, batch_id = "current", check_every_s: float = 5):
         """
