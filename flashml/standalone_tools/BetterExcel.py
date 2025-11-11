@@ -4,7 +4,7 @@ import typing as t
 import re
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
-
+import time
 
 APP_NAME = "Better Excel"
 
@@ -240,19 +240,28 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, model: DataFrameModel):
         super().__init__()
         self.model = model
-
+        # Cache font metrics
+        self._metrics_cache = {}
+    
     def sizeHint(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex) -> QtCore.QSize:
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
+        
+        # Fast path: short text without newlines
+        if len(text) < 100 and '\n' not in text:
+            font = option.font
+            metrics = QtGui.QFontMetrics(font)
+            width = metrics.horizontalAdvance(text) + 28  # padding
+            height = metrics.lineSpacing() + 8
+            return QtCore.QSize(width, height)
+        
+        # Slow path for multiline/long text
         doc = QtGui.QTextDocument()
-        doc.setDefaultFont(option.widget.font() if option.widget else option.font)
+        doc.setDefaultFont(option.font)
         doc.setPlainText(text)
         doc.setTextWidth(option.rect.width())
         
-        # Add vertical margins to match paint() method's adjusted rect
-        # paint() uses: rect = option.rect.adjusted(4, 2, -4, -2)
-        # So vertical margin = 2px top + 2px bottom = 4px
         content_height = doc.size().height()
-        total_height = int(content_height + 6)  # +4px margin + round up
+        total_height = int(content_height + 6)
         
         return QtCore.QSize(int(doc.idealWidth()), total_height)
 
@@ -680,7 +689,7 @@ class DataViewerPage(QtWidgets.QWidget):
         toolbar.addSeparator()
 
         # --- Other Actions ---
-        self.btn_autosize = QtGui.QAction("Autosize Columns", self)
+        self.btn_autosize = QtGui.QAction("Autosize", self)
         self.btn_autosize.triggered.connect(lambda: self.autosize_columns(force=True))
         toolbar.addAction(self.btn_autosize)
 
@@ -748,6 +757,32 @@ class DataViewerPage(QtWidgets.QWidget):
         self.status = QtWidgets.QStatusBar()
         self.status.setFixedHeight(24)
 
+        # Background task indicator (bottom-left corner)
+        self.bg_indicator = QtWidgets.QLabel("")
+        self.bg_indicator.setStyleSheet("""
+            QLabel {
+                background-color: #FFC107;
+                color: black;
+                padding: 4px 12px;
+                border-radius: 4px;
+                font-weight: 600;
+                border: 1px solid #E65100;
+            }
+        """)
+        self.bg_indicator.hide()
+        self.status.addWidget(self.bg_indicator)  # Left side of status bar
+
+        # Timer for updating elapsed time & progress
+        self.bg_timer = QtCore.QTimer()
+        self.bg_timer.setInterval(500)  # Update every 500ms for smoother progress
+        self.bg_timer.timeout.connect(self._update_bg_indicator)
+
+        # Progress tracking
+        self.bg_start_time = None
+        self.bg_task_name = ""
+        self.bg_total_rows = 0
+        self.bg_current_row = 0
+
         # Add everything to layout
         outer.addWidget(self.controls)
         outer.addWidget(toolbar)
@@ -769,6 +804,41 @@ class DataViewerPage(QtWidgets.QWidget):
                 self.model.set_search_term("")
                 self.model.set_search_term(current_term)
                 self.table.viewport().update()  # 👈 Force immediate repaint
+                
+                
+    def _show_background_indicator(self, task_name: str, total_rows: int, current_row: int = 0):
+        """Show the background processing indicator with progress and elapsed time"""
+        self.bg_task_name = task_name
+        self.bg_start_time = time.time()
+        self.bg_total_rows = total_rows
+        self.bg_current_row = current_row
+        self.bg_indicator.show()
+        self._update_bg_indicator()
+        self.bg_timer.start()
+
+    def _hide_background_indicator(self):
+        """Hide the background processing indicator"""
+        self.bg_timer.stop()
+        self.bg_indicator.hide()
+        self.bg_start_time = None
+        self.bg_task_name = ""
+        self.bg_total_rows = 0
+        self.bg_current_row = 0
+
+    def _update_bg_indicator(self):
+        """Update the progress and elapsed time in the indicator"""
+        if self.bg_start_time is None or not self.isVisible():
+            return
+        
+        elapsed = int(time.time() - self.bg_start_time)
+        
+        # Show both progress % and elapsed time
+        if self.bg_total_rows > 0:
+            progress = (self.bg_current_row / self.bg_total_rows) * 100
+            self.bg_indicator.setText(f"{self.bg_task_name}… ({progress:.1f}% - {elapsed}s)")
+        else:
+            self.bg_indicator.setText(f"{self.bg_task_name}… ({elapsed}s)")
+    
     def _on_column_moved(self, logical_index, old_visual_index, new_visual_index):
         """Reorder DataFrame columns when user drags column header"""
         if not self.model or old_visual_index == new_visual_index:
@@ -869,10 +939,12 @@ class DataViewerPage(QtWidgets.QWidget):
         self._update_replace_buttons()
         
     def load_path(self, path: Path):
+        self._hide_background_indicator()
+    
         original_text = self.dd.icon.text()
         self.dd.icon.setText("Loading…")
-        QtWidgets.QApplication.processEvents()  # Ensure UI updates immediately
-    
+        QtWidgets.QApplication.processEvents()
+        
         try:
             if path.suffix.lower() == ".csv":
                 df = pd.read_csv(path, low_memory=False)
@@ -886,6 +958,7 @@ class DataViewerPage(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
             return
+    
         self.current_path = path
         self.model = DataFrameModel(df)
         self.model._is_dark = self.mode_toggle.isChecked()
@@ -911,9 +984,11 @@ class DataViewerPage(QtWidgets.QWidget):
         self.dd.hide()
         self.status.showMessage(f"Loaded: {path}  |  {df.shape[0]} rows × {df.shape[1]} cols")
         
-        # Size columns and rows efficiently
+        # Size columns first (fast)
         self.autosize_columns(force=True)
-        self._autosize_all_rows()  # Full sizing on load
+        
+        # Defer row sizing - let UI paint first
+        QtCore.QTimer.singleShot(50, self._autosize_all_rows)
         
         # Reset search state
         self.current_match_pos = -1
@@ -921,7 +996,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.font_scale = 1.0
         self.model.set_search_term("")
         self._on_matches_changed(0)
-
+        
         # Enter full screen AFTER file is loaded
         self.window().showFullScreen()
 
@@ -1061,29 +1136,46 @@ class DataViewerPage(QtWidgets.QWidget):
         if not self.model:
             return
         
+        # Cache metrics and calculate once
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
+        avg_char_width = metrics.averageCharWidth()
         min_w, max_w = 80, 650
         
-        # Process in batches for large column counts
-        col_count = self.model.columnCount()
-        for c in range(col_count):
+        # Sample size: 200 rows is enough for most cases
+        SAMPLE_SIZE = 200
+        df_sample = self.model.df.head(SAMPLE_SIZE) if len(self.model.df) > SAMPLE_SIZE else self.model.df
+        
+        for c in range(self.model.columnCount()):
             header = str(self.model.df.columns[c])
-            col = self.model.df.iloc[:, c]
-            sample = col.dropna().astype(str).head(1000)
-            avg_len = sample.str.len().mean() if not sample.empty else 5
+            col = df_sample.iloc[:, c]
             
-            # Special handling for ID columns
+            # Initialize avg_len with a default value
+            avg_len = 8  # ← FIX: Define it here
+            
+            # Fast path: numeric columns need less width
+            if pd.api.types.is_numeric_dtype(col):
+                # Find max numeric width
+                max_val = col.dropna().abs().max() if not col.dropna().empty else 0
+                avg_len = len(f"{max_val:.2f}") if pd.notna(max_val) else 8  # ← Assign here
+            else:
+                # Use vectorized string length calculation
+                sample = col.dropna().astype(str)
+                if not sample.empty:
+                    avg_len = sample.str.len().mean()
+                    avg_len = min(avg_len, 100)  # Cap extremely long text
+                else:
+                    avg_len = 8  # ← Fallback here
+            
+            # Now avg_len is always defined
             is_id_col = "id" in header.strip().lower() and avg_len <= 16
-            base = 8 if is_id_col else avg_len
-            
-            # Calculate width based on header and content
-            w = int(metrics.averageCharWidth() * (base + len(header) * 0.15)) + 28
+            base = 8 if is_id_col else int(avg_len)
+            w = int(avg_char_width * (base + len(header) * 0.15)) + 28
             w = max(min_w, min(max_w, w))
             
-            # Set width without triggering multiple resize events
+            # Set width without triggering multiple signals
             self.table.horizontalHeader().resizeSection(c, w)
-
+    
     # === NEW: Column resize handler (debounced) ===
     def _on_column_resized(self, logical_index: int, old_size: int, new_size: int):
         """Triggered when any column is resized. Starts debounced row update."""
@@ -1169,38 +1261,54 @@ class DataViewerPage(QtWidgets.QWidget):
 
     # === NEW: Handle scrolling for on-demand row sizing ===
     def _on_scroll(self, value):
-        """Precalculate rows as they come into view during scrolling."""
+        """Precalculate rows as they come into view - optimized version"""
         if not self.model:
             return
         
-        # Only check every ~80 pixels of scrolling to avoid overhead
-        if abs(value - self._last_scroll_value) < 80:
+        # More aggressive throttling
+        if abs(value - self._last_scroll_value) < 150:
             return
         
         self._last_scroll_value = value
         
-        # Get rows at viewport edges
-        viewport = self.table.viewport()
-        top_row = self.table.rowAt(0)
-        bottom_row = self.table.rowAt(viewport.height())
-        
-        if top_row == -1 or bottom_row == -1:
+        # Get viewport boundaries more efficiently
+        viewport_height = self.table.viewport().height()
+        if viewport_height <= 0:
             return
         
-        # Add buffer
-        BUFFER_ROWS = 30
+        top_row = self.table.rowAt(0)
+        bottom_row = self.table.rowAt(viewport_height)
+        
+        # Validate row indices
+        if top_row == -1:
+            top_row = max(0, int(value / self.table.verticalHeader().defaultSectionSize()) - 10)
+        if bottom_row == -1:
+            bottom_row = min(self.model.rowCount() - 1, top_row + 100)
+        
+        # Add smaller buffer for better performance
+        BUFFER_ROWS = 20
         top_row = max(0, top_row - BUFFER_ROWS)
         bottom_row = min(self.model.rowCount() - 1, bottom_row + BUFFER_ROWS)
         
-        # Quick check: if rows already have reasonable height, skip
-        # This prevents re-processing already-sized rows
+        # Check if rows already have reasonable height
         font_metrics = QtGui.QFontMetrics(self.table.font())
         min_expected_height = font_metrics.lineSpacing() + 8
         
+        # Process only rows that need it
         for row in range(top_row, bottom_row + 1):
             if self.table.rowHeight(row) < min_expected_height:
-                self.table.resizeRowToContents(row)
-
+                # Double-check if this row actually needs resizing
+                needs_resize = False
+                for c in range(self.model.columnCount()):
+                    val = self.model.df.iat[row, c]
+                    if pd.notna(val):
+                        s = str(val)
+                        if '\n' in s or len(s) > 100:  # Only resize if multiline or very long
+                            needs_resize = True
+                            break
+                
+                if needs_resize:
+                    self.table.resizeRowToContents(row)
     # === NEW: Full recalculation on initial load ===
     def _autosize_all_rows(self):
         """Full recalculation of all row heights - called only on file load."""
@@ -1208,28 +1316,105 @@ class DataViewerPage(QtWidgets.QWidget):
             return
         
         row_count = self.model.rowCount()
+        if row_count == 0:
+            return
         
-        # For large tables, show wait cursor and use batching
-        if row_count > 500:
+        # Calculate a smart default height based on font
+        font = self.table.font()
+        metrics = QtGui.QFontMetrics(font)
+        default_height = metrics.lineSpacing() + 8
+        self.table.verticalHeader().setDefaultSectionSize(default_height)
+        
+        # Identify columns that might contain multiline content
+        text_columns = []
+        for c in range(self.model.columnCount()):
+            col_data = self.model.df.iloc[:, c]
+            if col_data.dtype == object:
+                sample = col_data.dropna().head(100)
+                if sample.astype(str).str.contains('\n').any() or sample.astype(str).str.len().max() > 200:
+                    text_columns.append(c)
+        
+        if not text_columns:
+            return  # Fast exit: no columns need row height adjustment
+        
+        # Show indicator for large tables
+        show_indicator = row_count > 500
+        if show_indicator:
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
-            QtWidgets.QApplication.processEvents()
-            
-            # Batched processing for very large tables
-            batch_size = 100
-            for start in range(0, row_count, batch_size):
-                end = min(start + batch_size, row_count)
-                for row in range(start, end):
-                    self.table.resizeRowToContents(row)
-                # Allow UI to remain responsive
-                if start % 500 == 0:
-                    QtWidgets.QApplication.processEvents()
-        else:
-            # Fast path for smaller tables
-            self.table.resizeRowsToContents()
+            self._show_background_indicator("Autosizing rows", row_count, 0)
         
-        if row_count > 500:
+        # Process initial rows (limit to 500 for initial load)
+        initial_limit = min(500, row_count)
+        
+        for start_row in range(0, initial_limit, 50):
+            end_row = min(start_row + 50, initial_limit)
+            
+            # Update progress
+            if show_indicator:
+                self.bg_current_row = end_row
+                self._update_bg_indicator()
+            
+            for row in range(start_row, end_row):
+                # Quick check before resizing
+                needs_resize = False
+                for col in text_columns:
+                    val = self.model.df.iat[row, col]
+                    if pd.notna(val):
+                        s = str(val)
+                        if '\n' in s or len(s) > 200:
+                            needs_resize = True
+                            break
+                
+                if needs_resize:
+                    self.table.resizeRowToContents(row)
+            
+            # Keep UI responsive
+            if show_indicator and start_row % 200 == 0:
+                QtWidgets.QApplication.processEvents()
+        
+        if show_indicator:
             QtWidgets.QApplication.restoreOverrideCursor()
-
+        
+        # Start background processing for remaining rows
+        remaining_rows = row_count - initial_limit
+        if remaining_rows > 0:
+            # Continue progress from where we left off
+            self.bg_current_row = initial_limit
+            self._update_bg_indicator()
+            QtCore.QTimer.singleShot(100, lambda: self._background_resize_remaining(initial_limit))
+        else:
+            self._hide_background_indicator()  # Hide if no background work needed
+        
+    def _background_resize_remaining(self, start_row):
+        """Process remaining rows in very small batches"""
+        if not self.model:
+            self._hide_background_indicator()
+            return
+        
+        total_rows = self.model.rowCount()
+        if start_row >= total_rows:
+            self._hide_background_indicator()
+            return
+        
+        # Process in tiny batches to avoid any UI lag
+        BATCH_SIZE = 25
+        end_row = min(start_row + BATCH_SIZE, total_rows)
+        
+        # Update progress
+        self.bg_current_row = end_row
+        
+        for row in range(start_row, end_row):
+            self.table.resizeRowToContents(row)
+        
+        # Update progress display
+        self._update_bg_indicator()
+        
+        # Schedule next batch or hide indicator
+        if end_row < total_rows:
+            QtCore.QTimer.singleShot(10, lambda: self._background_resize_remaining(end_row))
+        else:
+            self._hide_background_indicator()   
+                
     def toggle_mode(self, checked: bool):
         if self.model:
             self.model._is_dark = checked
@@ -1301,7 +1486,7 @@ class DataViewerPage(QtWidgets.QWidget):
             """
             self.table.setStyleSheet(light_scrollbar_style)
         self.table.viewport().update()
-            
+                
         
 class DiffTextEdit(QtWidgets.QTextEdit):
     def __init__(self):
