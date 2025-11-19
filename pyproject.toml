@@ -29,6 +29,7 @@ dependencies = [
     "pandas",
     "spacy",
     "openai",
+    "google-genai",
     "nbformat",
     "thefuzz", # used for fuzzy matching 
     "kneed", # used to find the best number of clusters for K-means clustering
@@ -62,7 +63,9 @@ dependencies = [
     "sphinx",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
-    "dspy"
+    "dspy",
+    "fuzzywuzzy",
+    "python-Levenshtein",
     #,
 
     

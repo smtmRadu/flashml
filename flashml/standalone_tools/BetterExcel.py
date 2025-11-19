@@ -82,12 +82,16 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.ItemDataRole.BackgroundRole:
             text = "" if pd.isna(val) else str(val).lower()
 
+            # --- DELETE OR COMMENT OUT THIS BLOCK ---
             # Row highlight: any cell in row matches?
-            row_has_match = any(m.row() == r for m in self._matches)
-            if row_has_match:
-                return QtGui.QBrush(QtGui.QColor(255, 220, 180, 60))  # light orange
+            # row_has_match = any(m.row() == r for m in self._matches)
+            # if row_has_match:
+            #     return QtGui.QBrush(QtGui.QColor(255, 220, 180, 60))  # light orange
+            # ----------------------------------------
 
+            # --- KEEP THIS BLOCK ---
             # Cell highlight: this cell contains the term
+            # Because the row logic is gone, this will now actually execute!
             if self.search_term and self.search_term.lower() in text:
                 return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))  # light yellow
 
@@ -95,7 +99,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             return QtGui.QBrush(column_shade_color(self._is_dark, c))
 
         return None
-
+    
     def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if role == QtCore.Qt.ItemDataRole.DisplayRole:
             if orientation == QtCore.Qt.Orientation.Horizontal:
@@ -321,17 +325,22 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
                 start = i + text_len
             
             if highlights:
-                layout = doc.documentLayout()
+                # CREATE A HIGHLIGHT FORMAT (Green background)
+                highlight_format = QtGui.QTextCharFormat()
+                highlight_format.setBackground(QtGui.QBrush(QtGui.QColor(0, 200, 0, 140)))
+                highlight_format.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.white)) # Optional: ensure text is readable
+
+                # APPLY FORMAT TO EACH MATCH
                 for pos, length in highlights:
                     cursor = QtGui.QTextCursor(doc)
                     cursor.setPosition(pos)
                     cursor.setPosition(pos + length, QtGui.QTextCursor.MoveMode.KeepAnchor)
-                    block_rect = layout.blockBoundingRect(cursor.block())
-                    selection_rect = QtCore.QRectF(block_rect)
-                    selection_rect.translate(QtCore.QPointF(rect.topLeft()))
-                    painter.fillRect(selection_rect, QtGui.QColor(0, 200, 0, 140))
-        
-        # Draw the text
+                    cursor.mergeCharFormat(highlight_format)
+
+                # REMOVE THE OLD "painter.fillRect" LOOP COMPLETELY
+                # (The lines containing blockBoundingRect and painter.fillRect are deleted)
+
+        # Draw the text (The document now contains the highlight formatting)
         painter.translate(rect.topLeft())
         clip = QtCore.QRectF(0, 0, rect.width(), rect.height())
         doc.drawContents(painter, clip)
@@ -495,7 +504,11 @@ class AnimatedScrollBar(QtWidgets.QScrollBar):
             self._is_dragging = False
         super().mouseReleaseEvent(event)
 
-
+    def setValueInstant(self, value):
+            """Force set value immediately, cancelling any animation."""
+            if self._animation.state() == QtCore.QPropertyAnimation.State.Running:
+                self._animation.stop()
+            super().setValue(value)
 class SmoothScrollTableView(QtWidgets.QTableView):
     """QTableView with smooth animated scrolling for both wheel and scrollbar interactions"""
     def __init__(self, parent=None):
@@ -791,6 +804,8 @@ class DataViewerPage(QtWidgets.QWidget):
         outer.addWidget(self.status)
         
         self.table.hide()
+        
+        
     def on_case_sensitive_toggled(self, checked: bool):
         """Toggle case sensitivity and refresh search"""
         if self.model:
@@ -929,19 +944,59 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.setStyleSheet(self.table.styleSheet() + scrollbar_style)
                              
     def on_search_return_pressed(self):
-        """Triggered when Enter is pressed in the search field."""
+        """
+        1. First Enter: Highlights, keeps exact static view, sets internal pointer to nearest match.
+        2. Subsequent Enters: Jumps to next match.
+        """
         search_text = self.search_edit.text()
         if not self.model:
             return
-        self.model.set_search_term(search_text)
-        self.current_match_pos = -1
-        self.replace_container.setVisible(bool(search_text.strip()))
-        self._update_replace_buttons()
+            
+        current_model_term = self.model.search_term or ""
         
+        # CHECK: Is this a new search term?
+        if search_text != current_model_term:
+            # --- CASE 1: New Term (First Enter) ---
+            
+            # A. Capture current scroll position (Pixel-perfect)
+            current_v_scroll = self.table.verticalScrollBar().value()
+            
+            # B. Update the Search (Highlights appear)
+            self.model.set_search_term(search_text)
+            
+            # C. Show Replace bar (This shrinks the table height, causing the shift)
+            self.replace_container.setVisible(bool(search_text.strip()))
+            self._update_replace_buttons()
+            
+            # D. FORCE INSTANT RESTORE (No animation, no jumping)
+            # This makes the view appear completely static.
+            sb = self.table.verticalScrollBar()
+            if hasattr(sb, 'setValueInstant'):
+                sb.setValueInstant(current_v_scroll)
+            else:
+                sb.setValue(current_v_scroll)
+            
+            # E. Smart Start: Set the "Next" pointer to the first match *after* the current view
+            if self.model.total_matches() > 0:
+                top_row = self.table.rowAt(0)
+                if top_row == -1: top_row = 0
+                
+                start_index = -1
+                for i, idx in enumerate(self.model._matches):
+                    if idx.row() >= top_row:
+                        start_index = i - 1
+                        break
+                self.current_match_pos = start_index
+            else:
+                self.current_match_pos = -1
+
+        else:
+            # --- CASE 2: Same Term (Subsequent Enters) ---
+            # Jump to next match
+            self.go_next_match()
+               
     def load_path(self, path: Path):
         self._hide_background_indicator()
-    
-        original_text = self.dd.icon.text()
         self.dd.icon.setText("Loading…")
         QtWidgets.QApplication.processEvents()
         
@@ -998,7 +1053,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self._on_matches_changed(0)
         
         # Enter full screen AFTER file is loaded
-        self.window().showFullScreen()
+        self.window().showMaximized()
 
     def open_file_dialog(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1586,83 +1641,111 @@ class DiffPage(QtWidgets.QWidget):
         self.right_edit.cursorPositionChanged.connect(lambda: self._sync_selection(self.right_edit, self.left_edit))
 
     def _sync_selection(self, source_edit: QtWidgets.QTextEdit, target_edit: QtWidgets.QTextEdit):
-        """Synchronize text selection from source to target editor with vertical alignment"""
+        """Synchronize text selection using Regex for multi-line and forced cleanup for stuck highlights."""
         if self._syncing_selection:
             return
-        
-        # Always clear target selection first
-        self._clear_selection(target_edit)
-        
-        cursor = source_edit.textCursor()
-        if not cursor.hasSelection():
-            return
-        
-        selected_text = cursor.selectedText()
-        if not selected_text:
-            return
 
-        # Detect if selection is in diff-only region
-        start_cursor = QtGui.QTextCursor(cursor)
-        start_cursor.setPosition(cursor.selectionStart())
-        char_format = start_cursor.charFormat()
-        bg_color = char_format.background().color()
-        
-        # Check if background is red (deleted) or green (inserted)
-        is_red = bg_color.red() > 150 and bg_color.green() < 80 and bg_color.blue() < 80
-        is_green = bg_color.green() > 120 and bg_color.red() < 80 and bg_color.blue() < 80
-        
-        if is_red or is_green:
-            # Don't sync diff-only text - just keep cleared state
-            return
-        
-        # Find and highlight matching text in target
-        target_doc = target_edit.document()
-        find_cursor = target_doc.find(selected_text, 0)
-        
-        if find_cursor.isNull():
-            return
-            
         self._syncing_selection = True
-        
-        # Calculate relative position for scroll alignment
-        source_rect = source_edit.cursorRect(cursor)
-        source_viewport_height = source_edit.viewport().height()
-        
-        if source_viewport_height > 0:
-            source_rel_y = source_rect.center().y() / source_viewport_height
-            source_rel_y = max(0.0, min(1.0, source_rel_y))
-            
-            target_edit.setTextCursor(find_cursor)
-            target_rect = target_edit.cursorRect(find_cursor)
-            target_viewport_height = target_edit.viewport().height()
-            
-            if target_viewport_height > 0:
-                target_scrollbar = target_edit.verticalScrollBar()
-                current_scroll = target_scrollbar.value()
-                desired_viewport_y = source_rel_y * target_viewport_height
-                delta_y = target_rect.top() - desired_viewport_y
-                new_scroll = current_scroll + delta_y
-                new_scroll = max(0, min(new_scroll, target_scrollbar.maximum()))
-                target_scrollbar.setValue(int(new_scroll))
-        
-        # Create and apply new highlight
-        selection = QtWidgets.QTextEdit.ExtraSelection()
-        selection.cursor = find_cursor
-        selection.format.setBackground(QtGui.QColor(0, 150, 255, 100))
-        selection.format.setProperty(QtGui.QTextFormat.Property.FullWidthSelection, False)
-        
-        target_edit.setExtraSelections([selection])
-        target_edit.viewport().update()
-        
-        self._syncing_selection = False
+        try:
+            # --- FIX 1: STUCK SELECTION ---
+            # Immediately clear highlights on BOTH sides. 
+            # This ensures that if you just clicked to deselect (hasSelection is False),
+            # the old artifacts are removed immediately.
+            source_edit.setExtraSelections([])
+            target_edit.setExtraSelections([])
 
+            cursor = source_edit.textCursor()
+            if not cursor.hasSelection():
+                return
+
+            text = cursor.selectedText()
+            if not text.strip():
+                return
+
+            # Detect if selection is in diff-only region (red/green background)
+            start_cursor = QtGui.QTextCursor(cursor)
+            start_cursor.setPosition(cursor.selectionStart())
+            char_format = start_cursor.charFormat()
+            bg_color = char_format.background().color()
+
+            # Check strictly for the diff colors defined in run_compare
+            is_red = bg_color.red() > 150 and bg_color.green() < 80 and bg_color.blue() < 80
+            is_green = bg_color.green() > 120 and bg_color.red() < 80 and bg_color.blue() < 80
+
+            if is_red or is_green:
+                return
+
+            # --- FIX 2: MULTI-LINE SELECTION ---
+            # Split selection into words and create a Regex pattern.
+            # This finds the words regardless of whether the gap is a space, \n, or \u2029
+            parts = text.split()
+            if not parts:
+                return
+                
+            # Escape parts to handle special chars like brackets or dots in the text
+            safe_parts = [QtCore.QRegularExpression.escape(p) for p in parts]
+            
+            # Join words with \s+ (matches any whitespace sequence including newlines)
+            pattern = r"\s+".join(safe_parts)
+            regex = QtCore.QRegularExpression(pattern)
+            
+            target_doc = target_edit.document()
+            
+            # Determine search direction
+            sel_start = cursor.selectionStart()
+            source_mid = source_edit.document().characterCount() // 2
+
+            if sel_start < source_mid:
+                find_cursor = target_doc.find(regex, 0)
+            else:
+                text_length = target_doc.characterCount()
+                find_cursor = target_doc.find(regex, text_length - 1,
+                                              QtGui.QTextDocument.FindFlag.FindBackward)
+
+            if find_cursor.isNull():
+                return
+
+            # Scroll alignment
+            source_rect = source_edit.cursorRect(cursor)
+            source_viewport_height = source_edit.viewport().height()
+
+            if source_viewport_height > 0:
+                source_rel_y = source_rect.center().y() / source_viewport_height
+                source_rel_y = max(0.0, min(1.0, source_rel_y))
+
+                target_edit.setTextCursor(find_cursor)
+                target_rect = target_edit.cursorRect(find_cursor)
+                target_viewport_height = target_edit.viewport().height()
+
+                if target_viewport_height > 0:
+                    target_scrollbar = target_edit.verticalScrollBar()
+                    current_scroll = target_scrollbar.value()
+                    desired_y = source_rel_y * target_viewport_height
+                    delta_y = target_rect.top() - desired_y
+                    new_scroll = current_scroll + delta_y
+                    new_scroll = max(0, min(new_scroll, target_scrollbar.maximum()))
+                    target_scrollbar.setValue(int(new_scroll))
+
+            # Apply blue highlight
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.cursor = find_cursor
+            selection.format.setBackground(QtGui.QColor(0, 150, 255, 100))
+            selection.format.setProperty(QtGui.QTextFormat.Property.FullWidthSelection, False)
+
+            target_edit.setExtraSelections([selection])
+            
+        finally:
+            # Ensure flag is reset even if we returned early
+            self._syncing_selection = False
     def _clear_selection(self, edit: QtWidgets.QTextEdit):
         """Clear extra selection highlights in the given editor"""
+        if self._syncing_selection:
+            return
         self._syncing_selection = True
         edit.setExtraSelections([])
-        edit.viewport().update()  # Force immediate repaint
+        edit.viewport().update()
         self._syncing_selection = False
-
+        
     def set_up_shortcuts(self):
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Undo, self, self.undo_text)
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Redo, self, self.redo_text)
@@ -1702,7 +1785,8 @@ class DiffPage(QtWidgets.QWidget):
 
     def run_compare(self):
         from html import escape as esc
-        import difflib, re
+        import difflib
+        import re
 
         left = self.left_edit.toPlainText()
         right = self.right_edit.toPlainText()
@@ -1877,6 +1961,12 @@ class MainWindow(QtWidgets.QMainWindow):
         apply_dark_palette(QtWidgets.QApplication.instance())
 
         self._create_shortcuts()
+        
+        self._last_screen = None
+        self._screen_change_timer = QtCore.QTimer()
+        self._screen_change_timer.setSingleShot(True)
+        self._screen_change_timer.setInterval(100)
+        self._is_initial_move = True
 
     def _create_shortcuts(self):
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self, activated=self._focus_search)
@@ -1912,11 +2002,24 @@ class MainWindow(QtWidgets.QMainWindow):
         y = screen_geometry.y() + (screen_geometry.height() - self.height()) // 2
         
         self.move(x, y)
+
+    def back_to_start(self):
+        self.centralWidget().setCurrentWidget(self.start)
+        self.showNormal()
+        self.resize(520, 320)
+        self.center_on_screen()
         
+    def moveEvent(self, event):
+        """Detect when window moves and check for screen changes"""
+        super().moveEvent(event)
+        # Trigger screen change check with debounce
+        self._screen_change_timer.start()
+
     def enter_viewer(self):
         self.centralWidget().setCurrentWidget(self.viewer)
+        # --- CHANGE: Use maximized instead of full-screen to avoid DPI issues ---
         if self.viewer.model is not None:
-            self.showFullScreen()
+            self.showMaximized()  # Better than fullScreen for multi-screen
         else:
             self.showNormal()
             self.resize(520, 320)
@@ -1924,23 +2027,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def enter_diff(self):
         self.centralWidget().setCurrentWidget(self.diff)
-        self.showFullScreen()
-
-    def back_to_start(self):
-        self.centralWidget().setCurrentWidget(self.start)
-        self.showNormal()
-        self.resize(520, 320)
-        self.center_on_screen()
-
+        self.showMaximized()  # Better than fullScreen for multi-screen
 
 def main():
+    from PyQt6 import QtCore
+    
+    QtWidgets.QApplication.setHighDpiScaleFactorRoundingPolicy(
+        QtCore.Qt.HighDpiScaleFactorRoundingPolicy.Round
+    )
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     win = MainWindow()
     win.show()
-    win.center_on_screen()
+    
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

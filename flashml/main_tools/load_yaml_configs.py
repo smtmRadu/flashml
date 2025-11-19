@@ -1,7 +1,8 @@
 import yaml
 from pathlib import Path
 from typing import Any
-
+import argparse
+from typing import Any
 
 class ConfigObject:
     """
@@ -34,10 +35,69 @@ class ConfigObject:
         return result
     
     def __repr__(self) -> str:
-        """String representation of the config object."""
-        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
         return f"ConfigObject({attrs})"
-    
+
+    # ------------------------------------------------------------------
+    # 2.  Pretty tree representation (what you asked for)
+    # ------------------------------------------------------------------
+    def __str__(self) -> str:
+        """Return a pretty, fully-expanded tree of the whole config."""
+        lines = []
+        self._build_tree(lines, prefix="", is_last=True)
+        return "\n".join(lines)
+
+    def _build_tree(
+        self,
+        lines: list[str],
+        prefix: str = "",
+        is_last: bool = True,
+    ) -> None:
+        """
+        Recursively build an ASCII tree similar to the Linux `tree` command.
+        
+        Prints debug information about the building process.
+        
+        prefix  : indentation string built up while descending
+        is_last : True if this node is the last sibling (affects the corner char)
+        """
+        items = [(k, v) for k, v in self.__dict__.items() if not k.startswith("_")]
+
+        for idx, (key, value) in enumerate(items):
+            is_last_item = idx == len(items) - 1
+            corner = "└── " if is_last_item else "├── "
+            
+            # Debug: Show the current key being processed
+            print(f"{prefix}{corner}{key}")
+            
+            lines.append(f"{prefix}{corner}{key}")
+            
+            if isinstance(value, ConfigObject):
+                # Debug: Show when descending into a ConfigObject
+                print(f"{prefix}    Descending into ConfigObject: {key}")
+                # Recursively build the tree for the nested ConfigObject
+                extension = "    " if is_last_item else "│   "
+                value._build_tree(lines, prefix + extension, True)
+            elif isinstance(value, list):
+                # Debug: Show when processing a list
+                print(f"{prefix}    Processing list: {key}")
+                # Print list elements, converting nested ConfigObjects on the fly
+                for i, elem in enumerate(value):
+                    elem_corner = "└── " if i == len(value) - 1 else "├── "
+                    if isinstance(elem, ConfigObject):
+                        print(f"{prefix}    Found ConfigObject in list: [{i}]")
+                        lines.append(f"{prefix}    {elem_corner}[{i}]")
+                        elem._build_tree(
+                            lines,
+                            prefix + ("    " if is_last_item else "│   ") + "    ",
+                            True,
+                        )
+                    else:
+                        lines.append(f"{prefix}    {elem_corner}[{i}] {elem!r}")
+            else:
+                # Plain leaf value
+                lines[-1] += f": {value!r}"
+                
     def __getitem__(self, key: str) -> Any:
         """Allow dictionary-style access as well."""
         return getattr(self, key)
@@ -97,7 +157,7 @@ def load_yaml_configs(config_path: str = "configs") -> ConfigObject:
         - Both .yaml and .yml extensions are supported
     """
     config_path = Path(config_path)
-    
+
     if not config_path.exists():
         raise FileNotFoundError(f"Config path not found: {config_path}")
     

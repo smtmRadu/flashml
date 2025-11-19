@@ -164,7 +164,7 @@ for r in resps:
         self.CURRENT__file_id = input_file.id
         print(f"[2] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File ID: \033[32m{input_file.id}\033[38;2;189;252;201m) uploaded.\033[37m")
         
-    def step_3_create_batch(self, file_id:str="current", metadata:dict = {}):
+    def step_3_create_batch_job(self, file_id:str="current", metadata:dict = {}):
         from flashml import bell
         """Puts the batch into processing. You can cancel the batch at anytime. 
 
@@ -183,7 +183,7 @@ for r in resps:
                 metadata=metadata
             )
 
-        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m). \033[38;2;189;252;201mSee: https://platform.openai.com/batches.\033[37m")
+        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch Job created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m). \033[38;2;189;252;201mSee: https://platform.openai.com/batches.\033[37m")
     
     def step_4_poll_batch(self, batch_id = "current", check_every_s: float = 5):
         """

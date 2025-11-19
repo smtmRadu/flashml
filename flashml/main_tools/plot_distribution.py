@@ -18,6 +18,7 @@ def plot_dist(
     import plotly.io as pio
     import numpy as np
     MAX_XTICKS: int = 100
+    GRID_COLOR = 'rgba(150, 150, 150, 0.3)'
     pio.templates.default = "plotly_dark"
     
     scale = 1.0 if size == "big" else 0.66
@@ -207,11 +208,13 @@ def plot_dist(
         # Calculate statistics if all values are numeric
         dict_mean = None
         dict_std = None
+        dict_median = None
         if all(isinstance(v, (int, float)) and v is not None for v in freq_dict.values()):
             values_for_stats = [v for v in freq_dict.values() if v is not None]
             if values_for_stats:
                 dict_mean = np.mean(values_for_stats)
                 dict_std = np.std(values_for_stats)
+                dict_median = np.median(values_for_stats)
         
         items = list(freq_dict.items())
         if sort:
@@ -271,7 +274,7 @@ def plot_dist(
         width = int(max(1100, min(1200, num_items * 40)) * scale)
         height = int(max(500, min(800, 300 + num_items * 5)) * scale)
         
-        title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}" if dict_mean is not None else ""
+        title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}, median={dict_median:.2f}" if dict_mean is not None else ""
         fig.update_layout(
             title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''}{title_suffix})",
             title_font_size=title_font_size,  # ADD THIS LINE
@@ -284,9 +287,11 @@ def plot_dist(
                 tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
                 showticklabels=len(str_keys) <= MAX_XTICKS,
                 showgrid=draw_details,
+                gridcolor=GRID_COLOR
             ),
             yaxis=dict(
                 showgrid=draw_details,
+                gridcolor=GRID_COLOR
             ),
             margin=dict(
                 l=50,
@@ -312,10 +317,12 @@ def plot_dist(
     # Calculate statistics for numeric data
     mean_val = None
     std_val = None
+    median_val = None
     if non_none_data and all(is_number(x) for x in non_none_data):
         numeric_data = [float(x) for x in non_none_data]
         mean_val = np.mean(numeric_data)
         std_val = np.std(numeric_data)
+        median_val = np.median(numeric_data)
 
     if len(non_none_data) == 0:
         keys = ["None"]
@@ -347,8 +354,9 @@ def plot_dist(
             width=int(800 * scale),
             height=int(500 * scale),
             showlegend=False,
-            xaxis=dict(showgrid=draw_details),
-            yaxis=dict(showgrid=draw_details),
+            xaxis=dict(showgrid=draw_details,gridcolor=GRID_COLOR),
+            yaxis=dict(showgrid=draw_details, gridcolor=GRID_COLOR),
+            
             margin=dict(l=50, r=50, t=80, b=50),
         )
         if draw_details:
@@ -420,7 +428,7 @@ def plot_dist(
         height = int(max(500, min(800, 300 + num_items * 5)) * scale)
         unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
         
-        title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
+        title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
         fig.update_layout(
             title=f"{title} ({len(data_list)} elements, {unique_count} unique{title_suffix})",
             title_font_size=title_font_size,  # ADD THIS LINE
@@ -433,9 +441,11 @@ def plot_dist(
                 tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
                 showticklabels=len(keys) <= MAX_XTICKS,
                 showgrid=draw_details,
+                gridcolor=GRID_COLOR
             ),
             yaxis=dict(
                 showgrid=draw_details,
+                gridcolor=GRID_COLOR
             ),
             margin=dict(
                 l=50,
@@ -498,7 +508,7 @@ def plot_dist(
         if xlabel_rotation <= 10:
             xlabel_rotation = 0
     
-    title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}" if mean_val is not None else ""
+    title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
     fig.update_layout(
         title=f"{title} ({len(data_list)} elements{title_suffix})",
         title_font_size=title_font_size,  # ADD THIS LINE
@@ -511,9 +521,11 @@ def plot_dist(
             tickangle=-xlabel_rotation if xlabel_rotation > 0 else 0,
             showticklabels=len(x_labels) <= MAX_XTICKS,
             showgrid=draw_details,
+            gridcolor=GRID_COLOR
         ),
         yaxis=dict(
             showgrid=draw_details,
+            gridcolor=GRID_COLOR
         ),
         margin=dict(
             l=50,
