@@ -493,11 +493,19 @@ class AnimatedScrollBar(QtWidgets.QScrollBar):
             if self._animation.state() == QtCore.QPropertyAnimation.State.Running:
                 self._animation.stop()
             super().setValue(value)
+
+
 class SmoothScrollTableView(QtWidgets.QTableView):
-    """QTableView with smooth animated scrolling for both wheel and scrollbar interactions"""
+    """QTableView with smooth animated scrolling for both wheel and scrollbar interactions
+    
+    Features:
+    - Animated scrolling via AnimatedScrollBar
+    - Wheel event smoothing
+    - 2D Middle-click autoscroll (NEW) - hold middle button and move mouse to scroll in any direction
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Enable per-pixel scrolling (already smooth for drag operations)
+        # Enable per-pixel scrolling
         self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
         
@@ -507,6 +515,181 @@ class SmoothScrollTableView(QtWidgets.QTableView):
         
         self.setVerticalScrollBar(v_scrollbar)
         self.setHorizontalScrollBar(h_scrollbar)
+        
+        # --- 2D Middle-click autoscroll support ---
+        self._autoscroll_active = False
+        self._autoscroll_origin = None
+        self._autoscroll_speed_x = 0
+        self._autoscroll_speed_y = 0
+        self._autoscroll_deadzone = 15  # pixels before scrolling starts
+        self._autoscroll_sensitivity = 0.35  # INCREASED for faster scrolling
+        
+        # Timer for smooth autoscroll updates
+        self._autoscroll_timer = QtCore.QTimer()
+        self._autoscroll_timer.setInterval(16)  # ~60fps
+        self._autoscroll_timer.timeout.connect(self._update_autoscroll)
+        
+    def mousePressEvent(self, event: QtGui.QMouseEvent):
+        # Any button press while autoscrolling should stop it
+        if self._autoscroll_active:
+            self._stop_autoscroll()
+            
+        # Middle button starts 2D autoscroll
+        if event.button() == QtCore.Qt.MouseButton.MiddleButton:
+            v_scrollbar = self.verticalScrollBar()
+            h_scrollbar = self.horizontalScrollBar()
+            
+            # Only enable if there's actual content to scroll (vertical OR horizontal)
+            has_vertical = v_scrollbar.maximum() > v_scrollbar.minimum()
+            has_horizontal = h_scrollbar.maximum() > h_scrollbar.minimum()
+            
+            if has_vertical or has_horizontal:
+                self._autoscroll_active = True
+                self._autoscroll_origin = event.position().toPoint()
+                self.viewport().setCursor(QtCore.Qt.CursorShape.SizeAllCursor)  # 2D cursor
+                self._autoscroll_timer.start()
+                event.accept()
+                return
+            
+        super().mousePressEvent(event)
+        
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
+        # Middle button stops autoscroll
+        if event.button() == QtCore.Qt.MouseButton.MiddleButton and self._autoscroll_active:
+            self._stop_autoscroll()
+            event.accept()
+            return
+            
+        super().mouseReleaseEvent(event)
+        
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+        # Update autoscroll speed based on mouse position (2D)
+        if self._autoscroll_active and self._autoscroll_origin:
+            # Calculate distance from origin for both axes
+            delta_x = event.position().x() - self._autoscroll_origin.x()
+            delta_y = event.position().y() - self._autoscroll_origin.y()
+            
+            # Apply deadzone to horizontal
+            if abs(delta_x) < self._autoscroll_deadzone:
+                self._autoscroll_speed_x = 0
+            else:
+                effective_delta_x = delta_x - (self._autoscroll_deadzone * (1 if delta_x > 0 else -1))
+                self._autoscroll_speed_x = effective_delta_x * self._autoscroll_sensitivity
+            
+            # Apply deadzone to vertical
+            if abs(delta_y) < self._autoscroll_deadzone:
+                self._autoscroll_speed_y = 0
+            else:
+                effective_delta_y = delta_y - (self._autoscroll_deadzone * (1 if delta_y > 0 else -1))
+                self._autoscroll_speed_y = effective_delta_y * self._autoscroll_sensitivity
+            
+        super().mouseMoveEvent(event)
+        
+    def leaveEvent(self, event: QtGui.QEvent):
+        # Stop autoscroll if mouse leaves viewport
+        if self._autoscroll_active:
+            self._stop_autoscroll()
+        super().leaveEvent(event)
+        
+    def _update_autoscroll(self):
+        """Update scroll position based on autoscroll speed (both axes)"""
+        if not self._autoscroll_active:
+            return
+            
+        # Update vertical scrollbar - bypass animation
+        if self._autoscroll_speed_y != 0:
+            v_scrollbar = self.verticalScrollBar()
+            current_value_y = v_scrollbar.value()
+            new_value_y = current_value_y + self._autoscroll_speed_y
+            new_value_y = max(v_scrollbar.minimum(), min(new_value_y, v_scrollbar.maximum()))
+            
+            # Stop any ongoing animation and set directly
+            if hasattr(v_scrollbar, '_animation'):
+                v_scrollbar._animation.stop()
+            QtWidgets.QScrollBar.setValue(v_scrollbar, int(new_value_y))  # Call parent class method
+        
+        # Update horizontal scrollbar - bypass animation
+        if self._autoscroll_speed_x != 0:
+            h_scrollbar = self.horizontalScrollBar()
+            current_value_x = h_scrollbar.value()
+            new_value_x = current_value_x + self._autoscroll_speed_x
+            new_value_x = max(h_scrollbar.minimum(), min(new_value_x, h_scrollbar.maximum()))
+            
+            # Stop any ongoing animation and set directly
+            if hasattr(h_scrollbar, '_animation'):
+                h_scrollbar._animation.stop()
+            QtWidgets.QScrollBar.setValue(h_scrollbar, int(new_value_x))  # Call parent class method
+            
+          
+    def _stop_autoscroll(self):
+        """Stop autoscroll and reset state"""
+        if not self._autoscroll_active:
+            return
+            
+        self._autoscroll_active = False
+        self._autoscroll_origin = None
+        self._autoscroll_speed_x = 0
+        self._autoscroll_speed_y = 0
+        self._autoscroll_timer.stop()
+        self.viewport().unsetCursor()
+        self.viewport().update()  # Clear any marker
+        
+    def paintEvent(self, event: QtGui.QPaintEvent):
+        """Custom paint to draw 2D autoscroll marker when active"""
+        super().paintEvent(event)
+        
+        if self._autoscroll_active and self._autoscroll_origin:
+            painter = QtGui.QPainter(self.viewport())
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+            
+            marker_size = 20
+            rect = QtCore.QRect(
+                self._autoscroll_origin.x() - marker_size // 2,
+                self._autoscroll_origin.y() - marker_size // 2,
+                marker_size,
+                marker_size
+            )
+            
+            # Draw crosshair circle
+            painter.setPen(QtGui.QPen(QtGui.QColor(100, 150, 255, 180), 2))
+            painter.setBrush(QtGui.QColor(100, 150, 255, 60))
+            painter.drawEllipse(rect)
+            
+            # Draw direction arrows with higher visibility
+            arrow_size = 7  # Slightly larger
+            painter.setBrush(QtGui.QColor(100, 200, 255, 220))  # Brighter
+            
+            # Vertical arrow
+            if abs(self._autoscroll_speed_y) > 2:
+                if self._autoscroll_speed_y < 0:  # Up arrow
+                    points = [
+                        QtCore.QPoint(self._autoscroll_origin.x(), self._autoscroll_origin.y() - marker_size // 2 - 3),
+                        QtCore.QPoint(self._autoscroll_origin.x() - arrow_size, self._autoscroll_origin.y() - marker_size // 2 + 4),
+                        QtCore.QPoint(self._autoscroll_origin.x() + arrow_size, self._autoscroll_origin.y() - marker_size // 2 + 4)
+                    ]
+                else:  # Down arrow
+                    points = [
+                        QtCore.QPoint(self._autoscroll_origin.x(), self._autoscroll_origin.y() + marker_size // 2 + 3),
+                        QtCore.QPoint(self._autoscroll_origin.x() - arrow_size, self._autoscroll_origin.y() + marker_size // 2 - 4),
+                        QtCore.QPoint(self._autoscroll_origin.x() + arrow_size, self._autoscroll_origin.y() + marker_size // 2 - 4)
+                    ]
+                painter.drawPolygon(QtGui.QPolygon(points))
+            
+            # Horizontal arrow
+            if abs(self._autoscroll_speed_x) > 2:
+                if self._autoscroll_speed_x < 0:  # Left arrow
+                    points = [
+                        QtCore.QPoint(self._autoscroll_origin.x() - marker_size // 2 - 3, self._autoscroll_origin.y()),
+                        QtCore.QPoint(self._autoscroll_origin.x() - marker_size // 2 + 4, self._autoscroll_origin.y() - arrow_size),
+                        QtCore.QPoint(self._autoscroll_origin.x() - marker_size // 2 + 4, self._autoscroll_origin.y() + arrow_size)
+                    ]
+                else:  # Right arrow
+                    points = [
+                        QtCore.QPoint(self._autoscroll_origin.x() + marker_size // 2 + 3, self._autoscroll_origin.y()),
+                        QtCore.QPoint(self._autoscroll_origin.x() + marker_size // 2 - 4, self._autoscroll_origin.y() - arrow_size),
+                        QtCore.QPoint(self._autoscroll_origin.x() + marker_size // 2 - 4, self._autoscroll_origin.y() + arrow_size)
+                    ]
+                painter.drawPolygon(QtGui.QPolygon(points))
         
     def wheelEvent(self, event):
         # Animate mouse wheel scrolling for vertical movement
@@ -527,6 +710,8 @@ class SmoothScrollTableView(QtWidgets.QTableView):
         else:
             # Handle horizontal scrolling or Ctrl+wheel (zoom) normally
             super().wheelEvent(event)
+
+
 class DataViewerPage(QtWidgets.QWidget):
     backRequested = QtCore.pyqtSignal()
 
