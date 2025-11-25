@@ -29,6 +29,17 @@ QWEN3_4B_INSTRUCT_2507_DEFAULT_ARGS = {
     "top_k": 20,
 }
 
+QWEN3_30B_A3B_Thinking_2507_FP8_DEFAULT_ARGS = {
+    "model": "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
+    "max_model_len": 81_920,
+    "max_completion_tokens": 61_440,
+    "gpu_memory_utilization": 0.95,
+    "tensor_parallel_size": 1,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+}
+
 GPT_OSS_120B_HIGH_DEFAULT_ARGS = {
     "model": "openai/gpt-oss-120b",
     "max_model_len": 81_920, # the model reasons even 12.5k samples

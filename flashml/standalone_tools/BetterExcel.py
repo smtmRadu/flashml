@@ -46,8 +46,8 @@ def column_shade_color(is_dark: bool, index: int) -> QtGui.QColor:
 
 # -------------------- Data Model for DataFrame --------------------
 class DataFrameModel(QtCore.QAbstractTableModel):
-    dataChangedHard = QtCore.pyqtSignal()      # for full repaint (e.g., search highlight)
-    matchesChanged = QtCore.pyqtSignal(int)    # emits total number of matches
+    dataChangedHard = QtCore.pyqtSignal()     
+    matchesChanged = QtCore.pyqtSignal(int)    
 
     def __init__(self, df: pd.DataFrame):
         super().__init__()
@@ -81,22 +81,14 @@ class DataFrameModel(QtCore.QAbstractTableModel):
 
         if role == QtCore.Qt.ItemDataRole.BackgroundRole:
             text = "" if pd.isna(val) else str(val).lower()
-
-            # --- DELETE OR COMMENT OUT THIS BLOCK ---
-            # Row highlight: any cell in row matches?
-            # row_has_match = any(m.row() == r for m in self._matches)
-            # if row_has_match:
-            #     return QtGui.QBrush(QtGui.QColor(255, 220, 180, 60))  # light orange
-            # ----------------------------------------
-
-            # --- KEEP THIS BLOCK ---
-            # Cell highlight: this cell contains the term
-            # Because the row logic is gone, this will now actually execute!
             if self.search_term and self.search_term.lower() in text:
-                return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))  # light yellow
+                return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))  
 
-            # Default zebra shading
-            return QtGui.QBrush(column_shade_color(self._is_dark, c))
+            base_color = column_shade_color(self._is_dark, c)
+            if r % 2 == 1:
+                base_color = base_color.darker(150)  
+            
+            return QtGui.QBrush(base_color)
 
         return None
     
@@ -272,15 +264,12 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):
         painter.save()
-        
-        # --- 1. Draw column-tinted background from the model ---
         bg_brush = index.data(QtCore.Qt.ItemDataRole.BackgroundRole)
         if bg_brush:
             painter.fillRect(option.rect, bg_brush)
         elif option.state & QtWidgets.QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, option.palette.highlight())
         
-        # --- 2. Now draw the content ---
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
         st = self.model.search_term
         if st:
@@ -325,7 +314,6 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
                 start = i + text_len
             
             if highlights:
-                # CREATE A HIGHLIGHT FORMAT (Green background)
                 highlight_format = QtGui.QTextCharFormat()
                 highlight_format.setBackground(QtGui.QBrush(QtGui.QColor(0, 200, 0, 140)))
                 highlight_format.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.white)) # Optional: ensure text is readable
@@ -337,10 +325,6 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
                     cursor.setPosition(pos + length, QtGui.QTextCursor.MoveMode.KeepAnchor)
                     cursor.mergeCharFormat(highlight_format)
 
-                # REMOVE THE OLD "painter.fillRect" LOOP COMPLETELY
-                # (The lines containing blockBoundingRect and painter.fillRect are deleted)
-
-        # Draw the text (The document now contains the highlight formatting)
         painter.translate(rect.topLeft())
         clip = QtCore.QRectF(0, 0, rect.width(), rect.height())
         doc.drawContents(painter, clip)
@@ -576,10 +560,12 @@ class DataViewerPage(QtWidgets.QWidget):
         self.btn_open = QtGui.QAction("Open", self)
         self.btn_open.triggered.connect(self.open_file_dialog)
         toolbar.addAction(self.btn_open)
+        toolbar.addSeparator()
 
         self.btn_save = QtGui.QAction("Save", self)
         self.btn_save.triggered.connect(self.save_file)
         toolbar.addAction(self.btn_save)
+        toolbar.addSeparator()
 
         self.btn_save_copy = QtGui.QAction("Save Copy", self)
         self.btn_save_copy.triggered.connect(self.save_copy)
@@ -593,9 +579,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self.mode_toggle.setCheckable(True)
         self.mode_toggle.setChecked(True)
         self.mode_toggle.toggled.connect(self.toggle_mode)
-        toolbar.addWidget(self.mode_toggle)
-
-        toolbar.addSeparator()
+        #toolbar.addWidget(self.mode_toggle) # we don't really need this shit (dark is fine).
+        #toolbar.addSeparator()
 
         # --- Search Field ---
         self.search_edit = QtWidgets.QLineEdit()
@@ -612,8 +597,6 @@ class DataViewerPage(QtWidgets.QWidget):
         self.search_btn.clicked.connect(self.on_search_return_pressed)
         toolbar.addWidget(self.search_btn)
 
-
-        # --- Case Sensitive Toggle ---
         # --- Case Sensitive Toggle ---
         self.case_sensitive_btn = QtWidgets.QToolButton()
         self.case_sensitive_btn.setText("Aa")
@@ -643,7 +626,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.btn_next.setToolTip("Next match (Enter)")
         self.btn_next.clicked.connect(self.go_next_match)
 
-        self.match_label = QtWidgets.QLabel("Matches: 0")
+        self.match_label = QtWidgets.QLabel("Matching cells: 0")
         self.match_label.setMinimumWidth(100)
 
         toolbar.addWidget(self.btn_prev)
@@ -1015,6 +998,10 @@ class DataViewerPage(QtWidgets.QWidget):
             return
     
         self.current_path = path
+        filename = path.name
+        self.controls.title_lbl.setText(filename)
+        self.window().setWindowTitle(f"{filename}")
+        
         self.model = DataFrameModel(df)
         self.model._is_dark = self.mode_toggle.isChecked()
         self.model.dataChangedHard.connect(self.table.viewport().update)
@@ -1138,7 +1125,21 @@ class DataViewerPage(QtWidgets.QWidget):
         idx = self.model.replace_once(self.current_match_index())
         if idx:
             self.current_match_pos = self.model._matches.index(idx)
-            self.table.scrollTo(idx, QtWidgets.QAbstractItemView.ScrollHint.EnsureVisible)
+            
+            # Smooth scroll to replaced cell
+            row = idx.row()
+            v_header = self.table.verticalHeader()
+            row_top = v_header.sectionPosition(row)
+            row_height = v_header.sectionSize(row)
+            viewport_height = self.table.viewport().height()
+            
+            target_v_scroll = row_top - (viewport_height - row_height) // 2
+            
+            v_sb = self.table.verticalScrollBar()
+            target_v_scroll = max(0, min(target_v_scroll, v_sb.maximum()))
+            
+            v_sb.setValue(target_v_scroll)
+            
             self.table.setCurrentIndex(idx)
             self._on_matches_changed(self.model.total_matches())
 
@@ -1155,7 +1156,7 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def _on_matches_changed(self, total: int):
         current = self.current_match_pos + 1 if total > 0 and self.current_match_pos >= 0 else 0
-        self.match_label.setText(f"Matches: {current} / {total}")
+        self.match_label.setText(f"Matching cells: {current} / {total}")
         self.btn_prev.setEnabled(total > 0)
         self.btn_next.setEnabled(total > 0)
 
@@ -1174,7 +1175,23 @@ class DataViewerPage(QtWidgets.QWidget):
     def _scroll_to_current(self):
         idx = self.model.match_at(self.current_match_pos)
         if idx:
-            self.table.scrollTo(idx, QtWidgets.QAbstractItemView.ScrollHint.EnsureVisible)
+            # Calculate target vertical scroll position to center the row
+            row = idx.row()
+            v_header = self.table.verticalHeader()
+            row_top = v_header.sectionPosition(row)
+            row_height = v_header.sectionSize(row)
+            viewport_height = self.table.viewport().height()
+            
+            # Target scroll position to center the row in viewport
+            target_v_scroll = row_top - (viewport_height - row_height) // 2
+            
+            # Clamp to valid scrollbar range
+            v_sb = self.table.verticalScrollBar()
+            target_v_scroll = max(0, min(target_v_scroll, v_sb.maximum()))
+            
+            # Animate to target (AnimatedScrollBar handles smooth transition)
+            v_sb.setValue(target_v_scroll)
+            
             self.table.setCurrentIndex(idx)
             self._on_matches_changed(self.model.total_matches())
 
@@ -1263,7 +1280,7 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Calculate new heights only for rows in visible+buffer zone
         for row in range(top_row, bottom_row + 1):
-            self.table.resizeRowToContents(row)
+            self._resize_row_with_padding(row)
         
         # Clear the tracking set
         self._columns_resized.clear()
@@ -1271,7 +1288,25 @@ class DataViewerPage(QtWidgets.QWidget):
         # Background full update for very large tables (>1000 rows)
         if self.model.rowCount() > 1000:
             QtCore.QTimer.singleShot(800, self._background_resize_rows)
-
+            
+    def _resize_row_with_padding(self, row: int):
+        """
+        Resize row to fit content and add one extra line of space for better readability.
+        This ensures all text is visible with comfortable padding at the bottom.
+        """
+        # Resize to fit content first
+        self.table.resizeRowToContents(row)
+        
+        # Calculate height of one text line based on current font
+        font = self.table.font()
+        metrics = QtGui.QFontMetrics(font)
+        line_height = metrics.lineSpacing() * 2
+        
+        # Add one extra line of space
+        current_height = self.table.rowHeight(row)
+        new_height = current_height + line_height
+        self.table.setRowHeight(row, new_height)
+        
     # === NEW: Background processing for off-screen rows ===
     def _background_resize_rows(self):
         """Low-priority update for rows outside viewport (runs after idle)."""
@@ -1294,7 +1329,7 @@ class DataViewerPage(QtWidgets.QWidget):
                     
                 end_row = min(current_row + BATCH_SIZE, total_rows)
                 for row in range(current_row, end_row):
-                    self.table.resizeRowToContents(row)
+                    self._resize_row_with_padding(row)
                 
                 current_row = end_row
                 if current_row < total_rows:
@@ -1312,7 +1347,7 @@ class DataViewerPage(QtWidgets.QWidget):
         if not roles or QtCore.Qt.ItemDataRole.DisplayRole in roles:
             # Recalculate just the changed rows
             for row in range(top_left.row(), bottom_right.row() + 1):
-                self.table.resizeRowToContents(row)
+                self._resize_row_with_padding(row)
 
     # === NEW: Handle scrolling for on-demand row sizing ===
     def _on_scroll(self, value):
@@ -1363,113 +1398,119 @@ class DataViewerPage(QtWidgets.QWidget):
                             break
                 
                 if needs_resize:
-                    self.table.resizeRowToContents(row)
+                    self._resize_row_with_padding(row)
+                    
     # === NEW: Full recalculation on initial load ===
     def _autosize_all_rows(self):
-        """Full recalculation of all row heights - called only on file load."""
+        """
+        Optimized: Sets a default height for all rows instantly, then uses 
+        Pandas vectorization to find ONLY the complex rows that need 
+        calculation.
+        """
         if not self.model:
             return
         
         row_count = self.model.rowCount()
         if row_count == 0:
             return
-        
-        # Calculate a smart default height based on font
+
+        # 1. Set global default height (Instant)
+        # This handles 90-99% of rows without ANY calculation overhead
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
         default_height = metrics.lineSpacing() + 8
         self.table.verticalHeader().setDefaultSectionSize(default_height)
         
-        # Identify columns that might contain multiline content
-        text_columns = []
-        for c in range(self.model.columnCount()):
-            col_data = self.model.df.iloc[:, c]
-            if col_data.dtype == object:
-                sample = col_data.dropna().head(100)
-                if sample.astype(str).str.contains('\n').any() or sample.astype(str).str.len().max() > 200:
-                    text_columns.append(c)
+        # 2. Identify "Complex" rows using Vectorized Pandas (Fast)
+        # We only care about columns that are 'object' type (text)
+        text_cols = self.model.df.select_dtypes(include=['object']).columns
         
-        if not text_columns:
-            return  # Fast exit: no columns need row height adjustment
+        complex_rows_set = set()
         
-        # Show indicator for large tables
-        show_indicator = row_count > 500
-        if show_indicator:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
-            self._show_background_indicator("Autosizing rows", row_count, 0)
+        if len(text_cols) > 0:
+            # Show busy cursor if file is huge
+            if row_count > 10000:
+                QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+
+            try:
+                # Check each text column for newlines or excessive length
+                # We do this column by column to save memory
+                for col in text_cols:
+                    series = self.model.df[col].dropna().astype(str)
+                    
+                    # Criteria: Contains newline OR is longer than 100 chars
+                    # We get the boolean mask and then the indices
+                    mask = (series.str.contains('\n')) | (series.str.len() > 100)
+                    
+                    # Add indices of complex rows to our set
+                    complex_rows_set.update(series[mask].index.tolist())
+            finally:
+                 if row_count > 10000:
+                    QtWidgets.QApplication.restoreOverrideCursor()
+
+        # Convert to a sorted list for processing
+        self._pending_resize_rows = sorted(list(complex_rows_set))
+        total_complex = len(self._pending_resize_rows)
         
-        # Process initial rows (limit to 500 for initial load)
-        initial_limit = min(500, row_count)
-        
-        for start_row in range(0, initial_limit, 50):
-            end_row = min(start_row + 50, initial_limit)
-            
-            # Update progress
-            if show_indicator:
-                self.bg_current_row = end_row
-                self._update_bg_indicator()
-            
-            for row in range(start_row, end_row):
-                # Quick check before resizing
-                needs_resize = False
-                for col in text_columns:
-                    val = self.model.df.iat[row, col]
-                    if pd.notna(val):
-                        s = str(val)
-                        if '\n' in s or len(s) > 200:
-                            needs_resize = True
-                            break
-                
-                if needs_resize:
-                    self.table.resizeRowToContents(row)
-            
-            # Keep UI responsive
-            if show_indicator and start_row % 200 == 0:
-                QtWidgets.QApplication.processEvents()
-        
-        if show_indicator:
-            QtWidgets.QApplication.restoreOverrideCursor()
-        
-        # Start background processing for remaining rows
-        remaining_rows = row_count - initial_limit
-        if remaining_rows > 0:
-            # Continue progress from where we left off
-            self.bg_current_row = initial_limit
-            self._update_bg_indicator()
-            QtCore.QTimer.singleShot(100, lambda: self._background_resize_remaining(initial_limit))
-        else:
-            self._hide_background_indicator()  # Hide if no background work needed
-        
-    def _background_resize_remaining(self, start_row):
-        """Process remaining rows in very small batches"""
-        if not self.model:
-            self._hide_background_indicator()
+        # If very few complex rows, just do it now and finish
+        if total_complex < 50:
+            for row in self._pending_resize_rows:
+                self.table.resizeRowToContents(row)
             return
+
+        # 3. Setup Background Processing for the Complex Rows ONLY
+        self._show_background_indicator("Autosizing rows", total_complex, 0)
         
-        total_rows = self.model.rowCount()
-        if start_row >= total_rows:
-            self._hide_background_indicator()
-            return
+        # Process first batch immediately to give instant feedback
+        BATCH_SIZE = 20
+        initial_batch = self._pending_resize_rows[:BATCH_SIZE]
+        self._pending_resize_rows = self._pending_resize_rows[BATCH_SIZE:]
         
-        # Process in tiny batches to avoid any UI lag
-        BATCH_SIZE = 25
-        end_row = min(start_row + BATCH_SIZE, total_rows)
-        
-        # Update progress
-        self.bg_current_row = end_row
-        
-        for row in range(start_row, end_row):
+        for row in initial_batch:
             self.table.resizeRowToContents(row)
-        
-        # Update progress display
-        self._update_bg_indicator()
-        
-        # Schedule next batch or hide indicator
-        if end_row < total_rows:
-            QtCore.QTimer.singleShot(10, lambda: self._background_resize_remaining(end_row))
+            
+        # Schedule the rest
+        if self._pending_resize_rows:
+            QtCore.QTimer.singleShot(50, self._background_resize_remaining)
         else:
-            self._hide_background_indicator()   
-                
+            self._hide_background_indicator()
+
+    def _background_resize_remaining(self):
+        """
+        Optimized: Process the queue of specific rows that need resizing.
+        Does NOT iterate through the whole table, only the necessary rows.
+        """
+        # Safety check: ensure the queue exists and model is loaded
+        if not self.model or not hasattr(self, '_pending_resize_rows') or not self._pending_resize_rows:
+            self._hide_background_indicator()
+            return
+            
+        # Process in batches
+        BATCH_SIZE = 50 
+        
+        # Take the next batch of indices from the queue
+        current_batch = self._pending_resize_rows[:BATCH_SIZE]
+        self._pending_resize_rows = self._pending_resize_rows[BATCH_SIZE:]
+        
+        # Resize only these specific rows
+        for row in current_batch:
+            self.table.resizeRowToContents(row)
+            
+        # Update progress based on how many are LEFT
+        if self.bg_total_rows > 0:
+            remaining = len(self._pending_resize_rows)
+            done = self.bg_total_rows - remaining
+            self.bg_current_row = done
+            self._update_bg_indicator()
+        
+        # If there are still rows left, schedule the next batch
+        if self._pending_resize_rows:
+            # Short delay (10ms) to keep UI responsive
+            QtCore.QTimer.singleShot(10, self._background_resize_remaining)
+        else:
+            self._hide_background_indicator()
+            self.status.showMessage(f"Finished formatting.")    
+        
     def toggle_mode(self, checked: bool):
         if self.model:
             self.model._is_dark = checked
@@ -1881,7 +1922,7 @@ class StartPage(QtWidgets.QWidget):
         content_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         
         # Welcome label
-        lbl = QtWidgets.QLabel("Welcome")
+        lbl = QtWidgets.QLabel("Choose your mode")
         lbl.setStyleSheet("font-size: 20px; font-weight: 600;")
         lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         

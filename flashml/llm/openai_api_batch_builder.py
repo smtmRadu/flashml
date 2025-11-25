@@ -202,11 +202,11 @@ for r in resps:
             total = batch.request_counts.total if batch.request_counts.total > 0 else 1
             print("[4] \033[32mOpenAI\033[37m |",
                   datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "|",
-                  f" status: \033[38;2;189;252;201m{batch.status}\033[0m (\033[38;2;0;128;128m{(batch.request_counts.completed + batch.request_counts.failed) * 100/total:.2f}%\033[0m)", "|", 
+                  f"status: \033[38;2;189;252;201m{batch.status}\033[0m (\033[38;2;0;128;128m{(batch.request_counts.completed + batch.request_counts.failed) * 100/total:.2f}%\033[0m)", "|", 
                   f"({batch.request_counts.completed} \033[38;5;10mcompleted\033[0m" ,"|",
                   f"{batch.request_counts.failed} \033[38;5;9mfailed\033[0m" , "|",
-                  f"{batch.request_counts.total} \033[38;5;12mtotal\033[0m) ",  "|", 
-                  f" Batch ID: \033[38;2;189;252;201m{batch.id}\033[37m")
+                  f"{batch.request_counts.total} \033[38;5;12mtotal\033[0m)",  "|", 
+                  f"Batch ID: \033[38;2;189;252;201m{batch.id}\033[37m")
             if batch.status == "completed":
                 bell()
                 break
