@@ -11,13 +11,13 @@ from .main_tools.extern import call_cs_kernel
 from .main_tools.logging_jsonl import load_jsonl, log_json
 from .main_tools.lorem_ipsum import lorem_ipsum, lorem_ipsum_en
 from .main_tools.manipulation import (
-    BatchIterator,
     sample_from,
     sample_elementwise,
     shuffle_df,
     shuffle_tensor,
     reorder_df_columns,
 )
+from .main_tools.batching import BatchIterator
 from .main_tools.mlflow_logging import (
     get_metrics_at_step,
     host_mlflow,
@@ -31,7 +31,7 @@ from .main_tools.parallel import parallel_for, parallel_foreach
 from .main_tools.plot_distribution import plot_dist
 from .main_tools.plot_graph import plot_graph
 from .main_tools.plot_rt_graph import plot_rt_graph
-from .main_tools.plot_tensor import plot_tensor
+from .main_tools.plot_tensor import plot_tensor, plot_image_tensor
 from .main_tools.plot_tsne import plot_tsne
 from .main_tools.resource_monitor import resource_monitor
 from .main_tools.sound_effects import bell
@@ -62,6 +62,7 @@ __all__ = [
     "parallel_foreach",
     "plot_dist",
     "plot_graph",
+    "plot_image_tensor",
     "plot_rt_graph",
     "plot_tensor",
     "plot_tsne",

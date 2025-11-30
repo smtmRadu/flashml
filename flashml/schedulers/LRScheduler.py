@@ -4,11 +4,12 @@ import math
 class LRScheduler:
     """
         `step()` called after `optim.step()`\\
-        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** or **len(BatchIterator)** \\
+        `max_steps` = **(EPOCHS x DATA_SIZE) / (BATCH_SIZE x GRADIENT_ACCUM_STEPS)** or **len(BatchIterator)** if no GRADIENT_ACCUM_STEPS are used. \\
         `warmup_steps_ratio` = 3%-10% of max_steps (use warmup_steps_ratio instead of warmup_steps to set it)\\
         `constant_steps_ratio` = ~10% of max_steps (use constant_steps_ratio instead of constant_steps to set it)\\
         `cycles` = number of cycles to anneal over (default 1)\\
         `max_lr_decay_factor` = factor to decay max_lr per cycle (default 1=no decay)\\
+        `min_lr` = minimum learning rate (at the end of a cycle) (default 1e-8)\\
         `gamma` = (if selected) gamma for exponential/logarithmic decay (default 0.95)\
     """
     def __init__(

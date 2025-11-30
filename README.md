@@ -93,8 +93,8 @@ result = parallel_for(0, 1e6, my_func, num_workers=16)
 from flashml import log_metrics, BatchIterator,log_checkpoint, load_checkpoint
 from flashml.classification import plot_confusion_matrix
 
-for step, batch, idcs in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
-        batch = data[batch_ids]
+for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
+        # batch.value, batch.index, batch.step, batch.ids
         # Compute loss and perform update
         # Compute validation
         log_metrics(

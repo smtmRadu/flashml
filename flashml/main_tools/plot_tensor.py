@@ -488,3 +488,140 @@ def _plot_3d_tensor(
     )
 
     return fig
+
+
+def plot_image_tensor(
+    tensors, 
+    max_figures: int = 32,
+    titles: list = None,
+    image_size: int = 200
+):
+    
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import torch
+    import numpy as np
+    import math
+
+    """
+    Plot image tensors in a grid layout using Plotly.
+    
+    Args:
+        tensors: Single tensor of shape (B, C, H, W) or list of tensors
+        N: Maximum number of samples from batch to plot (default: 32)
+        titles: Optional list of titles for each tensor group (e.g., ['Input', 'Target', 'Output'])
+        image_size: Size of each individual image in pixels (default: 200)
+    
+    Returns:
+        plotly.graph_objects.Figure: The created figure
+    """
+    # Normalize tensors to be a list
+    if isinstance(tensors, torch.Tensor):
+        tensors = [tensors]
+    
+    # Ensure all tensors are on CPU and detached
+    tensors = [t.detach().cpu() for t in tensors]
+    
+    # Get batch size and limit to N
+    batch_size = min(tensors[0].shape[0], max_figures)
+    num_tensor_groups = len(tensors)
+    
+    # Helper function to convert tensor to displayable format
+    def tensor_to_image(tensor):
+        """Convert tensor (C, H, W) to numpy array for display."""
+        if tensor.shape[0] == 1:  # Grayscale
+            img = tensor.squeeze(0).numpy()
+            # Normalize to [0, 255] for display
+            img = np.clip(img * 255, 0, 255).astype(np.uint8)
+            return img
+        elif tensor.shape[0] == 3:  # RGB
+            img = tensor.permute(1, 2, 0).numpy()
+            # Clip to [0, 1] range and convert to [0, 255]
+            img = np.clip(img, 0, 1)
+            img = (img * 255).astype(np.uint8)
+            return img
+        else:
+            # For other channel counts, just show first channel
+            img = tensor[0].numpy()
+            img = np.clip(img * 255, 0, 255).astype(np.uint8)
+            return img
+    
+    if num_tensor_groups == 1:
+        # Single tensor: arrange in nearly-square grid
+        cols = math.ceil(math.sqrt(batch_size))
+        rows = math.ceil(batch_size / cols)
+        
+        fig = make_subplots(
+            rows=rows, cols=cols,
+            horizontal_spacing=0.01,
+            vertical_spacing=0.01
+        )
+        
+        for idx in range(batch_size):
+            row = idx // cols + 1
+            col = idx % cols + 1
+            
+            img = tensor_to_image(tensors[0][idx])
+            
+            fig.add_trace(
+                go.Image(z=img),
+                row=row, col=col
+            )
+        
+        # Update layout
+        fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False)
+        fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=False)
+        
+        fig.update_layout(
+            height=rows * image_size,
+            width=cols * image_size,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=30, b=10)
+        )
+            
+    else:
+        # Multiple tensors: each row shows corresponding images from all tensors
+        rows = batch_size
+        cols = num_tensor_groups
+        
+        # Create subplot titles if provided
+        subplot_titles = []
+        if titles:
+            # Only add titles to the first row
+            for row_idx in range(rows):
+                for col_idx in range(cols):
+                    if row_idx == 0 and col_idx < len(titles):
+                        subplot_titles.append(titles[col_idx])
+                    else:
+                        subplot_titles.append("")
+        else:
+            subplot_titles = None
+        
+        fig = make_subplots(
+            rows=rows, cols=cols,
+            subplot_titles=subplot_titles,
+            horizontal_spacing=0.01,
+            vertical_spacing=0.01
+        )
+        
+        for row_idx in range(batch_size):
+            for col_idx, tensor in enumerate(tensors):
+                img = tensor_to_image(tensor[row_idx])
+                
+                fig.add_trace(
+                    go.Image(z=img),
+                    row=row_idx + 1, col=col_idx + 1
+                )
+        
+        # Update layout
+        fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False)
+        fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=False)
+        
+        fig.update_layout(
+            height=rows * image_size,
+            width=cols * image_size,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+    
+    return fig

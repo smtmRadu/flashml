@@ -13,8 +13,11 @@ class GQA(nn.Module):
         embedding_dim: int,
         num_heads_q: int,
         num_heads_kv: int = None,
+        expansion_factor: float = 1,
         is_causal: bool = False,
         dropout=0.0,
+        qk_norm: bool = False,
+        qk_norm_eps:float = 1e-6,
         use_rope: bool = False,
         rope_max_seq_len: int = 4096,
         rope_theta=10000,
@@ -44,18 +47,21 @@ class GQA(nn.Module):
         ), "group_kv must be in range [1, num_heads] and must divide num_heads"
 
         self.embedding_dim = embedding_dim
-        self.head_dim = embedding_dim // num_heads_q
+        self.inner_embedding_dim = int(embedding_dim * expansion_factor)
+        self.head_dim = self.inner_embedding_dim // num_heads_q
         self.num_heads_q = num_heads_q
         self.num_heads_kv = num_heads_kv
         self.max_seq_len = rope_max_seq_len
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None # 182 https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
         self.is_causal = is_causal
         self.w_qkv = nn.Linear(
             in_features=embedding_dim,
-            out_features=embedding_dim
-            + embedding_dim * num_heads_kv // num_heads_q * 2,
+            out_features=self.inner_embedding_dim
+            + self.inner_embedding_dim * num_heads_kv // num_heads_q * 2,
             bias=False,
         )
-        self.w_o = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.w_o = nn.Linear(self.inner_embedding_dim, embedding_dim, bias=False)
         self.rope = (
             RotaryPositionalEmbeddings(
                 dim=self.head_dim, max_seq_len=rope_max_seq_len, base=rope_theta
@@ -75,15 +81,23 @@ class GQA(nn.Module):
             f"Input sequence length {L} exceeds the maximum allowed length {self.max_seq_len}"
         )
         qkv_splits = [
-            self.embedding_dim,
-            self.embedding_dim * self.num_heads_kv // self.num_heads_q,
-            self.embedding_dim * self.num_heads_kv // self.num_heads_q,
+            self.inner_embedding_dim,
+            self.inner_embedding_dim * self.num_heads_kv // self.num_heads_q,
+            self.inner_embedding_dim * self.num_heads_kv // self.num_heads_q,
         ]
         q, k, v = torch.split(self.w_qkv(x), split_size_or_sections=qkv_splits, dim=-1)
+        
+
 
         q = q.view(B, L, self.num_heads_q, self.head_dim)
         k = k.view(B, L, self.num_heads_kv, self.head_dim)
         v = v.view(B, L, self.num_heads_kv, self.head_dim)
+        
+        if self.q_norm is not None:
+            q = self.q_norm(q)
+        if self.k_norm is not None:
+            k = self.k_norm(k)
+            
         if self.rope is not None:
             q, k = (
                 self.rope(q),
@@ -112,5 +126,5 @@ class GQA(nn.Module):
             attn_mask=attn_mask_expanded,
             enable_gqa=False if self.num_heads_q == self.num_heads_kv else True,
         )  # sdpa gets input (B, heads_num, L, head_dim)
-        y = y.transpose(-2, -3).contiguous().view(B, L, D)
+        y = y.transpose(-2, -3).contiguous().view(B, L, self.inner_embedding_dim)
         return self.w_o(y)

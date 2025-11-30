@@ -1,17 +1,46 @@
 import yaml
 from pathlib import Path
 from typing import Any
-import argparse
-from typing import Any
+
+
+def _auto_convert_type(value: Any) -> Any:
+    """
+    Automatically convert string representations to appropriate types.
+    Tries: bool -> int -> float -> keeps as string
+    """
+    if not isinstance(value, str):
+        return value
+    
+    # Try boolean conversion
+    if value.lower() in ('true', 'false'):
+        return value.lower() == 'true'
+    
+    # Try integer conversion
+    try:
+        # Check if it looks like an int (no decimal point or scientific notation)
+        if '.' not in value and 'e' not in value.lower():
+            return int(value)
+    except (ValueError, AttributeError):
+        pass
+    
+    # Try float conversion (handles scientific notation like 1e-3)
+    try:
+        return float(value)
+    except (ValueError, AttributeError):
+        pass
+    
+    # Keep as string if all conversions fail
+    return value
+
 
 class ConfigObject:
     """
-    A object that allows attribute-style access to nested dictionaries.
-    Similar to Hydra's OmegaConf but simpler.
+    An object that allows attribute-style access to nested dictionaries.
+    Similar to Hydra's OmegaConf but simpler. Preserves original types.
     """
     
     def __init__(self, data: dict):
-        """Initialize ConfigObject from a dictionary."""
+        """Initialize ConfigObject from a dictionary, preserving types."""
         for key, value in data.items():
             if isinstance(value, dict):
                 # Recursively convert nested dicts to ConfigObjects
@@ -20,10 +49,11 @@ class ConfigObject:
                 # Handle lists that might contain dicts
                 setattr(self, key, self._process_list(value))
             else:
-                setattr(self, key, value)
+                # Auto-convert strings to appropriate types, keep others as-is
+                setattr(self, key, _auto_convert_type(value))
     
     def _process_list(self, lst: list) -> list:
-        """Process list items, converting dicts to ConfigObjects."""
+        """Process list items, converting dicts to ConfigObjects and strings to appropriate types."""
         result = []
         for item in lst:
             if isinstance(item, dict):
@@ -31,16 +61,13 @@ class ConfigObject:
             elif isinstance(item, list):
                 result.append(self._process_list(item))
             else:
-                result.append(item)
+                result.append(_auto_convert_type(item))
         return result
     
     def __repr__(self) -> str:
         attrs = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
         return f"ConfigObject({attrs})"
 
-    # ------------------------------------------------------------------
-    # 2.  Pretty tree representation (what you asked for)
-    # ------------------------------------------------------------------
     def __str__(self) -> str:
         """Return a pretty, fully-expanded tree of the whole config."""
         lines = []
@@ -56,10 +83,10 @@ class ConfigObject:
         """
         Recursively build an ASCII tree similar to the Linux `tree` command.
         
-        Prints debug information about the building process.
-        
-        prefix  : indentation string built up while descending
-        is_last : True if this node is the last sibling (affects the corner char)
+        Args:
+            lines: List to accumulate output lines
+            prefix: Indentation string built up while descending
+            is_last: True if this node is the last sibling
         """
         items = [(k, v) for k, v in self.__dict__.items() if not k.startswith("_")]
 
@@ -67,39 +94,36 @@ class ConfigObject:
             is_last_item = idx == len(items) - 1
             corner = "└── " if is_last_item else "├── "
             
-            # Debug: Show the current key being processed
-            print(f"{prefix}{corner}{key}")
-            
-            lines.append(f"{prefix}{corner}{key}")
-            
             if isinstance(value, ConfigObject):
-                # Debug: Show when descending into a ConfigObject
-                print(f"{prefix}    Descending into ConfigObject: {key}")
-                # Recursively build the tree for the nested ConfigObject
+                # Add the key as a branch node
+                lines.append(f"{prefix}{corner}{key}")
+                # Recursively build the tree for nested ConfigObject
                 extension = "    " if is_last_item else "│   "
-                value._build_tree(lines, prefix + extension, True)
+                value._build_tree(lines, prefix + extension, is_last_item)
             elif isinstance(value, list):
-                # Debug: Show when processing a list
-                print(f"{prefix}    Processing list: {key}")
-                # Print list elements, converting nested ConfigObjects on the fly
+                # Add the key as a branch node
+                lines.append(f"{prefix}{corner}{key}")
+                # Print list elements
+                extension = "    " if is_last_item else "│   "
                 for i, elem in enumerate(value):
-                    elem_corner = "└── " if i == len(value) - 1 else "├── "
+                    elem_is_last = i == len(value) - 1
+                    elem_corner = "└── " if elem_is_last else "├── "
+                    
                     if isinstance(elem, ConfigObject):
-                        print(f"{prefix}    Found ConfigObject in list: [{i}]")
-                        lines.append(f"{prefix}    {elem_corner}[{i}]")
-                        elem._build_tree(
-                            lines,
-                            prefix + ("    " if is_last_item else "│   ") + "    ",
-                            True,
-                        )
+                        lines.append(f"{prefix}{extension}{elem_corner}[{i}]")
+                        elem_extension = "    " if elem_is_last else "│   "
+                        elem._build_tree(lines, prefix + extension + elem_extension, elem_is_last)
                     else:
-                        lines.append(f"{prefix}    {elem_corner}[{i}] {elem!r}")
+                        # Show type and value for leaf elements
+                        type_str = type(elem).__name__
+                        lines.append(f"{prefix}{extension}{elem_corner}[{i}]: {elem!r} ({type_str})")
             else:
-                # Plain leaf value
-                lines[-1] += f": {value!r}"
+                # Leaf value - show type to verify it's preserved
+                type_str = type(value).__name__
+                lines.append(f"{prefix}{corner}{key}: {value!r} ({type_str})")
                 
     def __getitem__(self, key: str) -> Any:
-        """Allow dictionary-style access as well."""
+        """Allow dictionary-style access."""
         return getattr(self, key)
     
     def to_dict(self) -> dict:
@@ -126,6 +150,44 @@ class ConfigObject:
             else:
                 result.append(item)
         return result
+    
+    def to_list(self) -> list[tuple[str, Any]]:
+        """
+        Flatten the entire configuration into a list of (path, value) tuples.
+        
+        Example output:
+            [
+                ("model.layers[0].units", 256),
+                ("training.lr", 0.001),
+            ]
+        
+        Lists produce paths like: key[0], key[1], etc.
+        """
+        flattened = []
+        self._flatten("", self, flattened)
+        return flattened
+
+    def _flatten(self, prefix: str, value: Any, out: list):
+        """
+        Recursive helper that walks ConfigObject, dicts, lists, and primitives.
+        """
+        if isinstance(value, ConfigObject):
+            # Iterate all attributes
+            for key, val in value.__dict__.items():
+                if key.startswith("_"):
+                    continue
+                new_prefix = f"{prefix}.{key}" if prefix else key
+                self._flatten(new_prefix, val, out)
+
+        elif isinstance(value, list):
+            # Handle indexed elements
+            for i, item in enumerate(value):
+                new_prefix = f"{prefix}[{i}]"
+                self._flatten(new_prefix, item, out)
+
+        else:
+            # Primitive value → store
+            out.append((prefix, value))
 
 
 def load_yaml_configs(config_path: str = "configs") -> ConfigObject:
@@ -155,6 +217,7 @@ def load_yaml_configs(config_path: str = "configs") -> ConfigObject:
         - YAML files become attributes named after the file (without .yaml extension)
         - Folders become nested ConfigObjects
         - Both .yaml and .yml extensions are supported
+        - Original types (int, float, str, bool) are preserved
     """
     config_path = Path(config_path)
 
@@ -177,14 +240,14 @@ def _load_config_recursive(path: Path) -> dict:
         path: Path to process
         
     Returns:
-        Dictionary with loaded configs
+        Dictionary with loaded configs (types preserved from YAML)
     """
     result = {}
     
     # Process all items in the directory
     for item in sorted(path.iterdir()):
         if item.is_file() and item.suffix in ['.yaml', '.yml']:
-            # Load YAML file
+            # Load YAML file - yaml.safe_load preserves types
             config_name = item.stem  # filename without extension
             with open(item, 'r') as f:
                 content = yaml.safe_load(f)
