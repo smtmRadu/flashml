@@ -7,6 +7,7 @@ name = "flashml"
 version = "0.6.5.6"
 authors = [{ name = "kbradu" }]
 dependencies = [
+    "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
     "ipywidgets",
     "pydantic", # used here for BaseClass in structured output with llms
     "mlflow",

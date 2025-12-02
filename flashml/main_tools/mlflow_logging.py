@@ -64,7 +64,7 @@ def log_checkpoint(
 ) -> None:
     """Makes a checkpoint of the model+optim+scheduler and logs it in the MLFlow session.
     Example:
-    >>> log_checkpoint({"model":model.state_dict(), "optim": optimizer.state_dict(), "scheduler": scheduler.state_dict() etc.})
+    >>> log_checkpoint({"model":model.state_dict(), "optim": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "batch_iterator": batch_iterator.state_dict(), etc.})
     Args:
         state_dict (str): _description_
         info (Any): Any info/metrics to add for this checkpoint. The timestamp and step is automatically logged.

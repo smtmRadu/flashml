@@ -1,13 +1,10 @@
-from typing import List, Literal,Tuple
+from typing import List, Literal, Tuple, Optional, Callable, Any
+import concurrent.futures
+from collections import deque
 
 class Batch:
     """
     Represents a batch in the processing workflow of BatchIterator.
-
-    :ivar (int) index: The index of the batch.
-    :ivar (tuple) step: The step information as a tuple (batch_id, num_batches).
-    :ivar value: The value associated with the batch.
-    :ivar (list) ids: The indices associated with the batch.
     """
 
     def __init__(self, batch_index, num_batches, batch_value, batch_idcs, is_optim_step_time, is_eval_time, is_save_time):
@@ -23,16 +20,14 @@ class Batch:
         return iter((self.step, self.value))
     
     def __len__(self):
-        """Returns the number of elements in the batch.
-        """
         return len(self.value)
     
-    def get_num_samples(self):
-        """Returns the number of elements in the batch."""
+    def size(self):
+        """Return the number of samples in the batch. (Batch Size)"""
         return len(self.value)
 
     def __repr__(self):
-        return f"Batch(index={self.index}, is_optim_step_time={self.is_optim_step_time}, eval_time={self.is_eval_time}, save_time={self.is_save_time}, step={self.step}, value={self.value}, ids={self.ids})"
+        return f"Batch(index={self.index}, is_optim_step_time={self.is_optim_step_time}, eval_time={self.is_eval_time}, save_time={self.is_save_time}, step={self.step}, value_type={type(self.value)})"
 
 class BatchIterator:
     """
@@ -46,13 +41,13 @@ class BatchIterator:
     ...     # batch.is_optim_step_time is True if the batch is used for optimization step, False otherwise. Last batch is always True.
     ...     # batch.is_eval_time is True if the batch is used for evaluation, False otherwise. Last batch is always True.
     ...     # batch.is_save_time is True if the batch is used for saving checkpoints, False otherwise. Last batch is always True.
+
     Note you can save the state dict (a.k.a. current step of it)
     Args:
         df: DataFrame (Polars or Pandas) or list/tuple of elements
         num_epochs: int, number of epochs to iterate over the dataset
         batch_size: int, size of each batch
         mode: Literal["train", "test"], mode of operation. If "train", batches are shuffled and partial batches are skipped; if "test", batches are sequential and can be partial.
-
     """
 
     @staticmethod
@@ -62,23 +57,6 @@ class BatchIterator:
         batch_size: int,
         mode: Literal["train", "test", "eval"]
     ) -> List[Tuple[int, ...]]:
-        """
-        This script computes the indices of the batches for a given dataset, with respect to the number of epochs and batch size.
-        You can directly pass through the return as from a dataloader for all epochs.
-        Args:
-            data_size: int, the length of the dataset.
-            num_epochs: int, the number of epochs to iterate over the dataset.
-            batch_size: int, the size of each batch.
-            mode: str, "train", "test" or "eval", whether to generate batches for training, testing or evaluation. If "train", last batch is skipped (if partial) and everything is shuffled.
-
-        Example:
-            >>> print(generate_batches(21, num_epochs=2, batch_size=4, mode="train"))
-                [(14, 13, 8, 15), (10, 11, 9, 2), (17, 4, 20, 6), (19, 3, 5, 0), (16, 18, 12, 1), (7, 15, 13, 7), (6, 2, 10, 19), (17, 5, 0, 9), (16, 18, 14, 20), (3, 11, 12, 4), (1, 8, 14, 13)]
-            >>> print(generate_batches(21, num_epochs=2, batch_size=4, mode="test"))
-                [(0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15), (16, 17, 18, 19), (20, 0, 1, 2), (3, 4, 5, 6), (7, 8, 9, 10), (11, 12, 13, 14), (15, 16, 17, 18), (19, 20)]
-        Returns:
-            List[Tuple[int,]]: a list of tuples containing the indices of each element in the batches.
-        """
         import random
 
         assert batch_size >= 1, "Batch size must be a positive integer."
@@ -123,26 +101,29 @@ class BatchIterator:
     def __init__(
         self,
         df,
-        num_epochs: int,
         batch_size: int,
-        gradient_accumulation_steps: int = 1, # default 1
+        num_epochs: int = 1,
+        gradient_accumulation_steps: int = 1,
         mode: Literal["train", "test"] = "train",
         eval_ratio: float = None,
         save_ratio: float = None,
+        transform: Optional[Callable[[Any], Any]] = None,
+        num_workers: int = 1,
     ):
         """
-        df: list or DataFrame
-        mode: "train" or "test". In train mode, batches are shuffled and partial batches are skipped. In test mode, batches are sequential and can be partial.
+        Args:
+            eval_ratio: (0,1) Ratio of evaluation wrt total batches. (0.2 means 5 evaluations in total during training)
+            mode: "train" or "test". If "train", the iterator shuffles the data and skips the last partial batch if incomplete.
+            transform: A function that takes a single sample and returns a transformed sample.
+                       This is executed on a separate thread.
         """
         assert batch_size >= 1, "Batch size must be a positive integer."
         assert num_epochs >= 1, "Number of epochs must be a positive integer."
-        assert len(df) >= batch_size, (
-            "Batch size must be smaller than or equal to the length of the dataset."
-        )
+        assert len(df) >= batch_size, "Batch size must be smaller than or equal to the length of the dataset."
         assert gradient_accumulation_steps >= 1, "Gradient accumulation steps must be a positive integer."
+        
         if mode not in ["train", "test"]:
             raise ValueError("Mode must be either 'train' or 'test'.")
-
         if mode == "test" and num_epochs != 1:
             raise ValueError("For 'test' mode, num_epochs must be 1.")
 
@@ -153,121 +134,143 @@ class BatchIterator:
         self.eval_ratio = eval_ratio
         self.save_ratio = save_ratio
         self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.transform = transform
+        self.num_workers = num_workers
         self.batch_idcs = self._generate_batch_ids(
             len(df), num_epochs, batch_size, mode=mode
         )
+        
         self.current_step = 0
+        
+        self.prefetch_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.worker_pool = concurrent.futures.ThreadPoolExecutor(max_workers=num_workers)
+        
+        self.next_batch_future = None
+        
+        # Start prefetching batch 0 immediately
+        self._schedule_next_batch(0)
 
+    def _process_row(self, idx):
+        """Worker method to fetch and transform a single row."""
+        raw_sample = self._get_single_item(idx)
+        if self.transform:
+            return self.transform(raw_sample)
+        return raw_sample
     
-
-    def __next__(self):
-        if self.current_step >= len(self.batch_idcs):
-            raise StopIteration
-
-        batch_indices = self.batch_idcs[self.current_step]
-
-        if hasattr(self.df, "iloc"):
-            selected_data = self.df.iloc[batch_indices]
-        elif hasattr(self.df, "get_column"):
-            if len(batch_indices) > 2:
-                selected_data = self.df[batch_indices]
-            else:
-                import polars as pl
-                selected_data = pl.concat([self.df[i] for i in batch_indices])
-                
+    def _schedule_next_batch(self, step_index: int):
+        if step_index < len(self.batch_idcs):
+            # The prefetcher coordinates the batch build
+            self.next_batch_future = self.prefetch_executor.submit(self._prepare_batch, step_index)
         else:
-            selected_data = [self.df[i] for i in batch_indices]
+            self.next_batch_future = None
+
+    def _get_single_item(self, idx):
+        """Helper to safely retrieve a single item from df, polars, or list."""
+        if hasattr(self.df, "iloc"):
+            return self.df.iloc[idx]
+        elif hasattr(self.df, "row"):
+            return self.df[idx] 
+        else: # List/Tuple
+            return self.df[idx]
+
+    def _prepare_batch(self, step_index: int) -> Batch:
+        """
+        Runs on the prefetch_thread. 
+        Distributes the work of processing samples to the worker_pool.
+        """
+        batch_indices = self.batch_idcs[step_index]
+
+        if self.transform is not None:
+            selected_data = list(self.worker_pool.map(self._process_row, batch_indices))
+        else:
+            if hasattr(self.df, "iloc"):
+                selected_data = self.df.iloc[batch_indices]
+            elif hasattr(self.df, "get_column"):
+                if len(batch_indices) > 2:
+                    selected_data = self.df[batch_indices]
+                else:
+                    import polars as pl
+                    selected_data = pl.concat([self.df[i] for i in batch_indices])
+            else:
+                selected_data = [self.df[i] for i in batch_indices]
 
         batch_elem = Batch(
-            batch_index=self.current_step,
+            batch_index=step_index,
             num_batches=len(self.batch_idcs),
             batch_value=selected_data,
             batch_idcs=batch_indices,
-            is_optim_step_time=self._should_optim_step(self.current_step),
-            is_eval_time=self._should_eval(self.current_step),
-            is_save_time=self._should_save(self.current_step)
+            is_optim_step_time=self._should_optim_step(step_index),
+            is_eval_time=self._should_eval(step_index),
+            is_save_time=self._should_save(step_index)
         )
+        return batch_elem
+
+    def __next__(self):
+        if self.next_batch_future is None and self.current_step >= len(self.batch_idcs):
+            raise StopIteration
+            
+        if self.next_batch_future:
+            try:
+                batch_elem = self.next_batch_future.result()
+            except Exception as e:
+                raise e
+        else:
+            raise StopIteration
 
         self.current_step += 1
+        self._schedule_next_batch(self.current_step)
+
         return batch_elem
 
     def __iter__(self):
-            return self
+        return self
     
     def __len__(self):
-        """Returns the number of batches.
-        """
         return len(self.batch_idcs)
 
     def reset(self):
-        """Resets the current position of the iterator to the beginning."""
         self.current_step = 0
+        self.next_batch_future = None 
+        self._schedule_next_batch(0)
         
     def state_dict(self):
-        ## we only save the current step because the object is already initialized by the same script.
         return {"current_step": self.current_step}
 
     def load_state_dict(self, state_dict):
         self.current_step = state_dict["current_step"]
+        self._schedule_next_batch(self.current_step)
         
-    def get_num_samples(self):
-        """
-        Return the total number of samples.
-        """
+    def size(self):
+        """Return the total number of samples in the dataset."""
         return len(self.df)
     
     def get_batch_size(self):
         return self.batch_size
 
     def _should_eval(self, batch_index: int) -> bool:
-        """Check if the current batch should be marked for evaluation."""
         if self.eval_ratio is None or self.eval_ratio <= 0:
             return False
-        
         num_batches = len(self.batch_idcs)
-        
-        # Always eval at the last batch
         if batch_index == num_batches - 1:
             return True
-        
-        # Calculate interval between evals
         interval = int(num_batches * self.eval_ratio)
-        if interval == 0:
-            return False
-        
-        # Mark at indices: interval-1, 2*interval-1, 3*interval-1, etc.
+        if interval == 0: return False
         return (batch_index + 1) % interval == 0
 
     def _should_save(self, batch_index: int) -> bool:
-        """Check if the current batch should be marked for checkpoint saving."""
         if self.save_ratio is None or self.save_ratio <= 0:
             return False
-        
         num_batches = len(self.batch_idcs)
-        
-        # Always save at the last batch
         if batch_index == num_batches - 1:
             return True
-        
-        # Calculate interval between saves
         interval = int(num_batches * self.save_ratio)
-        if interval == 0:
-            return False
-        
-        # Mark at indices: interval-1, 2*interval-1, 3*interval-1, etc.
+        if interval == 0: return False
         return (batch_index + 1) % interval == 0
     
-    
     def _should_optim_step(self, batch_index: int) -> bool:
-        """Check if the current batch should perform an optimizer step."""
         if self.gradient_accumulation_steps == 1:
             return True
-        
         num_batches = len(self.batch_idcs)
-        
-        # Always step at the last batch
         if batch_index == num_batches - 1:
             return True
-        
-        # Mark at indices: gradient_accumulation_steps-1, 2*gradient_accumulation_steps-1, etc.
         return (batch_index + 1) % self.gradient_accumulation_steps == 0
