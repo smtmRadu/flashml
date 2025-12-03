@@ -620,7 +620,6 @@ class SmoothScrollTableView(QtWidgets.QTableView):
                 h_scrollbar._animation.stop()
             QtWidgets.QScrollBar.setValue(h_scrollbar, int(new_value_x))  # Call parent class method
             
-          
     def _stop_autoscroll(self):
         """Stop autoscroll and reset state"""
         if not self._autoscroll_active:

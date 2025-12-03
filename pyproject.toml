@@ -37,7 +37,7 @@ dependencies = [
     "glances", # used to monitor system resources (for linux use nvtop)
     "lorem",
     "Faker", #lipsum but in english
-    
+
     # extras
     "torch",
     "torchtune",

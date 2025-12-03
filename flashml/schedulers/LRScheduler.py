@@ -35,13 +35,16 @@ class LRScheduler:
         if constant_steps_ratio is not None:
             assert 0.0 <= constant_steps_ratio < 1.0
             constant_steps = int(constant_steps_ratio * max_steps)
-        assert warmup_steps >= 0
-        assert max_steps > warmup_steps + constant_steps
+        
 
         self.optimizer = optimizer
-        self.max_steps = max_steps
-        self.warmup_steps = warmup_steps
-        self.constant_steps = constant_steps
+        self.max_steps = int(max_steps)
+        self.warmup_steps = int(warmup_steps)
+        self.constant_steps = int(constant_steps)
+        
+        assert warmup_steps >= 0
+        assert max_steps > warmup_steps + constant_steps
+        
         self.annealing_type = annealing_type
         self.min_lr = min_lr
         self.num_cycles = num_cycles

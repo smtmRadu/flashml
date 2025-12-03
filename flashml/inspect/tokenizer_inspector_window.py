@@ -1,9 +1,12 @@
 def inspect_tokenizer_window(tokenizer):
     import tkinter as tk
     from tkinter import ttk
-    import random
+    import threading
+    import queue
+    import time
+    import math
 
-    # --- Dark Mode Style ---
+    # --- Dark Mode Style (unchanged) ---
     BG_COLOR = "#2E2E2E"
     FG_COLOR = "#FFFFFF"
     TEXT_BG_COLOR = "#3C3C3C"
@@ -56,7 +59,7 @@ def inspect_tokenizer_window(tokenizer):
         )
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(0, 10))
 
-    # --- Left: Basic Info ---
+    # --- Left: Basic Info (unchanged) ---
     basic_frame = ttk.Frame(left_pane)
     basic_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
     add_section_heading(basic_frame, "Basic Information")
@@ -97,7 +100,7 @@ def inspect_tokenizer_window(tokenizer):
             row, text=str(val), wraplength=320, justify=tk.LEFT, font=("Segoe UI", 9)
         ).pack(side=tk.LEFT, expand=True, fill=tk.X, anchor="nw")
 
-    # --- Special Tokens Table (taller now) ---
+    # --- Special Tokens Table ---
     special_frame = ttk.Frame(left_pane)
     special_frame.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
     add_section_heading(special_frame, f"Special Tokens ({len(tokenizer) - tokenizer.vocab_size})")
@@ -130,7 +133,7 @@ def inspect_tokenizer_window(tokenizer):
 
     # --- Right: Live Tokenization & Finder ---
 
-    # TOP: Live Tokenization (token ids box as tall as input)
+    # TOP: Live Tokenization
     live_frame = ttk.Frame(right_pane)
     live_frame.grid(row=0, column=0, sticky="nsew")
     add_section_heading(live_frame, "Live Tokenization")
@@ -139,7 +142,7 @@ def inspect_tokenizer_window(tokenizer):
     input_hl_text = tk.Text(
         live_cont,
         wrap=tk.WORD,
-        height=14,   # Both input and IDs box use the same height!
+        height=14,
         relief=tk.FLAT,
         bg=TEXT_BG_COLOR,
         fg=FG_COLOR,
@@ -156,7 +159,7 @@ def inspect_tokenizer_window(tokenizer):
     ids_disp_text = tk.Text(
         live_cont,
         wrap=tk.WORD,
-        height=14,  # Same as input_hl_text!
+        height=14,
         relief=tk.FLAT,
         bg=TEXT_BG_COLOR,
         fg=FG_COLOR,
@@ -169,69 +172,127 @@ def inspect_tokenizer_window(tokenizer):
     ids_disp_text.pack(fill=tk.BOTH, expand=True)
     ids_disp_text.configure(state="disabled")
 
-    # --- Hover Logic State ---
-    token_colors = {}   # idx: color hex string
-    hover_idx = [None]  # single-element mutable for current hovered index
+    # --- Background Tokenization Setup ---
+    token_colors = {}
+    hover_idx = [None]
+    _tokenization_job = None
+    _tokenization_queue = queue.Queue(maxsize=1)
+    _shutdown_thread = threading.Event()
+
+    def tokenization_worker():
+        """Runs tokenization in background thread"""
+        while not _shutdown_thread.is_set():
+            try:
+                text = _tokenization_queue.get(timeout=0.1)
+                if text is None:  # Shutdown signal
+                    break
+                
+                start_time = time.time()
+                if not text.strip():
+                    result = ("empty",)
+                else:
+                    try:
+                        out = tokenizer(text, return_offsets_mapping=True, add_special_tokens=False)
+                        result = ("success", out, len(text))
+                    except Exception as e:
+                        result = ("error", str(e))
+                
+                processing_time = time.time() - start_time
+                window.after(0, lambda: process_tokenization_result(result, processing_time))
+                
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Worker error: {e}")
+
+    # Start worker thread
+    _tokenization_thread = threading.Thread(target=tokenization_worker, daemon=True)
+    _tokenization_thread.start()
 
     def update_live_hl_tokenize(event=None):
-        nonlocal token_colors
-        token_colors = {}  # Reset colors each time
+        """Debounced entry point: waits 300ms before tokenizing"""
+        nonlocal _tokenization_job
+        
+        if _tokenization_job:
+            window.after_cancel(_tokenization_job)
+        
+        def queue_tokenization():
+            # Clear old queue items
+            while not _tokenization_queue.empty():
+                _tokenization_queue.get_nowait()
+            try:
+                _tokenization_queue.put(input_hl_text.get("1.0", "end-1c"), block=False)
+            except queue.Full:
+                pass
+        
+        _tokenization_job = window.after(300, queue_tokenization)
+        token_count_label.config(text="Processing...")
 
-        text = input_hl_text.get("1.0", "end-1c")
-        # text = text.replace("\\n", "\n")
-        # clear previous tags
+    def process_tokenization_result(result, processing_time):
+        """Update UI with results (runs on main thread)"""
+        nonlocal token_colors
+        
+        # Batch tag removal
+        input_hl_text.tag_remove("tok_", "1.0", tk.END)
         for tag in input_hl_text.tag_names():
             if tag.startswith("tok_"):
                 input_hl_text.tag_delete(tag)
+        
         ids_disp_text.configure(state="normal")
         ids_disp_text.delete("1.0", tk.END)
-
-        if not text.strip():
+        token_colors.clear()
+        
+        if result[0] == "empty":
             ids_disp_text.insert(tk.END, "Token IDs will appear here.")
             token_count_label.config(text="")
+        elif result[0] == "error":
+            ids_disp_text.insert(tk.END, f"Error: {result[1][:100]}...")
+            token_count_label.config(text="")
         else:
-            try:
-                out = tokenizer(
-                    text, return_offsets_mapping=True, add_special_tokens=False
+            out, text_len = result[1], result[2]
+            tids = out.input_ids
+            offsets = out.offset_mapping
+            
+            # Deterministic color generation (faster than random)
+            for idx, (start, end) in enumerate(offsets):
+                if start < end:
+                    hue = (idx * 137.508) % 1.0  # Golden angle
+                    r, g, b = [int(200 + 55 * (0.5 + 0.5 * math.sin(hue * 2 * math.pi + i))) for i in (0, 2, 4)]
+                    bgc = f"#{r:02x}{g:02x}{b:02x}"
+                    tag = f"tok_{idx}"
+                    token_colors[idx] = bgc
+                    input_hl_text.tag_configure(tag, background=bgc, foreground="black")
+                    input_hl_text.tag_add(tag, f"1.0+{start}c", f"1.0+{end}c")
+            
+            # Batch ID insertion
+            id_parts = []
+            for idx, tid in enumerate(tids):
+                bgc = token_colors.get(idx, "#eee")
+                tag = f"id_{idx}"
+                ids_disp_text.tag_configure(
+                    tag,
+                    background=bgc,
+                    foreground="black",
+                    relief="raised",
+                    borderwidth=1,
+                    lmargin1=2,
+                    lmargin2=2,
+                    rmargin=2,
+                    spacing1=1,
+                    spacing3=1,
                 )
-                tids = out.input_ids
-                offsets = out.offset_mapping
-                for idx, (start, end) in enumerate(offsets):
-                    if start < end:
-                        r = random.randint(200, 255)
-                        g = random.randint(200, 255)
-                        b = random.randint(200, 255)
-                        bgc = f"#{r:02x}{g:02x}{b:02x}"
-                        tag = f"tok_{idx}"
-                        token_colors[idx] = bgc
-                        input_hl_text.tag_configure(tag, background=bgc, foreground="black")
-                        input_hl_text.tag_add(tag, f"1.0+{start}c", f"1.0+{end}c")
-                for idx, tid in enumerate(tids):
-                    bgc = token_colors.get(idx, "#eee")
-                    tag = f"id_{idx}"
-                    ids_disp_text.tag_configure(
-                        tag,
-                        background=bgc,
-                        foreground="black",
-                        relief="raised",
-                        borderwidth=1,
-                        lmargin1=2,
-                        lmargin2=2,
-                        rmargin=2,
-                        spacing1=1,
-                        spacing3=1,
-                    )
-                    ids_disp_text.insert(tk.END, f"{tid} ", tag)
-                # --- Set the token count label ---
-                token_count_label.config(
-                    text=f"Total tokens: {len(tids)}"
-                )
-            except Exception as e:
-                ids_disp_text.insert(tk.END, f"Error: {str(e)[:100]}...")
-                token_count_label.config(text="")
+                id_parts.append((f"{tid} ", tag))
+            
+            for text_part, tag in id_parts:
+                ids_disp_text.insert(tk.END, text_part, tag)
+            
+            token_count_label.config(
+                text=f"Total tokens: {len(tids)} (in {processing_time:.3f}s)"
+            )
+        
         ids_disp_text.configure(state="disabled")
 
-    # --- Hover highlight logic ---
+    # --- Hover Logic (unchanged) ---
     def set_token_highlight(idx, active):
         if active:
             bg = ""
@@ -287,10 +348,8 @@ def inspect_tokenizer_window(tokenizer):
     input_hl_text.bind("<Leave>", on_leave_input)
     ids_disp_text.bind("<Motion>", on_motion_ids)
     ids_disp_text.bind("<Leave>", on_leave_ids)
-    input_hl_text.insert("1.0", "Type text here to see live tokenization...")
-    update_live_hl_tokenize()
 
-    # --- Find Token (one-line, auto-update, no button) ---
+    # --- Find Token (unchanged) ---
     finder_frame = ttk.Frame(right_pane)
     finder_frame.grid(row=1, column=0, sticky="ew", pady=(10,0))
     add_section_heading(finder_frame, "Find Token (ID or Text)")
@@ -331,6 +390,18 @@ def inspect_tokenizer_window(tokenizer):
             except Exception as e:
                 tf_output.config(text=f"Error: {str(e)[:90]}...")
 
-    tf_entry.bind("<KeyRelease>", perform_find)  # instant update, no button!
+    tf_entry.bind("<KeyRelease>", perform_find)
 
+    # --- Cleanup on close ---
+    def on_closing():
+        _shutdown_thread.set()
+        _tokenization_queue.put(None)  # Wake up thread
+        window.destroy()
+
+    window.protocol("WM_DELETE_WINDOW", on_closing)
+
+    # --- Initialize ---
+    input_hl_text.insert("1.0", "Type text here to see live tokenization...")
+    update_live_hl_tokenize()
+    
     window.mainloop()

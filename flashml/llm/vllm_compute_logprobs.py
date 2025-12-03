@@ -6,14 +6,13 @@ def vllm_compute_logprobs(
     model_name: str,
     tokenizer_name: str = None,
     tokenizer_mode:str = 'auto',
-        enforce_eager:bool|None=False,
+    enforce_eager:bool|None=False,
     disable_custom_all_reduce:bool=False,
     quantization: Literal["awq", "gptq", "awq_marlin"] = None,
     max_model_len: int = 32_768,
     max_num_seqs: int = 256,
     tensor_parallel_size=1,
     gpu_memory_utilization: float = 0.8,
-    return_with_tokens:bool=False,
     ignore_patterns=["original/**", "metal/**"]
 ) -> List[List[float]]:
     """
@@ -70,8 +69,20 @@ def vllm_compute_logprobs(
         logprobs=1,  # We only need the actual token's logprob
         prompt_logprobs=1  # Get logprobs for input tokens
     )
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name if tokenizer_name is not None else model_name)
     
-
+    args = {
+            "model_name": model_name,
+            "tokenizer_name": tokenizer_name,
+            "quantization": quantization,
+            "max_model_len": max_model_len,
+            "max_num_seqs": max_num_seqs,
+            "tensor_parallel_size": tensor_parallel_size,
+            "gpu_memory_utilization": gpu_memory_utilization,
+            "ignore_patterns": ignore_patterns
+        }
+    
     if isinstance(texts, list) and all(isinstance(i, list) or i is None for i in texts):
         non_none_texts = [x for x in texts if x is not None]
         
@@ -82,40 +93,48 @@ def vllm_compute_logprobs(
             use_tqdm=True
         )
         
-        log_probs_res = []
-        tokens = []
+        full_info = []
+
         output_idx = 0
-        
         for t in texts:
             if t is None:
-                log_probs_res.append(None)
-                tokens.append(None)
+                full_info.append(None)
             else:
                 output = outputs[output_idx]
                 output_idx += 1
                 input_ids = output.prompt_token_ids
                 token_logprobs = [None]  # No logprob for the first token
+                tokens = [tokenizer.decode(output.prompt_token_ids[0])]
+                ranks = [None]
                 for i in range(1, len(input_ids)):
                     logprob_dict = output.prompt_logprobs[i]
                     token_id = input_ids[i]
                     key = token_id if token_id in logprob_dict else str(token_id)
-                    logprob = logprob_dict.get(key)
-                    if logprob is not None:
-                        token_logprobs.append(logprob.logprob)
-                    else:
-                        token_logprobs.append(0.0)
-                log_probs_res.append(token_logprobs)
-                tokens.append(output.prompt_token_ids)
+                    logprob_obj = logprob_dict.get(key)
+
+                    token_logprobs.append(logprob_obj.logprob)
+                    tokens.append(logprob_obj.decoded_token)
+                    ranks.append(logprob_obj.rank)
+                    
+                full_info.append({
+                    "request_id": output.request_id,
+                    "prompt": output.prompt,
+                    "logprobs": token_logprobs,
+                    "tokens_ids": output.prompt_token_ids,
+                    "tokens": tokens,
+                    "ranks": ranks,
+                    "args": args
+                })
+                
         
-        if return_with_tokens:
-            return log_probs_res, tokens
-        else:
-            return log_probs_res
+        
+
+        return full_info
+
+
         
     else:
-        log_probs_res = []
-        tokens = []
-        # Process texts in batch
+        full_info = []
         outputs = llm.generate(
             prompts=texts,
             sampling_params=sampling_params,
@@ -123,22 +142,29 @@ def vllm_compute_logprobs(
         )
         
         for output in outputs:
-            print(output)
             input_ids = output.prompt_token_ids
-            token_logprobs = [None]  # No logprob for the first token
+            token_logprobs = [None]
+            tokens = [tokenizer.decode(output.prompt_token_ids[0])]
+            ranks = [None]
             for i in range(1, len(input_ids)):
                 logprob_dict = output.prompt_logprobs[i]
                 token_id = input_ids[i]
                 key = token_id if token_id in logprob_dict else str(token_id)
-                logprob = logprob_dict.get(key)
-                if logprob is not None:
-                    token_logprobs.append(logprob.logprob)
-                else:
-                    token_logprobs.append(0.0)
-            log_probs_res.append(token_logprobs)
-            tokens.append(output.prompt_token_ids)
+                logprob_obj = logprob_dict.get(key)
+                token_logprobs.append(logprob_obj.logprob)
+                tokens.append(logprob_obj.decoded_token)
+                ranks.append(logprob_obj.rank)
+                    
+            full_info.append({
+                    "request_id": output.request_id,
+                    "prompt": output.prompt,
+                    "logprobs": token_logprobs,
+                    "tokens_ids": output.prompt_token_ids,
+                    "tokens": tokens,
+                    "ranks": ranks,
+                    "args": args
+                })
         
-        if return_with_tokens:
-            return log_probs_res, tokens
-        else:
-            return log_probs_res
+        
+        
+        return full_info

@@ -97,7 +97,7 @@ def merge_llm(
 def merge_and_quantize_llm(
     adapter_path: str,
     base_model_path: str = "auto",
-    quant_type: Literal["gptq", "awq", "bitsandbytes"] = "bitsandbytes",
+    quant_type: Literal["gptq", "awq", "bitsandbytes", "mxfp4"] = "bitsandbytes",
     calibration_dataset: list[str] | None = None,
     dtype: Literal["fp16", "bf16", "fp32"] = "bf16"
 ):
@@ -108,8 +108,8 @@ def merge_and_quantize_llm(
     Args:
         adapter_path (str): Path to LoRA adapter
         base_model_path (str): Base model path or "auto" to infer from adapter_config.json
-        quant_type (str): "gptq", "awq", or "bitsandbytes"
-        calibration_dataset (list[str] | None): Required for GPTQ/AWQ
+        quant_type (str): "gptq", "awq", "bitsandbytes", or "mxfp4"
+        calibration_dataset (list[str] | None): Required for GPTQ/AWQ/MXFP4
         dtype (str): Model load/merge precision ("fp16", "bf16", "fp32")
     """
     import torch
@@ -119,7 +119,7 @@ def merge_and_quantize_llm(
     import os, shutil, tempfile, json
 
     quant_type = quant_type.lower()
-    if quant_type not in ["gptq", "awq", "bitsandbytes"]:
+    if quant_type not in ["gptq", "awq", "bitsandbytes", "mxfp4"]:
         raise ValueError(f"Invalid quant_type: {quant_type}")
 
     # Handle dtypes
@@ -130,13 +130,14 @@ def merge_and_quantize_llm(
     }
     torch_dtype = dtype_map.get(dtype, torch.float16)
 
-    if quant_type in ["gptq", "awq"] and not calibration_dataset:
+    if quant_type in ["gptq", "awq", "mxfp4"] and not calibration_dataset:
         raise ValueError(f"{quant_type.upper()} requires calibration_dataset")
 
     suffix_map = {
         "awq": "_AWQ",
         "gptq": "_GPTQ",
-        "bitsandbytes": "_bnb"
+        "bitsandbytes": "_bnb",
+        "mxfp4": "_MXFP4"
     }
 
     adapter_path_obj = Path(adapter_path)
@@ -217,6 +218,50 @@ quant_stage:
             )
         merged_model = None
 
+    elif quant_type == "mxfp4":
+        try:
+            from llmcompressor.transformers import oneshot
+            from llmcompressor.modifiers.quantization import QuantizationModifier
+        except ImportError:
+            raise ImportError(
+                "MX-FP4 quantization requires llm-compressor. Install with: "
+                "pip install llmcompressor[transformers]"
+            )
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            merged_model.save_pretrained(temp_dir)
+            tokenizer.save_pretrained(temp_dir)
+            
+            # MX-FP4 recipe for block-wise microscaling quantization
+            recipe = QuantizationModifier(
+                targets="Linear",
+                scheme="FP4",
+                ignore=["lm_head"],
+                config_groups={
+                    "group_0": {
+                        "weights": {
+                            "num_bits": 4,
+                            "type": "float",
+                            "strategy": "group",
+                            "group_size": 128,
+                            "block_structure": "1x128"  # MX block structure
+                        }
+                    }
+                }
+            )
+            
+            # Perform one-shot quantization with calibration data
+            oneshot(
+                model=temp_dir,
+                dataset=calibration_dataset,
+                recipe=recipe,
+                output_dir=str(save_path),
+                num_calibration_samples=min(512, len(calibration_dataset)),
+                max_seq_length=2048,
+                pad_to_max_length=False
+            )
+        merged_model = None
+
     elif quant_type == "bitsandbytes":
         # BitsAndBytes requires calibration dataset for proper 4-bit serialization
         if not calibration_dataset:
@@ -264,6 +309,9 @@ quant_stage:
 
     print(f"\n🎉 Model merged, quantized, and saved to {save_path}")
     return save_path
+
+
+
 def get_4bit_quantization_config():
     from transformers import BitsAndBytesConfig
     import torch
