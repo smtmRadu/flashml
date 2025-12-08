@@ -22,6 +22,20 @@ QWEN3_VL_2B_THINKING_VLLM_CONFIG = {
     "gpu-memory-utilization": 0.85,
 }
 
+QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
+    "model": "unsloth/Qwen3-VL-8B-Thinking-bnb-4bit",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "limit-mm-per-prompt.video": 0,
+    "async-scheduling": "",
+    "gpu-memory-utilization": 0.95,
+    "tensor-parallel-size": 1,
+}
+
+
 QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3-VL-30B-A3B-Thinking",
     "max_model_len": 40_960,
@@ -31,7 +45,7 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
     "top_k": 20,
     "limit-mm-per-prompt.video": 0,
     "async-scheduling": "",
-    "gpu-memory-utilization": 0.85,
+    "gpu-memory-utilization": 0.95,
     "tensor-parallel-size": 1,
 }
 
