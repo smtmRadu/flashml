@@ -25,7 +25,7 @@ from .main_tools.mlflow_logging import (
     log_checkpoint,
     log_figure,
     log_metrics,
-    load_run_state
+    make_run_name
 )
 from .main_tools.parallel import parallel_for, parallel_foreach
 from .main_tools.plot_distribution import plot_dist
@@ -58,6 +58,7 @@ __all__ = [
     "log_metrics",
     "lorem_ipsum",
     "lorem_ipsum_en",
+    "make_run_name",
     "parallel_for",
     "parallel_foreach",
     "plot_dist",

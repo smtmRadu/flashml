@@ -84,8 +84,9 @@ def vllm_chat(
             print(i.outputs[0].text)
         ```
     """  
+    print("[Deprecated] We recommend using vllm_chat_openai_entrypoint.")
     from vllm import SamplingParams
-    from vllm.sampling_params import GuidedDecodingParams
+    from vllm.sampling_params import StructuredOutputsParams
     llm = VLLMCore.initialize(
         model_name=model_name,
         tokenizer_name=tokenizer_name,
@@ -117,7 +118,7 @@ def vllm_chat(
                 
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
                 stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
-                guided_decoding=GuidedDecodingParams(json=format.model_json_schema()) if format is not None else None),
+                guided_decoding=StructuredOutputsParams(json=format.model_json_schema()) if format is not None else None),
             use_tqdm=True
         )
         
@@ -142,7 +143,7 @@ def vllm_chat(
                 min_p=min_p, 
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
                 stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
-                guided_decoding=GuidedDecodingParams(json=format) if format is not None else None),
+                guided_decoding=StructuredOutputsParams(json=format) if format is not None else None),
             use_tqdm=True
         )
 

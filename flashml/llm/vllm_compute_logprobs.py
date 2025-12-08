@@ -4,12 +4,12 @@ from flashml.llm.vllm_engine import VLLMCore
 def vllm_compute_logprobs(
     texts: List[str],
     model_name: str,
+    max_model_len: int = 32_768,
     tokenizer_name: str = None,
     tokenizer_mode:str = 'auto',
     enforce_eager:bool|None=False,
     disable_custom_all_reduce:bool=False,
     quantization: Literal["awq", "gptq", "awq_marlin"] = None,
-    max_model_len: int = 32_768,
     max_num_seqs: int = 256,
     tensor_parallel_size=1,
     gpu_memory_utilization: float = 0.8,
@@ -41,9 +41,14 @@ def vllm_compute_logprobs(
             texts=texts
         )
         
-        for i, logprobs in enumerate(results):
-            print(f"Text {i}: '{texts[i]}'")
-            print(f"Logprobs: {logprobs}")
+        for elem in enumerate(results):
+            elem["request_id"] (int)
+            elem["prompt"] (str)
+            elem["logprobs"] (list[float], first element is None) 
+            elem["tokens_ids"] (list[int], first and last element might be special tokens ids, equal in length with logprobs)
+            elem["tokens"] (list[str], first and last element might be special tokens, equal in length with logprobs)
+            elem["ranks"] (list[int], equal in length with logprobs)
+            elem["args"] (the received arguments when generating: model_name, tokenizer_name, quantization etc.)
         ```
     """
     from vllm import SamplingParams

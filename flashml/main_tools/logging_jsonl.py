@@ -15,12 +15,23 @@ def log_json(
 
     Args:
         record (dict | str): A message or a dictionary
-        path (flashml_logger.jsonl): _description_
-        mode (str, optional): _description_. Defaults to "a".
-        utf (str, optional): _description_. Defaults to "utf-8".
+        path (str): Path to the jsonl file (including directories).
+        add_timestamp (bool, optional): Whether to add a timestamp. Defaults to False.
+        mode (str, optional): File mode, defaults to "a" (append).
+        utf (str, optional): Encoding, defaults to "utf-8".
     """
+    if not path.endswith((".jsonl", ".json")):
+        path += ".jsonl"
+
+    # Ensure the directory exists
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        print(f"[ℹ️ log_json] Directory created: {directory}")
+
     if isinstance(record, str):
         record = {"message": record}
+    
     if add_timestamp:
         new_dict = {"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), **record}
     else:
@@ -46,12 +57,15 @@ def load_jsonl(
     """
     import os, json
 
+    if not path.endswith((".jsonl", ".json")):
+        path += ".jsonl"
+        
     # check file exists
     if not os.path.exists(path):
         from flashml import bell
         bell()
         print(
-            f"\033[93mWARNING: The file at path {path} couldn't be found, the returned object is None.\033[0m"
+            f"⚠️  \033[93mThe file at path {path} couldn't be found, the returned object is None.\033[0m"
         )
         return None
 
@@ -74,7 +88,7 @@ def load_jsonl(
 
     except ValueError as e:
         # Fallback: scan line by line to find bad JSON
-        print(f"\033[91mError while reading {path}: {e}\033[0m")
+        print(f"❌ \033[91mError while reading {path}: {e}\033[0m")
         print("Scanning file line by line to locate issue...\n")
         bad_lines = []
         with open(path, "r", encoding=utf) as f:
@@ -89,5 +103,5 @@ def load_jsonl(
             for lineno, msg, sample in bad_lines:
                 print(f"Line {lineno}: {msg}\n  {sample}\n")
         else:
-            print("No obvious bad lines found (may be an encoding or quoting issue).")
+            print("ℹ️ No obvious bad lines found (may be an encoding or quoting issue).")
         raise

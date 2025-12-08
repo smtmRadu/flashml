@@ -22,28 +22,30 @@ class Batch:
     Represents a batch in the processing workflow of BatchIterator.
     """
 
-    def __init__(self, batch_index, num_batches, batch_value, batch_idcs, is_optim_step_time, is_eval_time, is_save_time):
+    def __init__(self, batch_index, batch_value, batch_idcs, is_optim_step_time, is_eval_time, is_save_time, optim_step_index, total_optim_steps):
         self.index: int = batch_index
-        self.step = (batch_index+1, num_batches)
+        self.optim_step = (optim_step_index, total_optim_steps) if is_optim_step_time is True else None
         self.value = batch_value
         self.ids = batch_idcs
         self.is_optim_step_time = is_optim_step_time
         self.is_eval_time = is_eval_time
         self.is_save_time = is_save_time
 
-    def __iter__(self):
-        return iter((self.step, self.value))
-    
     def __len__(self):
         return len(self.value)
     
     def size(self):
         """Return the number of samples in the batch. (Batch Size)"""
         return len(self.value)
-
+    
+    def __iter__(self):
+        return iter(self.optim_step)
+    
     def __repr__(self):
-        return f"Batch(index={self.index}, is_optim_step_time={self.is_optim_step_time}, eval_time={self.is_eval_time}, save_time={self.is_save_time}, step={self.step}, value_type={type(self.value)})"
+        return f"Batch(index={self.index}, size={self.size()}, optim_step={self.optim_step}, is_optim_step_time={self.is_optim_step_time}, is_eval_time={self.is_eval_time}, is_save_time={self.is_save_time}, value:{type(self.value).__name__}={len(self.value)} samples)"
 
+    def __str__(self):
+        return self.__repr__()
 
 class _InternalDataset(Dataset):
     """Internal Dataset wrapper for PyTorch DataLoader."""
@@ -92,16 +94,17 @@ class BatchIterator:
     """
     Automatic build batch elements from a dataframe/list for training or testing.
     Now uses PyTorch DataLoader as backend for true parallel preprocessing.
-    
-    Examples:
-    >>> for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
-    ...     # batch.index is the batch index (int), e.g.: 1, 2, 3, 4, ...
-    ...     # batch.step is the batch index out of num batches (tuple(step, total_steps)), e.g.: (1,120), (2, 120) ...
-    ...     # batch.value is a list with batch_size elements
-    ...     # batch.ids are the indices of the rows in the batch (list), e.g: [72, 2817, ... 2182], [2183, 1456, ... 1729], ...
-    ...     # batch.is_optim_step_time is True if the batch is used for optimization step
-    ...     # batch.is_eval_time is True if the batch is used for evaluation
-    ...     # batch.is_save_time is True if the batch is used for saving checkpoints
+
+Examples:
+>>> for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
+...     # batch.index is the batch index (int), e.g.: 0, 1, 2, 3, ...
+...     # batch.optim_step is the optimization step out of total optim steps (tuple(step, total_steps)), e.g.: (1,60), (1,60), (2,60), (2,60) ... (if grad_accum=2)
+...     # batch.value is a list with batch_size elements
+...     # batch.ids are the indices of the rows in the batch (list), e.g: [72, 2817, ... 2182], [2183, 1456, ... 1729], ...
+...     # batch.is_optim_step_time is True if the batch is used for optimization step
+...     # batch.is_eval_time is True if the batch is used for evaluation
+...     # batch.is_save_time is True if the batch is used for saving checkpoints
+
     """
 
     def __init__(
@@ -152,12 +155,13 @@ class BatchIterator:
         if num_workers is None:
             if _is_notebook():
                 num_workers = 0
-                import warnings
-                warnings.warn(
-                    "Detected Jupyter notebook environment. Setting num_workers=0 for compatibility. "
-                    "To use multiprocessing, explicitly set num_workers > 0 (may cause issues).",
-                    UserWarning
-                )
+                print("[⚠️ BatchIterator] Detected Jupyter notebook environment. Setting num_workers=0 for compatibility.")
+                # import warnings
+                # warnings.warn(
+                #     "Detected Jupyter notebook environment. Setting num_workers=0 for compatibility. "
+                #     "To use multiprocessing, explicitly set num_workers > 0 (may cause issues).",
+                #     UserWarning
+                # )
             else:
                 num_workers = 4  # Safe default for scripts
 
@@ -184,6 +188,9 @@ class BatchIterator:
         if not drop_last and len(df) % batch_size != 0:
             batches_per_epoch += 1
         self.total_batches = batches_per_epoch * num_epochs
+        self.total_optim_steps = self.total_batches // gradient_accumulation_steps
+        if self.total_batches % gradient_accumulation_steps != 0:
+            self.total_optim_steps += 1
         
         # Create DataLoader with appropriate settings
         self.dataloader = DataLoader(
@@ -198,7 +205,7 @@ class BatchIterator:
             persistent_workers=persistent_workers if num_workers > 0 else False,
         )
         
-        self.current_step = 0
+        self.current_batch = 0
         self.dataloader_iter = None
         self._epoch = 0
         
@@ -230,7 +237,8 @@ class BatchIterator:
         return (batch_index + 1) % self.gradient_accumulation_steps == 0
 
     def __next__(self):
-        if self.current_step >= self.total_batches:
+        if self.current_batch >= self.total_batches:
+            # print("ℹ️ BatchIterator: End of dataset reached.")
             raise StopIteration
         
         # Initialize iterator if needed
@@ -247,18 +255,23 @@ class BatchIterator:
             self.dataloader_iter = iter(self.dataloader)
             batch_value, batch_idcs = next(self.dataloader_iter)
         
-        # Create Batch object with all metadata
+        # Add after: self.current_batch >= self.total_batches check
+        current_optim_step = (self.current_batch // self.gradient_accumulation_steps) + 1
+
+        # Then update Batch creation:
         batch_elem = Batch(
-            batch_index=self.current_step,
-            num_batches=self.total_batches,
+            batch_index=self.current_batch,
+            optim_step_index=current_optim_step,
+            total_optim_steps=self.total_optim_steps,
             batch_value=batch_value,
             batch_idcs=batch_idcs,
-            is_optim_step_time=self._should_optim_step(self.current_step),
-            is_eval_time=self._should_eval(self.current_step),
-            is_save_time=self._should_save(self.current_step)
+            is_optim_step_time=self._should_optim_step(self.current_batch),
+            is_eval_time=self._should_eval(self.current_batch),
+            is_save_time=self._should_save(self.current_batch),
+            
         )
         
-        self.current_step += 1
+        self.current_batch += 1
         return batch_elem
 
     def __iter__(self):
@@ -270,27 +283,27 @@ class BatchIterator:
 
     def reset(self):
         """Reset iterator to beginning."""
-        self.current_step = 0
+        self.current_batch = 0
         self._epoch = 0
         self.dataloader_iter = None
         
     def state_dict(self):
         """Save current state for resuming training."""
         return {
-            "current_step": self.current_step,
+            "current_step": self.current_batch,
             "epoch": self._epoch
         }
 
     def load_state_dict(self, state_dict):
         """Load saved state to resume training."""
-        self.current_step = state_dict["current_step"]
+        self.current_batch = state_dict["current_step"]
         self._epoch = state_dict.get("epoch", 0)
         self.dataloader_iter = None
         
         # Fast-forward to the correct position
-        if self.current_step > 0:
+        if self.current_batch > 0:
             self.dataloader_iter = iter(self.dataloader)
-            steps_in_current_epoch = self.current_step % (self.total_batches // self.num_epochs)
+            steps_in_current_epoch = self.current_batch % (self.total_batches // self.num_epochs)
             for _ in range(steps_in_current_epoch):
                 try:
                     next(self.dataloader_iter)
@@ -304,45 +317,3 @@ class BatchIterator:
     def get_batch_size(self):
         """Return the batch size."""
         return self.batch_size
-
-
-# Example usage:
-if __name__ == "__main__":
-    import pandas as pd
-    
-    # Create sample data
-    df = pd.DataFrame({
-        'x': range(1000),
-        'y': range(1000, 2000)
-    })
-    
-    # Example transform function
-    def my_transform(row):
-        return {
-            'x': row['x'] * 2,
-            'y': row['y'] * 2
-        }
-    
-    # Create iterator with parallel processing
-    batch_iter = BatchIterator(
-        df=df,
-        batch_size=32,
-        num_epochs=2,
-        mode="train",
-        transform=my_transform,
-        num_workers=4,  # Use 4 worker processes
-        eval_ratio=0.2,
-        save_ratio=0.1,
-        gradient_accumulation_steps=4
-    )
-    
-    print(f"Total batches: {len(batch_iter)}")
-    
-    for batch in batch_iter:
-        print(batch)
-        print(f"  Batch size: {batch.size()}")
-        print(f"  First item: {batch.value[0]}")
-        print(f"  Indices: {batch.ids[:5]}...")
-        
-        if batch.current_step >= 5:  # Just show first few batches
-            break

@@ -1,5 +1,31 @@
 from typing import Any, Tuple
 
+def make_run_name(base_name:str, experiment_name:str=None):
+    """Returns a new run name for the experiment with the following template:
+    {base_name}_{DD}{MM}_v{version_number}
+    
+    Recommended base_name: type(model).__name__
+    """
+    from mlflow.tracking import MlflowClient
+    from datetime import datetime
+    import mlflow
+    client = MlflowClient()
+    experiment_id = mlflow.get_experiment_by_name(
+        experiment_name if experiment_name else "Default"
+    ).experiment_id
+    
+    existing_runs = client.search_runs(experiment_ids=[experiment_id])
+    existing_run_names = [run.info.run_name for run in existing_runs]
+    
+    now = datetime.now()
+    base_name = base_name if base_name else "run"
+    date_str = f"{now.day:02d}{now.month:02d}"
+    
+    version = 1
+    while f"{base_name}_{date_str}_v{version}" in existing_run_names:
+        version += 1
+    
+    return f"{base_name}_{date_str}_v{version}"
 
 def log_metrics(
     metrics: dict[str, Any],
@@ -22,7 +48,7 @@ def log_metrics(
 
     Args:
         metrics (dict[str, Any]): metrics dict
-        step (Tuple[int, int]): the current step and total steps. It is incremented automatically if none
+        step (Tuple[int, int]): the current step and total steps, or just current step. It is incremented automatically if None.
         hyperparams (dict[str, Any]): hyperparams dict. If not provided, it will be taken from the global variable (if possible)
         run_name (str): If None, it will initialize a new run and will log only to it. You can have multiple runs in a single python call (e.g. for grid search/parallel coords)
         experiment_name (str): The tab where to log the experiment (even with that, you can merge them inside mlflow when comparing results)
@@ -149,45 +175,7 @@ def host_mlflow(host="127.0.0.1", port="5000"):
     )
     return subprocess.Popen(["mlflow", "ui", "--host", host, "--port", port])
 
-def load_run_state(run_id: str, experiment_name: str = None):
-    """
-    Loads all metrics (including system metrics) from a given MLflow run and logs them to the current active run,
-    initializing the TrainingLogger first and using direct mlflow.log_metrics calls.
-    Args:
-        run_id (str): The MLflow run ID to load from.
-        experiment_name (str, optional): The experiment name. Defaults to None.
-    """
-    raise Exception("Not in use. It is too slow and must be updated in the future with some sort of copy pasting from the source..")
-    import mlflow
-    from mlflow.tracking import MlflowClient
 
-    # 1. Explicitly initialize the logger (this starts a new run if not already started)
-    logger = _TrainingLogger(None, run_name=None, experiment_name=experiment_name)
-    client = MlflowClient()
-
-    # 2. Copy scalar metrics (user-logged metrics)
-    run = client.get_run(run_id)
-    metric_names = list(run.data.metrics.keys())
-
-    for metric_name in metric_names:
-        history = client.get_metric_history(run_id, metric_name)
-        for metric in history:
-            # Use native mlflow log_metrics to log at the exact step
-            mlflow.log_metrics({metric_name: metric.value}, step=metric.step, synchronous=False)
-
-    # 3. Copy system metrics (MLflow >=2.5.0)
-    try:
-        sys_metric_names = getattr(run.data, "system_metrics", {}).keys()
-        for sys_metric_name in sys_metric_names:
-            sys_history = client.get_metric_history(run_id, sys_metric_name, metric_type="system")
-            for sys_metric in sys_history:
-                mlflow.log_metrics({sys_metric_name: sys_metric.value}, step=sys_metric.step, synchronous=False)
-    except Exception as e:
-        print(f"Warning: Could not load system metrics. ({e})")
-
-    print(f"Copied all metrics and system metrics from run {run_id} to current run.")
-    
-    # this should also increment the internal step counter but fuck off...
 class _TrainingLogger:
     _instance: "_TrainingLogger" = None
 
@@ -250,7 +238,7 @@ class _TrainingLogger:
         print(
             f"\033[90mAccess MLFlow run at:\033[0m \033[94mhttp://{self.host}:{self.port}\033[0m \033[95m({self.mlflow_op.info.run_name})\033[0m"
         )
-        self.display = tqdm(desc="Batch", total=num_steps, leave=True)
+        self.display = tqdm(desc="Step", total=num_steps, leave=True)
 
         atexit.register(self._end_mlflow_ui)
         self.display.reset()
