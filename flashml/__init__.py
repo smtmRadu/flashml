@@ -36,6 +36,7 @@ from .main_tools.plot_tsne import plot_tsne
 from .main_tools.resource_monitor import resource_monitor
 from .main_tools.sound_effects import bell
 from .main_tools.load_yaml_configs import load_yaml_configs
+from .main_tools.send_telegram_notification import send_telegram_notification
 
 __all__ = [
     "BatchIterator",
@@ -71,6 +72,7 @@ __all__ = [
     "resource_monitor",
     "sample_elementwise",
     "sample_from",
+    "send_telegram_notification",
     "shuffle_df",
     "shuffle_tensor",
     "stress_cpu",

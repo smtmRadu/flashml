@@ -4,7 +4,7 @@ from typing import Literal
 def merge_llm(
     adapter_path: str,
     base_model_path: str = "auto",
-    dtype: Literal["fp16", "bf16", "fp32"] = "bf16"
+    dtype: Literal["fp16", "bf16", "fp32"] = "fp16"
 ):
     """
     Merges a base model with a LoRA adapter and saves it in the specified precision

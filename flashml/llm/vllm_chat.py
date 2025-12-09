@@ -19,7 +19,6 @@ def vllm_chat(
     top_p=1,
     min_p=0,
     stop: List[str] | List[int] = None, 
-    format=None,
     max_tokens=131_072,
     ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
     **kwargs,
@@ -86,7 +85,7 @@ def vllm_chat(
     """  
     print("[Deprecated] We recommend using vllm_chat_openai_entrypoint.")
     from vllm import SamplingParams
-    from vllm.sampling_params import StructuredOutputsParams
+    # from vllm.sampling_params import StructuredOutputsParams
     llm = VLLMCore.initialize(
         model_name=model_name,
         tokenizer_name=tokenizer_name,
@@ -118,8 +117,7 @@ def vllm_chat(
                 
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
                 stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
-                guided_decoding=StructuredOutputsParams(json=format.model_json_schema()) if format is not None else None),
-            use_tqdm=True
+        )
         )
         
         with_none_outputs = []
@@ -142,9 +140,7 @@ def vllm_chat(
                 top_p=top_p, 
                 min_p=min_p, 
                 stop=stop if stop is not None and isinstance(stop[0], str) else None,
-                stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,
-                guided_decoding=StructuredOutputsParams(json=format) if format is not None else None),
-            use_tqdm=True
+                stop_token_ids=stop if stop is not None and isinstance(stop[0], int) else None,)
         )
 
         
