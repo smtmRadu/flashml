@@ -403,4 +403,6 @@ def test_plot_func():
     
     
 if __name__ == "__main__":
-    test_plot_func()
+    from flashml import print_info, print_warning, print_error
+    print_error("This is an informational message.")
+    # test_plot_func()

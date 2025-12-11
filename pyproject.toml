@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashml"
-version = "0.6.5.6"
+version = "0.6.7"
 authors = [{ name = "kbradu" }]
 dependencies = [
     "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
@@ -48,13 +48,13 @@ dependencies = [
     "torch-optimi",
     "gymnasium",
     "transformers",
+    "unsloth",
     "trl",
     "weave",
     "wandb",
     "evaluate",
     "hydra-core",
     "rouge_score",
-    "autoawq",
     "peft",
     "bitsandbytes",
     "ipykernel",
@@ -71,7 +71,6 @@ dependencies = [
 
     
     #"auto-gptq",
-    #"autoawq",
     #"llmcompressor",
     #"vllm",
 

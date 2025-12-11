@@ -103,3 +103,19 @@ GPT_OSS_20B_LOW_VLLM_CONFIG = {
     "ignore-patterns": ["original/**", "metal/**"]
 }
 
+
+MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
+    "model": "mistralai/Ministral-3-3B-Instruct-2512",
+    "max_model_len": 8192,
+    "max_completion_tokens": 4096,
+    "gpu-memory-utilization": 0.85,
+    "tensor-parallel-size": 1,
+    "temperature": 0.1,
+    "tokenizer-mode": "mistral",
+    "config_format": "mistral",
+    "load_format": "mistral",
+    
+    
+    
+    "ignore_patterns": ["original/**", "metal/**"],
+}

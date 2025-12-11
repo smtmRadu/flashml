@@ -37,6 +37,7 @@ from .main_tools.resource_monitor import resource_monitor
 from .main_tools.sound_effects import bell
 from .main_tools.load_yaml_configs import load_yaml_configs
 from .main_tools.send_telegram_notification import send_telegram_notification
+from .main_tools.printing import print_info, print_warning, print_error
 
 __all__ = [
     "BatchIterator",
@@ -68,6 +69,10 @@ __all__ = [
     "plot_rt_graph",
     "plot_tensor",
     "plot_tsne",
+    "print_error",
+    "print_info",
+    "print_warning",
+    
     "reorder_df_columns",
     "resource_monitor",
     "sample_elementwise",
