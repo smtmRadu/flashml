@@ -24,7 +24,7 @@ def vllm_chat(
     **kwargs,
 ):
     """
-    (WSL or Linux only) Runs chat inference on a VLLM backend.
+    (WSL or Linux only) Runs chat inference on a VLLM backend (>=0.12.0).
     It handles None messages (output will be None as well)
     Install FlashInfer for best performance.
 
@@ -83,7 +83,6 @@ def vllm_chat(
             print(i.outputs[0].text)
         ```
     """  
-    print("[Deprecated] We recommend using vllm_chat_openai_entrypoint.")
     from vllm import SamplingParams
     # from vllm.sampling_params import StructuredOutputsParams
     llm = VLLMCore.initialize(

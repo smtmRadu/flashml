@@ -66,14 +66,23 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         return len(self._df.index)
 
     def columnCount(self, parent=None):
-        return len(self._df.columns)
+        return len(self._df.columns) + 1
 
     def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         r, c = index.row(), index.column()
+        
+        # Handle the "+" column
+        if c == len(self._df.columns):
+            if role == QtCore.Qt.ItemDataRole.DisplayRole:
+                return ""
+            elif role == QtCore.Qt.ItemDataRole.BackgroundRole:
+                return QtGui.QBrush(QtGui.QColor(60, 60, 60))
+            return None
+        
+        # Existing logic for regular columns
         val = self._df.iat[r, c]
-
         if role in (QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole):
             if pd.isna(val):
                 return ""
@@ -82,19 +91,20 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.ItemDataRole.BackgroundRole:
             text = "" if pd.isna(val) else str(val).lower()
             if self.search_term and self.search_term.lower() in text:
-                return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))  
+                return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))
 
             base_color = column_shade_color(self._is_dark, c)
             if r % 2 == 1:
-                base_color = base_color.darker(150)  
+                base_color = base_color.darker(150)
             
             return QtGui.QBrush(base_color)
-
         return None
     
     def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if role == QtCore.Qt.ItemDataRole.DisplayRole:
             if orientation == QtCore.Qt.Orientation.Horizontal:
+                if section == len(self._df.columns):  # Last column
+                    return "+"
                 return str(self._df.columns[section])
             else:
                 return str(self._df.index[section])
@@ -103,6 +113,8 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     def flags(self, index):
         if not index.isValid():
             return QtCore.Qt.ItemFlag.NoItemFlags
+        if index.column() == len(self._df.columns):
+            return QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled
         return (
             QtCore.Qt.ItemFlag.ItemIsSelectable
             | QtCore.Qt.ItemFlag.ItemIsEnabled
@@ -142,20 +154,18 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             return
         
         if self.case_sensitive:
-            # Case-sensitive search
             st = self.search_term
             for r in range(self.rowCount()):
-                for c in range(self.columnCount()):
+                for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
                     if pd.isna(val):
                         continue
                     if st in str(val):
                         self._matches.append(self.index(r, c))
         else:
-            # Original case-insensitive search
             st = self.search_term.lower()
             for r in range(self.rowCount()):
-                for c in range(self.columnCount()):
+                for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
                     if pd.isna(val):
                         continue
@@ -169,6 +179,13 @@ class DataFrameModel(QtCore.QAbstractTableModel):
 
     def total_matches(self) -> int:
         return len(self._matches)
+    
+    def add_new_column(self, col_name: str):
+        """Add a new column to the DataFrame"""
+        if col_name and col_name not in self._df.columns:
+            self.beginInsertColumns(QtCore.QModelIndex(), self.columnCount() - 1, self.columnCount() - 1)
+            self._df[col_name] = ""
+            self.endInsertColumns()
 
     # --------------------------------------------------------------------- #
     #  REPLACE LOGIC (unchanged from your original)
@@ -264,10 +281,28 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):
         painter.save()
+        
+        # Get base background color
         bg_brush = index.data(QtCore.Qt.ItemDataRole.BackgroundRole)
+        
+        # Check if item is selected
+        is_selected = option.state & QtWidgets.QStyle.StateFlag.State_Selected
+        
         if bg_brush:
-            painter.fillRect(option.rect, bg_brush)
-        elif option.state & QtWidgets.QStyle.StateFlag.State_Selected:
+            base_color = bg_brush.color()
+            if is_selected:
+                # Make background lighter when selected (add 40 to each RGB component)
+                lighter_color = QtGui.QColor(
+                    min(255, base_color.red() - 20),
+                    min(255, base_color.green() - 20),
+                    min(255, base_color.blue() - 20),
+                    base_color.alpha()
+                )
+                painter.fillRect(option.rect, lighter_color)
+            else:
+                painter.fillRect(option.rect, bg_brush)
+        elif is_selected:
+            # Fallback to standard selection color if no background
             painter.fillRect(option.rect, option.palette.highlight())
         
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
@@ -585,7 +620,7 @@ class SmoothScrollTableView(QtWidgets.QTableView):
             
         super().mouseMoveEvent(event)
         
-    def leaveEvent(self, event: QtGui.QEvent):
+    def leaveEvent(self, event: QtCore.QEvent):
         # Stop autoscroll if mouse leaves viewport
         if self._autoscroll_active:
             self._stop_autoscroll()
@@ -890,10 +925,15 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.horizontalHeader().setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.InternalMove)
         self.table.horizontalHeader().sectionMoved.connect(self._on_column_moved)
         
+        self.table.horizontalHeader().sectionClicked.connect(self._select_column)
+        self.table.verticalHeader().sectionClicked.connect(self._select_row)
+        
+        
                 # === NEW: Visual feedback for column dragging ===
         self.table.horizontalHeader().setDragDropOverwriteMode(False)
         self.table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        
+        self.table.horizontalHeader().sectionDoubleClicked.connect(self._rename_column)
+        self.table.clicked.connect(self._handle_plus_column_click)
         self._apply_scrollbar_style()
         
         # === NEW: Debounced row resizing system ===
@@ -1162,6 +1202,25 @@ class DataViewerPage(QtWidgets.QWidget):
             # Jump to next match
             self.go_next_match()
                
+    def _select_column(self, logical_index: int):
+        """Select entire column when header is clicked"""
+        if not self.model:
+            return
+        
+        # Don't select the "+" column
+        if logical_index >= len(self.model.df.columns):
+            return
+        
+        self.table.selectColumn(logical_index)
+
+    def _select_row(self, logical_index: int):
+        """Select entire row when row header is clicked"""
+        if not self.model:
+            return
+        
+        self.table.selectRow(logical_index)
+    
+    
     def load_path(self, path: Path):
         self._hide_background_indicator()
         self.dd.icon.setText("Loading…")
@@ -1402,7 +1461,7 @@ class DataViewerPage(QtWidgets.QWidget):
         SAMPLE_SIZE = 200
         df_sample = self.model.df.head(SAMPLE_SIZE) if len(self.model.df) > SAMPLE_SIZE else self.model.df
         
-        for c in range(self.model.columnCount()):
+        for c in range(len(self.model.df.columns)):
             header = str(self.model.df.columns[c])
             col = df_sample.iloc[:, c]
             
@@ -1767,6 +1826,36 @@ class DataViewerPage(QtWidgets.QWidget):
             self.table.setStyleSheet(light_scrollbar_style)
         self.table.viewport().update()
                 
+    def _handle_plus_column_click(self, index: QtCore.QModelIndex):
+        """Handle clicks on the '+' column to add a new column"""
+        if not self.model:
+            return
+        
+        if index.column() == self.model.columnCount() - 1:
+            new_name, ok = QtWidgets.QInputDialog.getText(
+                self, "New Column", "Enter column name:"
+            )
+            if ok and new_name.strip():
+                self.model.add_new_column(new_name.strip())
+                self.autosize_columns(force=True)
+                self._autosize_all_rows()
+                self.status.showMessage(f"Added column: {new_name}")
+
+    def _rename_column(self, logical_index: int):
+        """Rename a column via double-click on header"""
+        if not self.model or logical_index >= len(self.model.df.columns):
+            return
+        
+        current_name = self.model.df.columns[logical_index]
+        new_name, ok = QtWidgets.QInputDialog.getText(
+            self, "Rename Column", f"Rename '{current_name}' to:", text=current_name
+        )
+        if ok and new_name.strip() and new_name != current_name:
+            self.model.df.rename(columns={current_name: new_name}, inplace=True)
+            self.model.headerDataChanged.emit(
+                QtCore.Qt.Orientation.Horizontal, logical_index, logical_index
+            )
+            self.status.showMessage(f"Renamed column to: {new_name}")
         
 class DiffTextEdit(QtWidgets.QTextEdit):
     def __init__(self):

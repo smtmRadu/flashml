@@ -9,6 +9,17 @@ QWEN3_0_6B_CONFIG_VLLM_CONFIG = {
     "top_k": 20,
 }
 
+QWEN3_4B_THINKING_2507_VLLM_CONFIG = {
+    "model": "unsloth/Qwen3-4B-Thinking-2507-bnb-4bit",
+    "max_model_len": 10240,
+    "max_completion_tokens": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "tensor-parallel-size": 1,
+    "gpu-memory-utilization": 0.85,
+}
+
 QWEN3_VL_2B_THINKING_VLLM_CONFIG = {
     "model": "unsloth/Qwen3-VL-2B-Thinking-bnb-4bit",
     "max_model_len": 8192,
@@ -34,6 +45,8 @@ QWEN3_VL_4B_THINKING_AWQ_VLLM_CONFIG = {
     "async-scheduling": "",
     "gpu-memory-utilization": 0.85,
 }
+
+
 
 QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
     "model": "unsloth/Qwen3-VL-8B-Thinking-bnb-4bit",
