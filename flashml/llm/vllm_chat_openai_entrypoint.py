@@ -109,10 +109,16 @@ def vllm_chat_openai_entrypoint(
         
         for k, v in vllm_config.items():
             cmd.append(f"--{k}")
-            if v != "" and v is not None:
+
+            if v is None or v == "":
+                continue
+
+            if isinstance(v, (list, tuple)):
+                for item in v:
+                    cmd.append(str(item))
+            else:
                 cmd.append(str(v))
-
-
+        print(f"Instantiating vLLM: \033[92m{' '.join(cmd)}\033[0m")
         _ = subprocess.run(cmd, text=True, check=True)
         print(f"\033[92m============== 100% Completed | {len(requests)}/{len(requests)} ==============\033[0m")
         

@@ -97,7 +97,7 @@ def merge_llm(
 def merge_and_quantize_llm(
     adapter_path: str,
     base_model_path: str = "auto",
-    quant_type: Literal["gptq", "awq", "bitsandbytes", "mxfp4"] = "bitsandbytes",
+    quant_type: Literal["gptq", "awq", "bnb", "mxfp4"] = "bnb",
     calibration_dataset: list[str] | None = None,
     dtype: Literal["fp16", "bf16", "fp32"] = "bf16"
 ):
@@ -108,7 +108,7 @@ def merge_and_quantize_llm(
     Args:
         adapter_path (str): Path to LoRA adapter
         base_model_path (str): Base model path or "auto" to infer from adapter_config.json
-        quant_type (str): "gptq", "awq", "bitsandbytes", or "mxfp4"
+        quant_type (str): "gptq", "awq", "bnb", or "mxfp4"
         calibration_dataset (list[str] | None): Required for GPTQ/AWQ/MXFP4
         dtype (str): Model load/merge precision ("fp16", "bf16", "fp32")
     """
@@ -119,7 +119,7 @@ def merge_and_quantize_llm(
     import os, shutil, tempfile, json
 
     quant_type = quant_type.lower()
-    if quant_type not in ["gptq", "awq", "bitsandbytes", "mxfp4"]:
+    if quant_type not in ["gptq", "awq", "bnb", "mxfp4"]:
         raise ValueError(f"Invalid quant_type: {quant_type}")
 
     # Handle dtypes
@@ -136,7 +136,7 @@ def merge_and_quantize_llm(
     suffix_map = {
         "awq": "_AWQ",
         "gptq": "_GPTQ",
-        "bitsandbytes": "_bnb",
+        "bnb": "_bnb",
         "mxfp4": "_MXFP4"
     }
 
@@ -262,7 +262,7 @@ quant_stage:
             )
         merged_model = None
 
-    elif quant_type == "bitsandbytes":
+    elif quant_type == "bnb":
         # BitsAndBytes requires calibration dataset for proper 4-bit serialization
         if not calibration_dataset:
             print("⚠️  Warning: BitsAndBytes without calibration_dataset will save config only.")
@@ -311,8 +311,7 @@ quant_stage:
     return save_path
 
 
-
-def get_4bit_quantization_config():
+def get_bnb_4bit_quantization_config():
     from transformers import BitsAndBytesConfig
     import torch
     return BitsAndBytesConfig(
@@ -330,8 +329,6 @@ def get_boxed_answer(text: str) -> str | None:
     import re
     matches = re.findall(r'\\boxed\{(.+?)\}', text)
     return matches[-1] if matches else None
-
-
 
 def image_to_base64(image):
     """
