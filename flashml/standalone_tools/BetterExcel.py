@@ -57,7 +57,8 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._is_dark = True
         self._matches: list[QtCore.QModelIndex] = []   # cached matches
         self.case_sensitive: bool = False
-
+        self.is_dirty = False
+        
     @property
     def df(self) -> pd.DataFrame:
         return self._df
@@ -125,9 +126,11 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.ItemDataRole.EditRole and index.isValid():
             r, c = index.row(), index.column()
             self._df.iat[r, c] = value
+            self.is_dirty = True
             self.dataChanged.emit(index, index, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
             self._rebuild_matches()  # update matches after edit
             self.matchesChanged.emit(len(self._matches))
+            
             return True
         return False
 
@@ -185,6 +188,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         if col_name and col_name not in self._df.columns:
             self.beginInsertColumns(QtCore.QModelIndex(), self.columnCount() - 1, self.columnCount() - 1)
             self._df[col_name] = ""
+            self.is_dirty = True
             self.endInsertColumns()
 
     # --------------------------------------------------------------------- #
@@ -212,6 +216,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         val = str(self._df.iat[r, c])
         new_val = self._replace_case_insensitive(val, self.search_term, self.replace_term, count=1)
         self._df.iat[r, c] = new_val
+        self.is_dirty = True
         self.dataChanged.emit(m, m, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
         self._rebuild_matches()
         self.dataChangedHard.emit()
@@ -235,6 +240,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                         self._df.iat[r, c] = new_val
                         count += 1
         if count:
+            self.is_dirty = True
             tl = self.index(0, 0)
             br = self.index(self.rowCount() - 1, self.columnCount() - 1)
             self.dataChanged.emit(tl, br, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
@@ -1077,7 +1083,7 @@ class DataViewerPage(QtWidgets.QWidget):
             # Reorder DataFrame to match visual order
             new_columns = [self.model.df.columns[i] for i in visual_order]
             self.model.df = self.model.df[new_columns]
-            
+            self.model.is_dirty = True
             self.model.layoutChanged.emit()
             
             # Reapply search highlights (column indices changed)
@@ -1207,8 +1213,17 @@ class DataViewerPage(QtWidgets.QWidget):
         if not self.model:
             return
         
-        # Don't select the "+" column
-        if logical_index >= len(self.model.df.columns):
+        # Check if the clicked header is the "+" column
+        if logical_index == len(self.model.df.columns):
+            # Trigger the New Column dialog (same logic as clicking the cells)
+            new_name, ok = QtWidgets.QInputDialog.getText(
+                self, "New Column", "Enter column name:"
+            )
+            if ok and new_name.strip():
+                self.model.add_new_column(new_name.strip())
+                self.autosize_columns(force=True)
+                self._autosize_all_rows()
+                self.status.showMessage(f"Added column: {new_name}")
             return
         
         self.table.selectColumn(logical_index)
@@ -1313,13 +1328,15 @@ class DataViewerPage(QtWidgets.QWidget):
     def save_file(self):
         if not self.model or not self.current_path:
             QtWidgets.QMessageBox.information(self, "Nothing to save", "Open a file first.")
-            return
+            return False
         try:
             self._write_dataframe(self.current_path, self.model.df)
+            self.model.is_dirty = False
             self.status.showMessage(f"Saved to {self.current_path}")
+            return True
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
-
+            return False
     def save_copy(self):
         if not self.model:
             return
@@ -1439,14 +1456,84 @@ class DataViewerPage(QtWidgets.QWidget):
             self._on_matches_changed(self.model.total_matches())
 
     def keyPressEvent(self, event: QtGui.QKeyEvent):
+        # Existing Enter key logic
         if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
             if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
                 self.go_prev_match()
             else:
                 self.go_next_match()
             return
+        
+        # === NEW: Handle Delete Key ===
+        if event.key() == QtCore.Qt.Key.Key_Delete:
+            self._handle_delete_key()
+            return
+            
         super().keyPressEvent(event)
+        
+    def _handle_delete_key(self):
+            """Handles deletion of Columns, Rows, or Cell Contents based on selection."""
+            if not self.model:
+                return
 
+            # --- Case 1: Delete Selected Columns ---
+            sel_cols = self.table.selectionModel().selectedColumns()
+            if sel_cols:
+                # Get indices and filter out the "+" column
+                col_indices = [c.column() for c in sel_cols]
+                valid_indices = [i for i in col_indices if i < len(self.model._df.columns)]
+                
+                if not valid_indices:
+                    return
+
+                msg = f"Delete {len(valid_indices)} column(s)?"
+                reply = QtWidgets.QMessageBox.question(
+                    self, "Delete Columns", msg,
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+                )
+                
+                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                    self.model.layoutAboutToBeChanged.emit()
+                    # Drop columns by name
+                    cols_to_drop = [self.model._df.columns[i] for i in valid_indices]
+                    self.model._df.drop(columns=cols_to_drop, inplace=True)
+                    self.model.layoutChanged.emit()
+                return
+
+            # --- Case 2: Delete Selected Rows ---
+            sel_rows = self.table.selectionModel().selectedRows()
+            if sel_rows:
+                row_indices = [r.row() for r in sel_rows]
+                
+                msg = f"Delete {len(row_indices)} row(s)?"
+                reply = QtWidgets.QMessageBox.question(
+                    self, "Delete Rows", msg,
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+                )
+                
+                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                    self.model.layoutAboutToBeChanged.emit()
+                    # Drop rows by index
+                    self.model._df.drop(self.model._df.index[row_indices], inplace=True)
+                    # Reset index to keep row numbers sequential
+                    self.model._df.reset_index(drop=True, inplace=True)
+                    self.model.layoutChanged.emit()
+                    
+                    # Refresh search matches since row indices have shifted
+                    if self.model.search_term:
+                        self.model._rebuild_matches()
+                return
+
+            # --- Case 3: Clear Cell Contents (Fallback) ---
+            # If no full row/col is selected, just empty the selected cells
+            if self.table.selectionModel().hasSelection():
+                self.model.layoutAboutToBeChanged.emit()
+                for idx in self.table.selectedIndexes():
+                    if idx.isValid() and idx.column() < len(self.model._df.columns):
+                        # Set value to empty string
+                        self.model._df.iat[idx.row(), idx.column()] = ""
+                self.model.layoutChanged.emit()
+            
     def autosize_columns(self, force=False):
         if not self.model:
             return
@@ -1904,7 +1991,7 @@ class DiffPage(QtWidgets.QWidget):
         self.controls.backRequested.connect(self.backRequested.emit)
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
-        self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
+        self.controls.closeRequested.connect(self.window().close)
 
         # Small toolbar with live stats
         toolbar = QtWidgets.QToolBar()
@@ -2282,6 +2369,32 @@ class MainWindow(QtWidgets.QMainWindow):
         self._screen_change_timer.setInterval(100)
         self._is_initial_move = True
 
+    def closeEvent(self, event):
+            """Intercept close requests to check for unsaved changes"""
+            # Check if we are currently looking at the viewer
+            current_widget = self.centralWidget().currentWidget()
+            
+            if current_widget == self.viewer and self.viewer.model and self.viewer.model.is_dirty:
+                reply = QtWidgets.QMessageBox.question(
+                    self, 
+                    "Unsaved Changes",
+                    "You have unsaved changes. Do you want to save before closing?",
+                    QtWidgets.QMessageBox.StandardButton.Yes | 
+                    QtWidgets.QMessageBox.StandardButton.No | 
+                    QtWidgets.QMessageBox.StandardButton.Cancel
+                )
+
+                if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                    event.ignore()  # Stop closing
+                    return
+                elif reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                    if not self.viewer.save_file():
+                        event.ignore()  # Stop closing if save failed
+                        return
+            
+            # If No was clicked, or save succeeded, or no changes exists:
+            event.accept()
+        
     def _create_shortcuts(self):
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self, activated=self._focus_search)
         QtGui.QShortcut(QtGui.QKeySequence("Ctrl+S"), self, activated=lambda: self.viewer.save_file())

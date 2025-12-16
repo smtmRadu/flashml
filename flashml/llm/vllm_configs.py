@@ -63,7 +63,7 @@ QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
 
 
 QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
-    "model": "Qwen/Qwen3-VL-30B-A3B-Thinking",
+    "model": "QuantTrio/Qwen3-VL-30B-A3B-Thinking-AWQ",
     "max_model_len": 40_960,
     "max_completion_tokens": 30_720,
     "temperature": 0.6,
