@@ -6,8 +6,7 @@ import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
 
-APP_NAME = "Better Excel"
-
+APP_NAME = "Better Excel v1.1"
 
 # -------------------- Utility: Dark/Light palettes & styles --------------------
 def apply_dark_palette(app: QtWidgets.QApplication):
@@ -48,20 +47,35 @@ def column_shade_color(is_dark: bool, index: int) -> QtGui.QColor:
 class DataFrameModel(QtCore.QAbstractTableModel):
     dataChangedHard = QtCore.pyqtSignal()     
     matchesChanged = QtCore.pyqtSignal(int)    
-
+    dirtyStateChanged = QtCore.pyqtSignal(bool)
     def __init__(self, df: pd.DataFrame):
         super().__init__()
         self._df = df
         self.search_term: str = ""
         self.replace_term: str = ""
         self._is_dark = True
-        self._matches: list[QtCore.QModelIndex] = []   # cached matches
+        self._matches: list[QtCore.QModelIndex] = []
         self.case_sensitive: bool = False
-        self.is_dirty = False
+        self._is_dirty = False
         
     @property
     def df(self) -> pd.DataFrame:
         return self._df
+
+    @df.setter
+    def df(self, value: pd.DataFrame):
+        self._df = value
+
+    @property
+    def is_dirty(self) -> bool:
+        return self._is_dirty
+
+    @is_dirty.setter
+    def is_dirty(self, value: bool):
+        """Automatically emit signal when dirty state changes"""
+        if self._is_dirty != value:
+            self._is_dirty = value
+            self.dirtyStateChanged.emit(value)
 
     def rowCount(self, parent=None):
         return len(self._df.index)
@@ -255,10 +269,13 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         flags = re.IGNORECASE
         return re.sub(re.escape(pattern), repl, text, count=count if count else 0, flags=flags)
 
+
+        
 class HighlightDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, model: DataFrameModel):
         super().__init__()
         self.model = model
+        
         # Cache font metrics
         self._metrics_cache = {}
     
@@ -769,7 +786,7 @@ class DataViewerPage(QtWidgets.QWidget):
 
         # Window controls bar
         self.controls = WindowControls("Viewer")
-        self.controls.backRequested.connect(self.backRequested.emit)
+        self.controls.backRequested.connect(lambda: self.app_ref.back_to_start())
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
@@ -812,7 +829,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.search_edit.setPlaceholderText("Search keyword…")
         self.search_edit.setMinimumWidth(150)
         self.search_edit.returnPressed.connect(self.on_search_return_pressed)
-        
+        self.search_edit.installEventFilter(self)
         toolbar.addWidget(self.search_edit)
         
         # --- Search Button (magnifier) ---
@@ -998,6 +1015,17 @@ class DataViewerPage(QtWidgets.QWidget):
         self.bg_indicator.hide()
         self.status.addWidget(self.bg_indicator)  # Left side of status bar
 
+        self.dirty_indicator = QtWidgets.QLabel("")
+        self.dirty_indicator.setStyleSheet("""
+            QLabel {
+                color: #FFC107;
+                font-weight: 600;
+                padding: 2px 8px;
+            }
+        """)
+        self.dirty_indicator.hide()
+        self.status.addPermanentWidget(self.dirty_indicator)  # Right side of status bar
+
         # Timer for updating elapsed time & progress
         self.bg_timer = QtCore.QTimer()
         self.bg_timer.setInterval(500)  # Update every 500ms for smoother progress
@@ -1033,7 +1061,36 @@ class DataViewerPage(QtWidgets.QWidget):
                 self.model.set_search_term(current_term)
                 self.table.viewport().update()  # 👈 Force immediate repaint
                 
-                
+    def reset_viewer(self):
+        """Clear all loaded data and return to drag-and-drop screen"""
+        # Clear the model
+        if self.model:
+            self.table.setModel(None)
+            self.model = None
+        
+        # Reset UI state
+        self.current_path = None
+        self.current_match_pos = -1
+        self.search_edit.clear()
+        self.replace_edit.clear()
+        self.replace_container.setVisible(False)
+        
+        # Reset window title
+        self.controls.title_lbl.setText("Viewer")
+        self.window().setWindowTitle(APP_NAME)
+        
+        # Reset indicators
+        self.match_label.setText("Matching cells: 0")
+        self.status.clearMessage()
+        self.dirty_indicator.hide()
+        self._hide_background_indicator()
+        
+        # Show drag-and-drop, hide table
+        self.table.hide()
+        self.dd.show()
+        self.dd.icon.setText("🗂️Drop a CSV / XLS / XLSX / JSONL file here")     
+        
+               
     def _show_background_indicator(self, task_name: str, total_rows: int, current_row: int = 0):
         """Show the background processing indicator with progress and elapsed time"""
         self.bg_task_name = task_name
@@ -1157,10 +1214,6 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.setStyleSheet(self.table.styleSheet() + scrollbar_style)
                              
     def on_search_return_pressed(self):
-        """
-        1. First Enter: Highlights, keeps exact static view, sets internal pointer to nearest match.
-        2. Subsequent Enters: Jumps to next match.
-        """
         search_text = self.search_edit.text()
         if not self.model:
             return
@@ -1177,36 +1230,22 @@ class DataViewerPage(QtWidgets.QWidget):
             # B. Update the Search (Highlights appear)
             self.model.set_search_term(search_text)
             
-            # C. Show Replace bar (This shrinks the table height, causing the shift)
+            # C. Show Replace bar
             self.replace_container.setVisible(bool(search_text.strip()))
             self._update_replace_buttons()
             
             # D. FORCE INSTANT RESTORE (No animation, no jumping)
-            # This makes the view appear completely static.
             sb = self.table.verticalScrollBar()
             if hasattr(sb, 'setValueInstant'):
                 sb.setValueInstant(current_v_scroll)
             else:
                 sb.setValue(current_v_scroll)
             
-            # E. Smart Start: Set the "Next" pointer to the first match *after* the current view
-            if self.model.total_matches() > 0:
-                top_row = self.table.rowAt(0)
-                if top_row == -1: top_row = 0
-                
-                start_index = -1
-                for i, idx in enumerate(self.model._matches):
-                    if idx.row() >= top_row:
-                        start_index = i - 1
-                        break
-                self.current_match_pos = start_index
-            else:
-                self.current_match_pos = -1
-
-        else:
-            # --- CASE 2: Same Term (Subsequent Enters) ---
-            # Jump to next match
-            self.go_next_match()
+            # E. Smart Start: Set to -1 so next press goes to first match
+            self.current_match_pos = -1
+        
+        # Always navigate to next match when Enter is pressed
+        self.go_next_match()
                
     def _select_column(self, logical_index: int):
         """Select entire column when header is clicked"""
@@ -1264,6 +1303,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self.model._is_dark = self.mode_toggle.isChecked()
         self.model.dataChangedHard.connect(self.table.viewport().update)
         self.model.matchesChanged.connect(self._on_matches_changed)
+        self.model.dirtyStateChanged.connect(self.update_dirty_indicator)
+        self.update_dirty_indicator()
         
         # === NEW: Connect dataChanged for cell edit handling ===
         self.model.dataChanged.connect(self._on_cell_data_changed)
@@ -1301,6 +1342,25 @@ class DataViewerPage(QtWidgets.QWidget):
         self.window().showMaximized()
 
     def open_file_dialog(self):
+        """Open new file with unsaved changes check"""
+        # Check dirty state BEFORE closing
+        if self.model and self.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before opening a new file?",
+                (QtWidgets.QMessageBox.StandardButton.Yes | 
+                QtWidgets.QMessageBox.StandardButton.No | 
+                QtWidgets.QMessageBox.StandardButton.Cancel)
+            )
+
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                return  # Abort - keep current file open
+            elif reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                if not self.save_file():
+                    return  # Abort if save failed
+        
+        # Only proceed if user didn't cancel
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open File", str(Path.home()), "Data Files (*.csv *.xls *.xlsx *.jsonl)"
         )
@@ -1337,6 +1397,7 @@ class DataViewerPage(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
             return False
+    
     def save_copy(self):
         if not self.model:
             return
@@ -1432,25 +1493,47 @@ class DataViewerPage(QtWidgets.QWidget):
         self.current_match_pos = (self.current_match_pos - 1) % self.model.total_matches()
         self._scroll_to_current()
 
+    def eventFilter(self, obj, event):
+        """Capture Shift+Enter in search box for backwards navigation"""
+        if obj == self.search_edit and event.type() == QtCore.QEvent.Type.KeyPress:
+            if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+                if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                    # Shift+Enter: go to previous match
+                    self.go_prev_match()
+                    return True  # Event handled
+        return super().eventFilter(obj, event)
+
     def _scroll_to_current(self):
         idx = self.model.match_at(self.current_match_pos)
         if idx:
-            # Calculate target vertical scroll position to center the row
             row = idx.row()
+            col = idx.column()
+            
+            # === VERTICAL SCROLLING (Animated) ===
             v_header = self.table.verticalHeader()
             row_top = v_header.sectionPosition(row)
             row_height = v_header.sectionSize(row)
             viewport_height = self.table.viewport().height()
             
-            # Target scroll position to center the row in viewport
             target_v_scroll = row_top - (viewport_height - row_height) // 2
-            
-            # Clamp to valid scrollbar range
             v_sb = self.table.verticalScrollBar()
             target_v_scroll = max(0, min(target_v_scroll, v_sb.maximum()))
             
-            # Animate to target (AnimatedScrollBar handles smooth transition)
-            v_sb.setValue(target_v_scroll)
+            # Use animated setValue (this triggers AnimatedScrollBar's animation)
+            v_sb.setValue(int(target_v_scroll))
+            
+            # === HORIZONTAL SCROLLING (Animated) ===
+            h_header = self.table.horizontalHeader()
+            col_left = h_header.sectionPosition(col)
+            col_width = h_header.sectionSize(col)
+            viewport_width = self.table.viewport().width()
+            
+            target_h_scroll = col_left - (viewport_width - col_width) // 2
+            h_sb = self.table.horizontalScrollBar()
+            target_h_scroll = max(0, min(target_h_scroll, h_sb.maximum()))
+            
+            # Use animated setValue for horizontal too
+            h_sb.setValue(int(target_h_scroll))
             
             self.table.setCurrentIndex(idx)
             self._on_matches_changed(self.model.total_matches())
@@ -1497,6 +1580,7 @@ class DataViewerPage(QtWidgets.QWidget):
                     # Drop columns by name
                     cols_to_drop = [self.model._df.columns[i] for i in valid_indices]
                     self.model._df.drop(columns=cols_to_drop, inplace=True)
+                    self.model.is_dirty = True
                     self.model.layoutChanged.emit()
                 return
 
@@ -1517,6 +1601,7 @@ class DataViewerPage(QtWidgets.QWidget):
                     self.model._df.drop(self.model._df.index[row_indices], inplace=True)
                     # Reset index to keep row numbers sequential
                     self.model._df.reset_index(drop=True, inplace=True)
+                    self.model.is_dirty = True
                     self.model.layoutChanged.emit()
                     
                     # Refresh search matches since row indices have shifted
@@ -1532,6 +1617,7 @@ class DataViewerPage(QtWidgets.QWidget):
                     if idx.isValid() and idx.column() < len(self.model._df.columns):
                         # Set value to empty string
                         self.model._df.iat[idx.row(), idx.column()] = ""
+                self.model.is_dirty = True
                 self.model.layoutChanged.emit()
             
     def autosize_columns(self, force=False):
@@ -1939,11 +2025,27 @@ class DataViewerPage(QtWidgets.QWidget):
         )
         if ok and new_name.strip() and new_name != current_name:
             self.model.df.rename(columns={current_name: new_name}, inplace=True)
+            self.model.is_dirty = True
             self.model.headerDataChanged.emit(
                 QtCore.Qt.Orientation.Horizontal, logical_index, logical_index
             )
             self.status.showMessage(f"Renamed column to: {new_name}")
         
+    def update_dirty_indicator(self, is_dirty: bool = None):
+        """Update the unsaved changes indicator based on model state"""
+        if not self.model:
+            self.dirty_indicator.hide()
+            return
+        
+        if is_dirty is None:
+            is_dirty = self.model.is_dirty
+        
+        if is_dirty:
+            self.dirty_indicator.setText("⚠️ Unsaved changes")
+            self.dirty_indicator.show()
+        else:
+            self.dirty_indicator.hide()
+            
 class DiffTextEdit(QtWidgets.QTextEdit):
     def __init__(self):
         super().__init__()
@@ -2257,6 +2359,7 @@ class DiffPage(QtWidgets.QWidget):
             self.window().showNormal()
         else:
             self.window().showMaximized()
+
 class StartPage(QtWidgets.QWidget):
     viewRequested = QtCore.pyqtSignal()
     compareRequested = QtCore.pyqtSignal()
@@ -2270,7 +2373,7 @@ class StartPage(QtWidgets.QWidget):
         layout.setSpacing(0)
         
         # Add window controls bar - hide back button on start page
-        self.controls = WindowControls("Better Excel")
+        self.controls = WindowControls(APP_NAME)
         self.controls.back_btn.hide()
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
@@ -2370,30 +2473,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self._is_initial_move = True
 
     def closeEvent(self, event):
-            """Intercept close requests to check for unsaved changes"""
-            # Check if we are currently looking at the viewer
-            current_widget = self.centralWidget().currentWidget()
-            
-            if current_widget == self.viewer and self.viewer.model and self.viewer.model.is_dirty:
-                reply = QtWidgets.QMessageBox.question(
-                    self, 
-                    "Unsaved Changes",
-                    "You have unsaved changes. Do you want to save before closing?",
-                    QtWidgets.QMessageBox.StandardButton.Yes | 
-                    QtWidgets.QMessageBox.StandardButton.No | 
-                    QtWidgets.QMessageBox.StandardButton.Cancel
-                )
+        """Intercept close to check for unsaved changes"""
+        current_widget = self.centralWidget().currentWidget()
+        
+        if current_widget == self.viewer and self.viewer.model and self.viewer.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self, 
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                (QtWidgets.QMessageBox.StandardButton.Yes | 
+                QtWidgets.QMessageBox.StandardButton.No | 
+                QtWidgets.QMessageBox.StandardButton.Cancel)
+            )
 
-                if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
-                    event.ignore()  # Stop closing
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+            elif reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                if not self.viewer.save_file():
+                    event.ignore()
                     return
-                elif reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                    if not self.viewer.save_file():
-                        event.ignore()  # Stop closing if save failed
-                        return
-            
-            # If No was clicked, or save succeeded, or no changes exists:
-            event.accept()
+        
+        event.accept()
         
     def _create_shortcuts(self):
         QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self, activated=self._focus_search)
@@ -2430,11 +2531,37 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.move(x, y)
 
+    
+    
     def back_to_start(self):
+        """Return to start screen with unsaved changes check"""
+        # Check if in viewer with unsaved changes
+        if self.centralWidget().currentWidget() == self.viewer and self.viewer.model and self.viewer.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before leaving?",
+                (QtWidgets.QMessageBox.StandardButton.Yes | 
+                QtWidgets.QMessageBox.StandardButton.No | 
+                QtWidgets.QMessageBox.StandardButton.Cancel)
+            )
+
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                return  # Abort - stay on current screen
+            elif reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                if not self.viewer.save_file():
+                    return  # Abort if save failed
+        
+        # Clear viewer state (NEW)
+        self.viewer.reset_viewer()
+        
+        # Only proceed if user didn't cancel
         self.centralWidget().setCurrentWidget(self.start)
         self.showNormal()
         self.resize(520, 320)
         self.center_on_screen()
+        
+
         
     def moveEvent(self, event):
         """Detect when window moves and check for screen changes"""

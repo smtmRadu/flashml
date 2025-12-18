@@ -57,7 +57,7 @@ class OpenAISyncRequest():
                 msg = msg.to_dict()
 
             elm = {
-                "custom_id": f"sync-req-{idx+1}" if custom_ids is None else str(custom_ids[idx]),
+                "custom_id": f"sync-req-{idx}" if custom_ids is None else str(custom_ids[idx]),
                 "message": msg
             }
             log_json(record=elm, path=file_name, add_timestamp=True)
@@ -118,7 +118,7 @@ for r in resps:
             
         for elem_id, mess in enumerate(self.messages_batch):
             req = {
-                "custom_id" : f"async-req-{elem_id+1}" if custom_ids is None else str(custom_ids[elem_id]), #note custom_ids must be string as openai api says
+                "custom_id" : f"async-req-{elem_id}" if custom_ids is None else str(custom_ids[elem_id]), #note custom_ids must be string as openai api says
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body":{

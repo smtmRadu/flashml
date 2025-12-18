@@ -66,7 +66,7 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
     "model": "QuantTrio/Qwen3-VL-30B-A3B-Thinking-AWQ",
     "max_model_len": 40_960,
     "max_completion_tokens": 30_720,
-    "temperature": 0.6,
+    "temperature": 0.7,
     "top_p": 0.95,
     "top_k": 20,
     "limit-mm-per-prompt.video": 0,
@@ -82,7 +82,7 @@ GPT_OSS_120B_HIGH_VLLM_CONFIG = {
     "max_completion_tokens": 61_440,
     "gpu-memory-utilization": 0.95,
     "tensor-parallel-size": 1,
-    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
     "reasoning_effort": "high",
@@ -95,7 +95,7 @@ GPT_OSS_120B_LOW_VLLM_CONFIG = {
     "max_completion_tokens": 61_440,
     "gpu-memory-utilization": 0.95,
     "tensor-parallel-size": 1,
-    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
     "reasoning_effort": "low",
@@ -110,7 +110,7 @@ GPT_OSS_20B_LOW_VLLM_CONFIG = {
     "reasoning_effort": "low",
     "gpu-memory-utilization": 0.95,
     "tensor-parallel-size": 1,
-    "temperature": 0.9,
+    "temperature": 1.0,
     "top_p": 1,
     "top_k": -1,
     "ignore-patterns": ["original/**", "metal/**"]
