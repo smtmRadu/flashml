@@ -400,9 +400,42 @@ def test_plot_func():
     plot_dist(x6)
     plot_dist(x7)       
     plot_dist(x8)      
+
+def heavy_prime_check(sample):
+    """
+    Check if numbers are prime - computationally expensive.
+    Good for testing: ~0.1-1 second per sample depending on value.
+    """
+    if isinstance(sample, dict):
+        value = sample.get('value', 100000)
+    else:
+        value = sample
     
+    # Convert to integer in a reasonable range
+    n = int(abs(value) % 1000000) + 100000  # Range: 100,000 to 1,100,000
     
+    # Naive prime checking (intentionally slow)
+    if n < 2:
+        return {'original': value, 'number': n, 'is_prime': False}
+    
+    is_prime = True
+    for i in range(2, int(math.sqrt(n)) + 1):
+        if n % i == 0:
+            is_prime = False
+            break
+    
+    return {'original': value, 'number': n, 'is_prime': is_prime }
+
+def test_multiproc_batching():
+    from flashml import BatchIterator
+    from tqdm import tqdm
+    data = range(1000000, 10000000)
+    bi = BatchIterator(data, batch_size=4, num_epochs=2, gradient_accumulation_steps=3,mode='train', transform=heavy_prime_check)
+
+    for i in tqdm(bi):
+        time.sleep(0.1)
+        # print(i)
+
 if __name__ == "__main__":
-    from flashml import print_info, print_warning, print_error
-    print_error("This is an informational message.")
+    test_multiproc_batching()
     # test_plot_func()

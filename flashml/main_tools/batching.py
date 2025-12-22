@@ -52,11 +52,11 @@ class _InternalDataset(Dataset):
     
     def __init__(self, df, transform=None):
         # Convert DataFrame to list for better pickling compatibility
-        if hasattr(df, "to_dict"):  # Pandas
-            self.data = df.to_dict('records')
-            self.data_type = "dict"
-        elif hasattr(df, "to_dicts"):  # Polars
+        if hasattr(df, "to_dicts"):  # Polars - check this FIRST
             self.data = df.to_dicts()
+            self.data_type = "dict"
+        elif hasattr(df, "to_dict"):  # Pandas
+            self.data = df.to_dict('records')
             self.data_type = "dict"
         else:  # Already a list/tuple
             self.data = list(df)

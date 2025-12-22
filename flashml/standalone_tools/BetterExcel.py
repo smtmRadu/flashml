@@ -2093,7 +2093,8 @@ class DiffPage(QtWidgets.QWidget):
         self.controls.backRequested.connect(self.backRequested.emit)
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
-        self.controls.closeRequested.connect(self.window().close)
+        self.controls.closeRequested.connect(lambda: QtWidgets.QApplication.instance().quit())
+
 
         # Small toolbar with live stats
         toolbar = QtWidgets.QToolBar()

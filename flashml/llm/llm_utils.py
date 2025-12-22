@@ -155,6 +155,9 @@ def merge_and_quantize_llm(
         base_model_path = adapter_config.get("base_model_name_or_path")
         if not base_model_path:
             raise ValueError("Cannot infer base model path from adapter_config.json")
+        
+    if base_model_path.startswith("unsloth"):
+        raise ValueError(f"Unsloth base model path inferred ({base_model_path}). Please pass the original Hhf 16bit model path so it can be quantized. ")
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 
@@ -163,7 +166,10 @@ def merge_and_quantize_llm(
         device_map="cpu",
         torch_dtype=torch_dtype,
         offload_folder="./offload_flashml",
-        trust_remote_code=True
+        trust_remote_code=True,
+        quantization_config=None,  # ← Add this
+        load_in_4bit=False,        # ← Add this
+        load_in_8bit=False         # ← Add this
     )
 
     merged_model = PeftModel.from_pretrained(
@@ -309,6 +315,7 @@ quant_stage:
 
     print(f"\n🎉 Model merged, quantized, and saved to {save_path}")
     return save_path
+
 
 
 def get_bnb_4bit_quantization_config():
