@@ -10,7 +10,7 @@ dependencies = [
     "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
     "ipywidgets",
     "pydantic", # used here for BaseClass in structured output with llms
-    "mlflow",
+    "mlflow==3.3.0",
     "matplotlib",
     "plotly",
     "numpy",

@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 import os
+from tqdm import tqdm
 class OpenAISyncRequest():
     def __init__(self, api_key:str, messages_batch:list[list[dict]], model_name:str,
                  max_completion_tokens:int = None, temperature:float = None,
@@ -116,7 +117,7 @@ for r in resps:
         with open(file_name, "w") as f:
             f.write("")
             
-        for elem_id, mess in enumerate(self.messages_batch):
+        for elem_id, mess in tqdm(enumerate(self.messages_batch), desc="Building batch file"):
             req = {
                 "custom_id" : f"async-req-{elem_id}" if custom_ids is None else str(custom_ids[elem_id]), #note custom_ids must be string as openai api says
                 "method": "POST",

@@ -20,6 +20,7 @@ def vllm_chat(
     min_p=0,
     stop: List[str] | List[int] = None, 
     max_tokens=131_072,
+    seed=0,
     ignore_patterns=["original/**", "metal/**", "consolidated.safetensors"],
     **kwargs,
 ):

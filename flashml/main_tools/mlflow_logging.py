@@ -1,3 +1,5 @@
+## This works only with mlflow==3.3.0
+## (tried to adapt it to newer version > 3.3.0 but is not that easy. Better let it like this, 3.3.0 is not bad at all)
 from typing import Any, Tuple
 
 def make_run_name(base_name:str, experiment_name:str=None):
@@ -10,13 +12,16 @@ def make_run_name(base_name:str, experiment_name:str=None):
     from datetime import datetime
     import mlflow
     client = MlflowClient()
-    experiment_id = mlflow.get_experiment_by_name(
-        experiment_name if experiment_name else "Default"
-    ).experiment_id
-    
-    existing_runs = client.search_runs(experiment_ids=[experiment_id])
-    existing_run_names = [run.info.run_name for run in existing_runs]
-    
+    try:
+        experiment_id = mlflow.get_experiment_by_name(
+            experiment_name if experiment_name else "Default"
+        ).experiment_id
+        
+        existing_runs = client.search_runs(experiment_ids=[experiment_id])
+        existing_run_names = [run.info.run_name for run in existing_runs]
+    except:
+        existing_run_names = []
+
     now = datetime.now()
     base_name = base_name if base_name else "run"
     date_str = f"{now.day:02d}{now.month:02d}"
@@ -260,7 +265,7 @@ class _TrainingLogger:
         except requests.ConnectionError:
             pass
 
-        print("\033[90mStarting MLFlow UI.\033[0m", end=" ")
+        print("\033[90mStarting MLFlow UI (3.3.0).\033[0m", end=" ")
         try:
             cmd = [
                 sys.executable,
@@ -365,8 +370,16 @@ class _TrainingLogger:
     ):
         """Log checkpoint to MLFlow."""
         import mlflow
-        logger = _TrainingLogger(None, run_name=None, experiment_name=experiment_name)
-
+        
+        current_run_name = None
+        current_experiment = experiment_name
+        if _TrainingLogger._instance is not None:
+            current_run_name = _TrainingLogger._instance.run_name
+            if experiment_name is None:
+                current_experiment = _TrainingLogger._instance.experiment_name
+    
+        logger = _TrainingLogger(None, run_name=current_run_name, experiment_name=current_experiment)
+    
         if not save_over_last_checkpoint:
             logger.ckpt_version += 1
 
@@ -391,13 +404,22 @@ class _TrainingLogger:
     @staticmethod
     def log_figure(figure, figure_name: str = None, experiment_name: str = None):
         """Log figure to MLFlow."""
-        _ = _TrainingLogger(
-            None, run_name=None, experiment_name=experiment_name
-        )
         import mlflow
+        
+        current_run_name = None
+        current_experiment = experiment_name
+        if _TrainingLogger._instance is not None:
+            current_run_name = _TrainingLogger._instance.run_name
+            if experiment_name is None:
+                current_experiment = _TrainingLogger._instance.experiment_name
+        
+        _ = _TrainingLogger(
+            None, run_name=current_run_name, experiment_name=current_experiment
+        )
+        
         mlflow.log_figure(
             figure=figure,
             artifact_file=figure_name
-            if figure_name.endswith(".html")
-            else f"{figure_name}.html",
+            if figure_name and figure_name.endswith(".html")
+            else f"{figure_name}.html" if figure_name else "figure.html",
         )

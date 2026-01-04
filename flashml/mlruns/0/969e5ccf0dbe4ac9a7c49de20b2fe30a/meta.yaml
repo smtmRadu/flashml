@@ -1,0 +1,14 @@
+artifact_uri: file:///c:/Dev/flashml/flashml/mlruns/0/969e5ccf0dbe4ac9a7c49de20b2fe30a/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 969e5ccf0dbe4ac9a7c49de20b2fe30a
+run_name: masked-bat-106
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1766859051855
+status: 1
+tags: []
+user_id: Radu

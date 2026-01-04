@@ -1,0 +1,14 @@
+artifact_uri: file:///c:/Dev/flashml/flashml/mlruns/0/0012e9190c4d4370b1f4468e7bfb0014/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 0012e9190c4d4370b1f4468e7bfb0014
+run_name: thundering-squid-580
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1766859179112
+status: 1
+tags: []
+user_id: Radu

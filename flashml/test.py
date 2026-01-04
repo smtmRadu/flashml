@@ -435,7 +435,22 @@ def test_multiproc_batching():
     for i in tqdm(bi):
         time.sleep(0.1)
         # print(i)
+        
+        
+def print_mlflow_logging():
+    from flashml import log_metrics, log_checkpoint
+    
+    for i in range(100):
+        log_metrics(
+            {
+                "metric": 0.1,
+            },
+            step=i,
+            hyperparams={"no": "yes"}
+        )
+        if i%10==0:
+            log_checkpoint(state_dict={"no": "name"})
 
 if __name__ == "__main__":
-    test_multiproc_batching()
+    print_mlflow_logging()
     # test_plot_func()
