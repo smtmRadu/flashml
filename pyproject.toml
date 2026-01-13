@@ -7,6 +7,8 @@ name = "flashml"
 version = "0.6.7"
 authors = [{ name = "kbradu" }]
 dependencies = [
+    "torch", # let it first
+    "PyPDF2",
     "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
     "ipywidgets",
     "pydantic", # used here for BaseClass in structured output with llms
@@ -39,7 +41,7 @@ dependencies = [
     "Faker", #lipsum but in english
 
     # extras
-    "torch",
+    
     "torchtune",
     "torchao",
     "torchinfo",
@@ -48,6 +50,7 @@ dependencies = [
     "torch-optimi",
     "gymnasium",
     "transformers",
+    "sentence-transformers",
     "unsloth",
     "trl",
     "weave",

@@ -1,6 +1,108 @@
 
 from typing import Literal
 
+def merge_unsloth_llm(
+    adapter_path: str,
+    base_model_path: str = "auto",
+    dtype: Literal["fp16", "bf16", "fp32"] = "fp16",
+    max_seq_length: int = 4096,
+):
+    """
+    Merges an Unsloth LoRA adapter into its base model and saves the fully merged
+    model in the specified precision (fp16, bf16, or fp32). No quantization.
+
+    Args:
+        adapter_path (str): Path to Unsloth LoRA adapter (checkpoint dir)
+        base_model_path (str): Base model name/path or "auto"
+        dtype (str): "fp16", "bf16", or "fp32"
+        max_seq_length (int): Max sequence length for Unsloth loading
+
+    Example:
+        merge_unsloth_llm(
+            "../models/gemma-3-270m-it_2912_v6/checkpoint-155",
+            dtype="fp32"
+        )
+    """
+    import torch, json, shutil, os
+    from pathlib import Path
+    from typing import Literal
+    from unsloth import FastLanguageModel
+    from peft import PeftModel
+
+    # --- Dtype handling ---
+    dtype_map = {
+        "fp16": torch.float16,
+        "bf16": torch.bfloat16,
+        "fp32": torch.float32,
+    }
+    torch_dtype = dtype_map[dtype]
+
+    adapter_path = Path(adapter_path)
+
+    # --- Infer base model if needed ---
+    if base_model_path == "auto":
+        config_path = adapter_path / "adapter_config.json"
+        if not config_path.exists():
+            raise ValueError("Base model path not specified and adapter_config.json not found.")
+
+        with open(config_path) as f:
+            adapter_config = json.load(f)
+
+        base_model_path = adapter_config.get("base_model_name_or_path")
+        if not base_model_path:
+            raise ValueError("'base_model_name_or_path' missing from adapter_config.json")
+
+    print(f"🔄 Step 1/2: Loading base model with Unsloth ({dtype}) (load_in_4bit={'4bit' in base_model_path})...")
+    print(f"Base model: {base_model_path}")
+
+    # --- Output path ---
+    save_path = adapter_path.parent / f"{adapter_path.name}_merged_{dtype}"
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    # --- Load base model via Unsloth ---
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name       = base_model_path,
+        max_seq_length   = max_seq_length,
+        torch_dtype      = torch_dtype,
+        load_in_4bit     = '4bit' in base_model_path,   # IMPORTANT: full precision merge
+    )
+
+    # --- Load adapter ---
+    model = PeftModel.from_pretrained(
+        model,
+        adapter_path,
+        torch_dtype=torch_dtype,
+    )
+
+    # --- Merge ---
+    model = model.merge_and_unload()
+    FastLanguageModel.for_inference(model)
+    model.dequantize()
+    print("✓ Models merged successfully")
+
+    # --- Save merged model ---
+    print(f"💾 Step 2/2: Saving merged model in {dtype.upper()} precision...")
+    model.to(dtype=torch_dtype)
+
+    model.save_pretrained(
+        save_path,
+        tokenizer=tokenizer,
+        save_method="merged_32bit" if dtype == "fp32" else "merged_16bit",
+    )
+
+    # --- Copy extra files ---
+    for fname in ["chat_template.jinja", "README.md", "training_args.bin"]:
+        src = adapter_path / fname
+        dst = save_path / fname
+        if src.exists():
+            shutil.copy2(src, dst)
+            print(f"📎 Copied {fname}")
+
+    print(f"\n🎉 Unsloth model merged and saved to {save_path} ({dtype})")
+    return save_path
+
+    
+    
 def merge_llm(
     adapter_path: str,
     base_model_path: str = "auto",
@@ -50,7 +152,8 @@ def merge_llm(
         base_model_path = adapter_config.get("base_model_name_or_path")
         if not base_model_path:
             raise ValueError("'base_model_name_or_path' missing from adapter_config.json")
-
+    else:
+        print(f"Using {base_model_path} as the base model.")
     # --- Load tokenizer ---
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 

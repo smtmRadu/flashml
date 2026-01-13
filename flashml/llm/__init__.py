@@ -3,9 +3,9 @@ from .openai_api_batch_builder import OpenAIBatchRequest, OpenAISyncRequest
 from .vllm_chat import vllm_chat
 from .vllm_compute_logprobs import vllm_compute_logprobs
 from .vllm_engine import vllm_close
-from .llm_utils import get_bnb_4bit_quantization_config, get_boxed_answer, merge_and_quantize_llm, merge_llm, image_to_base64
+from .llm_utils import get_bnb_4bit_quantization_config, get_boxed_answer, merge_and_quantize_llm, merge_llm, image_to_base64, merge_unsloth_llm
 from .vllm_chat_openai_entrypoint import vllm_chat_openai_entrypoint
-from .chat import chat
+# from .chat import chat
 
 from .vllm_configs import (
     QWEN3_0_6B_CONFIG_VLLM_CONFIG, 
@@ -37,11 +37,12 @@ __all__ = [
     
     "OpenAIBatchRequest",
     "OpenAISyncRequest",
-    "chat",
+    # "chat",
     "get_bnb_4bit_quantization_config",
     "get_boxed_answer",
     "image_to_base64",
     "merge_llm",
+    "merge_unsloth_llm",
     "merge_and_quantize_llm",
     "vllm_chat_openai_entrypoint",
     "plot_chat",

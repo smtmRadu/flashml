@@ -1,483 +1,390 @@
-def detect_model_type(path):
-    """
-    Detect if a model requires Unsloth.
-    
-    Returns:
-        True if unsloth is needed, False otherwise
-    """
-    from pathlib import Path
-    
-    path_str = str(path)
-    
-    # Check if "unsloth" is in the path
-    if "unsloth" in path_str.lower():
-        return True
-    
-    # Check if it's an adapter with unsloth base model
-    adapter_config_path = Path(path) / "adapter_config.json"
-    if adapter_config_path.exists():
-        import json
+import sys
+import os
+import time
+import torch
+from threading import Thread
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLineEdit, QPushButton, QLabel, 
+                             QScrollArea, QFrame)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtGui import QFont
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+
+# Suppress symlink warning
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+
+# Global cache
+_MODEL_CACHE = {}
+
+# -------------------------------------------------------------------------
+#  Worker Thread
+# -------------------------------------------------------------------------
+
+class GenerationWorker(QThread):
+    new_token_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal()
+    metrics_signal = pyqtSignal(float)
+
+    def __init__(self, model_path, user_input, history, temperature, top_p, top_k, system_prompt):
+        super().__init__()
+        self.model_path = model_path
+        self.user_input = user_input
+        self.history = history
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.system_prompt = system_prompt
+
+    def run(self):
+        global _MODEL_CACHE
+        
         try:
-            with open(adapter_config_path) as f:
-                config = json.load(f)
-                base_model = config.get("base_model_name_or_path", "")
-                if "unsloth" in base_model.lower():
-                    return True
-        except Exception:
-            pass
-    
-    return False
-
-
-def create_chat_window_class():
-    """Create the ChatWindow class with proper PyQt6 inheritance"""
-    from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel
-    from PyQt6.QtCore import QObject, pyqtSignal
-    from PyQt6.QtGui import QFont, QTextCursor
-    
-    class ChatWindow(QMainWindow):
-        def __init__(self, model, tokenizer, system_prompt, temperature, top_p, top_k, engine):
-            super().__init__()
+            start_time = time.time()
+            token_count = 0
             
-            self.model = model
-            self.tokenizer = tokenizer
-            self.system_prompt = system_prompt
-            self.temperature = temperature
-            self.top_p = top_p
-            self.top_k = top_k
-            self.engine = engine
+            # Load Model (Cached)
+            if self.model_path not in _MODEL_CACHE:
+                print(f"Loading model: {self.model_path}...")
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                
+                tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+                
+                # CRITICAL FIX: Set pad_token_id to prevent CUDA errors
+                if tokenizer.pad_token_id is None:
+                    tokenizer.pad_token_id = tokenizer.eos_token_id
+                
+                torch_dtype = torch.float16 if device == "cuda" else torch.float32
+                
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.model_path,
+                    torch_dtype=torch_dtype,
+                    device_map=None,
+                    low_cpu_mem_usage=True,
+                    pad_token_id=tokenizer.pad_token_id  # Pass to model config
+                )
+                
+                if device == "cuda":
+                    model = model.to("cuda")
+                
+                _MODEL_CACHE[self.model_path] = {"model": model, "tokenizer": tokenizer}
+                print(f"Model loaded. Vocab size: {len(tokenizer)}, Pad ID: {tokenizer.pad_token_id}")
             
-            self.conversation_history = []
-            self.is_generating = False
-            self.current_response = ""
-            self.token_times = []
-            self.generation_start = 0
+            cached = _MODEL_CACHE[self.model_path]
+            model = cached["model"]
+            tokenizer = cached["tokenizer"]
             
-            # Create signals object
-            class Signals(QObject):
-                token_generated = pyqtSignal(str)
-                generation_finished = pyqtSignal()
-                error_occurred = pyqtSignal(str)
-                speed_update = pyqtSignal(float)
-            
-            self.signals = Signals()
-            self.signals.token_generated.connect(self.append_token)
-            self.signals.generation_finished.connect(self.generation_complete)
-            self.signals.error_occurred.connect(self.show_error)
-            self.signals.speed_update.connect(self.update_speed_display)
-            
-            self.init_ui()
-            
-        def init_ui(self):
-            """Initialize the modern UI"""
-            self.setWindowTitle("AI Chat Interface")
-            self.setGeometry(100, 100, 900, 700)
-            
-            # Apply modern dark theme
-            self.setStyleSheet("""
-                QMainWindow {
-                    background-color: #1e1e1e;
-                }
-                QTextEdit {
-                    background-color: #2d2d2d;
-                    color: #e0e0e0;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 12px;
-                    font-size: 14px;
-                }
-                QLineEdit {
-                    background-color: #2d2d2d;
-                    color: #e0e0e0;
-                    border: 2px solid #3d3d3d;
-                    border-radius: 8px;
-                    padding: 12px;
-                    font-size: 14px;
-                }
-                QLineEdit:focus {
-                    border: 2px solid #5e5ce6;
-                }
-                QPushButton {
-                    background-color: #5e5ce6;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 12px 24px;
-                    font-size: 14px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #6e6cf6;
-                }
-                QPushButton:pressed {
-                    background-color: #4e4cd6;
-                }
-                QPushButton:disabled {
-                    background-color: #3d3d3d;
-                    color: #666;
-                }
-                QLabel {
-                    color: #e0e0e0;
-                    font-size: 13px;
-                }
-            """)
-            
-            # Central widget
-            central_widget = QWidget()
-            self.setCentralWidget(central_widget)
-            main_layout = QVBoxLayout(central_widget)
-            main_layout.setSpacing(12)
-            main_layout.setContentsMargins(20, 20, 20, 20)
-            
-            # Top bar with speedometer
-            top_bar = QHBoxLayout()
-            
-            title_label = QLabel("[AI Chat]")
-            title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #5e5ce6;")
-            top_bar.addWidget(title_label)
-            
-            top_bar.addStretch()
-            
-            self.speed_label = QLabel("Speed: 0.0 tok/s")
-            self.speed_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4ade80;")
-            top_bar.addWidget(self.speed_label)
-            
-            engine_label = QLabel(f"Engine: {self.engine}")
-            engine_label.setStyleSheet("font-size: 12px; color: #888;")
-            top_bar.addWidget(engine_label)
-            
-            main_layout.addLayout(top_bar)
-            
-            # Chat display area
-            self.chat_display = QTextEdit()
-            self.chat_display.setReadOnly(True)
-            self.chat_display.setFont(QFont("Segoe UI", 11))
-            main_layout.addWidget(self.chat_display)
-            
-            # Input area
-            input_layout = QHBoxLayout()
-            input_layout.setSpacing(12)
-            
-            self.input_field = QLineEdit()
-            self.input_field.setPlaceholderText("Type your message here...")
-            self.input_field.returnPressed.connect(self.send_message)
-            input_layout.addWidget(self.input_field)
-            
-            self.send_button = QPushButton("Send")
-            self.send_button.setFixedWidth(100)
-            self.send_button.clicked.connect(self.send_message)
-            input_layout.addWidget(self.send_button)
-            
-            main_layout.addLayout(input_layout)
-            
-            # Initial message
-            self.add_system_message("Welcome! Start chatting with the AI model.")
-            
-            # Display system prompt if provided
+            # Build message list for chat template
+            messages = []
             if self.system_prompt:
-                self.add_system_message(f"[System Prompt] {self.system_prompt}")
+                messages.append({"role": "system", "content": self.system_prompt})
             
-        def add_system_message(self, text):
-            """Add a system message to the chat"""
-            cursor = self.chat_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.chat_display.setTextCursor(cursor)
-            self.chat_display.insertHtml(
-                f'<div style="color: #888; font-style: italic; margin: 10px 0;">{text}</div>'
-            )
-            self.chat_display.verticalScrollBar().setValue(
-                self.chat_display.verticalScrollBar().maximum()
-            )
+            for sender, msg in self.history:
+                role = "user" if sender == "User" else "assistant"
+                messages.append({"role": role, "content": msg})
             
-        def add_user_message(self, text):
-            """Add a user message to the chat"""
-            cursor = self.chat_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.chat_display.setTextCursor(cursor)
-            self.chat_display.insertHtml(
-                f'<div style="background-color: #5e5ce6; color: white; padding: 12px; '
-                f'border-radius: 12px; margin: 10px 0; margin-left: 20%;">'
-                f'<b>You:</b><br>{text}</div>'
-            )
-            self.chat_display.verticalScrollBar().setValue(
-                self.chat_display.verticalScrollBar().maximum()
+            messages.append({"role": "user", "content": self.user_input})
+            
+            # Use model's native chat template (Gemma 3 compatible)
+            conversation_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
             )
             
-        def start_assistant_message(self):
-            """Start a new assistant message bubble"""
-            cursor = self.chat_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.chat_display.setTextCursor(cursor)
-            self.chat_display.insertHtml(
-                f'<div style="background-color: #3d3d3d; color: #e0e0e0; padding: 12px; '
-                f'border-radius: 12px; margin: 10px 0; margin-right: 20%;">'
-                f'<b>Assistant:</b><br>'
+            # Tokenize with attention mask
+            inputs = tokenizer(
+                conversation_prompt,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=2048
+            )
+
+            device = next(model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Print debug info
+            print(f"Input shape: {inputs['input_ids'].shape}, Max token ID: {inputs['input_ids'].max().item()}")
+            
+            # Setup streaming
+            streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+            
+            generation_kwargs = dict(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                streamer=streamer,
+                max_new_tokens=512,
+                do_sample=True,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id,
+                repetition_penalty=1.1,  # Prevents degenerate loops
             )
             
-        def append_token(self, token):
-            """Append a token to the current response"""
-            self.current_response += token
-            
-            # Insert the token at the end
-            cursor = self.chat_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.chat_display.setTextCursor(cursor)
-            self.chat_display.insertPlainText(token)
-            
-            # Scroll to bottom
-            self.chat_display.verticalScrollBar().setValue(
-                self.chat_display.verticalScrollBar().maximum()
-            )
-            
-        def generation_complete(self):
-            """Handle generation completion"""
-            self.is_generating = False
-            self.send_button.setEnabled(True)
-            self.input_field.setEnabled(True)
-            self.input_field.setFocus()
-            
-            # Save to history
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": self.current_response
-            })
-            
-            # Close the div
-            cursor = self.chat_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.chat_display.setTextCursor(cursor)
-            self.chat_display.insertHtml('</div>')
-            
-            self.current_response = ""
-            self.token_times = []
-            
-        def show_error(self, error_msg):
-            """Show an error message"""
-            self.is_generating = False
-            self.send_button.setEnabled(True)
-            self.input_field.setEnabled(True)
-            self.add_system_message(f"[ERROR] {error_msg}")
-            
-        def update_speed_display(self, speed):
-            """Update the token speed display"""
-            self.speed_label.setText(f"Speed: {speed:.1f} tok/s")
-            
-        def send_message(self):
-            """Send a message and get a response"""
-            from threading import Thread
-            
-            if self.is_generating:
-                return
-                
-            user_message = self.input_field.text().strip()
-            if not user_message:
-                return
-                
-            # Add user message to display
-            self.add_user_message(user_message)
-            
-            # Add to history
-            self.conversation_history.append({
-                "role": "user",
-                "content": user_message
-            })
-            
-            # Clear input
-            self.input_field.clear()
-            self.input_field.setEnabled(False)
-            self.send_button.setEnabled(False)
-            
-            # Start assistant response
-            self.is_generating = True
-            self.current_response = ""
-            self.start_assistant_message()
-            
-            # Start generation in a separate thread
-            thread = Thread(target=self.generate_response, daemon=True)
+            # Generate in separate thread
+            thread = Thread(target=model.generate, kwargs=generation_kwargs, daemon=True)
             thread.start()
             
-        def generate_response(self):
-            """Generate response in a separate thread"""
-            import time
-            from threading import Thread
+            # Stream tokens
+            for new_text in streamer:
+                token_count += 1
+                self.new_token_signal.emit(new_text)
             
-            try:
-                # Build messages
-                messages = []
-                if self.system_prompt:
-                    messages.append({"role": "system", "content": self.system_prompt})
-                messages.extend(self.conversation_history)
-                
-                # Format for the model
-                if hasattr(self.tokenizer, 'apply_chat_template'):
-                    prompt = self.tokenizer.apply_chat_template(
-                        messages, 
-                        tokenize=False, 
-                        add_generation_prompt=True
-                    )
-                else:
-                    # Fallback formatting
-                    prompt = ""
-                    for msg in messages:
-                        role = msg["role"]
-                        content = msg["content"]
-                        if role == "system":
-                            prompt += f"System: {content}\n\n"
-                        elif role == "user":
-                            prompt += f"User: {content}\n\n"
-                        elif role == "assistant":
-                            prompt += f"Assistant: {content}\n\n"
-                    prompt += "Assistant: "
-                
-                # Tokenize
-                inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-                
-                # Generate with streaming
-                self.generation_start = time.time()
-                token_count = 0
-                
-                if self.engine == "transformers":
-                    from transformers import TextIteratorStreamer
-                    
-                    streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True)
-                    
-                    generation_kwargs = dict(
-                        **inputs,
-                        streamer=streamer,
-                        max_new_tokens=512,
-                        temperature=self.temperature,
-                        top_p=self.top_p,
-                        top_k=self.top_k,
-                        do_sample=True if self.temperature > 0 else False,
-                    )
-                    
-                    # Start generation in another thread
-                    gen_thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
-                    gen_thread.start()
-                    
-                    # Stream tokens
-                    for token in streamer:
-                        if token:
-                            self.signals.token_generated.emit(token)
-                            token_count += 1
-                            
-                            # Calculate speed
-                            elapsed = time.time() - self.generation_start
-                            if elapsed > 0:
-                                speed = token_count / elapsed
-                                self.signals.speed_update.emit(speed)
-                    
-                    gen_thread.join()
-                    
-                else:  # unsloth
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=4096,
-                        temperature=self.temperature,
-                        top_p=self.top_p,
-                        top_k=self.top_k,
-                        do_sample=True if self.temperature > 0 else False,
-                    )
-                    
-                    # Decode and emit token by token for visualization
-                    response = self.tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-                    words = response.split()
-                    
-                    for i, word in enumerate(words):
-                        token = word + (" " if i < len(words) - 1 else "")
-                        self.signals.token_generated.emit(token)
-                        token_count += 1
-                        
-                        # Calculate speed
-                        elapsed = time.time() - self.generation_start
-                        if elapsed > 0:
-                            speed = token_count / elapsed
-                            self.signals.speed_update.emit(speed)
-                        
-                        time.sleep(0.05)  # Simulate streaming for visual effect
-                
-                self.signals.generation_finished.emit()
-                
-            except Exception as e:
-                self.signals.error_occurred.emit(str(e))
-    
-    return ChatWindow
+            end_time = time.time()
+            duration = end_time - start_time
+            speed = token_count / duration if duration > 0 else 0
+            self.metrics_signal.emit(speed)
 
+        except Exception as e:
+            self.new_token_signal.emit(f"\n[Error: {str(e)}]")
+        finally:
+            self.finished_signal.emit()
 
-def chat(
-    path,
-    system_prompt="",
-    temperature=0.7,
-    top_p=0.95,
-    top_k=200,
-):
+# -------------------------------------------------------------------------
+#  Frontend
+# -------------------------------------------------------------------------
+
+class ChatBubble(QFrame):
+    def __init__(self, text, is_user=False):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+        
+        self.label = QLabel(text)
+        self.label.setWordWrap(True)
+        self.label.setFont(QFont("Segoe UI", 10))
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        
+        self.layout.addWidget(self.label)
+        self.layout.setContentsMargins(15, 10, 15, 10)
+
+        if is_user:
+            color = "#0078D4"
+            text_col = "white"
+        else:
+            color = "#2D2D2D"
+            text_col = "#E0E0E0"
+
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {color};
+                border-radius: 15px;
+                border-{('bottom-right' if is_user else 'bottom-left')}-radius: 0px;
+            }}
+            QLabel {{
+                color: {text_col};
+                background-color: transparent;
+            }}
+        """)
+
+class MainWindow(QMainWindow):
+    def __init__(self, model_path="gpt2", system_prompt="You are a helpful AI assistant.", 
+                 temperature=0.7, top_p=0.9, top_k=50):
+        super().__init__()
+        
+        self.model_path = model_path
+        self.system_prompt = system_prompt
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.history = []
+
+        self.init_ui()
+        self.setup_styles()
+        QTimer.singleShot(100, self.preload_model)
+
+    def init_ui(self):
+        self.setWindowTitle("Neural Chat")
+        self.resize(500, 700)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        header_layout = QHBoxLayout()
+        self.model_label = QLabel(f"Model: {self.model_path}")
+        self.model_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.model_label.setStyleSheet("color: #FFFFFF;")
+        
+        self.speed_label = QLabel("Speed: - t/s")
+        self.speed_label.setStyleSheet("color: #888888; font-size: 11px;")
+        
+        header_layout.addWidget(self.model_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.speed_label)
+        main_layout.addLayout(header_layout)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        self.chat_container = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_container)
+        self.chat_layout.addStretch()
+        
+        self.scroll_area.setWidget(self.chat_container)
+        main_layout.addWidget(self.scroll_area)
+
+        input_frame = QFrame()
+        input_frame.setStyleSheet("background-color: #252526; border-radius: 20px;")
+        input_layout = QHBoxLayout(input_frame)
+        input_layout.setContentsMargins(10, 5, 10, 5)
+
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("Type a message...")
+        self.input_field.setStyleSheet("border: none; color: white; background: transparent; font-size: 14px;")
+        self.input_field.returnPressed.connect(self.send_message)
+
+        self.send_btn = QPushButton("Send")
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setFixedSize(60, 30)
+        self.send_btn.clicked.connect(self.send_message)
+
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.send_btn)
+        main_layout.addWidget(input_frame)
+
+    def setup_styles(self):
+        self.setStyleSheet("""
+            QMainWindow { background-color: #1E1E1E; }
+            QScrollArea { background-color: #1E1E1E; border: none; }
+            QWidget { background-color: #1E1E1E; }
+            QPushButton {
+                background-color: #0078D4;
+                color: white;
+                border-radius: 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #198CDD; }
+            QPushButton:disabled { background-color: #444444; color: #888888; }
+        """)
+
+    def preload_model(self):
+        if self.model_path not in _MODEL_CACHE:
+            self.model_label.setText(f"Loading {self.model_path}...")
+            
+            def load():
+                try:
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+                    
+                    if tokenizer.pad_token_id is None:
+                        tokenizer.pad_token_id = tokenizer.eos_token_id
+                    
+                    torch_dtype = torch.float16 if device == "cuda" else torch.float32
+                    
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.model_path,
+                        torch_dtype=torch_dtype,
+                        device_map=None,
+                        low_cpu_mem_usage=True,
+                        pad_token_id=tokenizer.pad_token_id
+                    )
+                    
+                    if device == "cuda":
+                        model = model.to("cuda")
+                    
+                    _MODEL_CACHE[self.model_path] = {"model": model, "tokenizer": tokenizer}
+                    QTimer.singleShot(0, lambda: self.model_label.setText(f"Model: {self.model_path}"))
+                except Exception as e:
+                    print(f"Model loading error: {e}")
+                    QTimer.singleShot(0, lambda: self.model_label.setText(f"Error loading model"))
+            
+            Thread(target=load, daemon=True).start()
+
+    def add_message(self, text, is_user):
+        bubble = ChatBubble(text, is_user)
+        h_layout = QHBoxLayout()
+        if is_user:
+            h_layout.addStretch()
+            h_layout.addWidget(bubble)
+        else:
+            h_layout.addWidget(bubble)
+            h_layout.addStretch()
+        
+        self.chat_layout.addLayout(h_layout)
+        QTimer.singleShot(10, lambda: self.scroll_area.verticalScrollBar().setValue(
+            self.scroll_area.verticalScrollBar().maximum()
+        ))
+        return bubble
+
+    def send_message(self):
+        text = self.input_field.text().strip()
+        if not text:
+            return
+
+        self.add_message(text, is_user=True)
+        self.input_field.clear()
+        self.input_field.setDisabled(True)
+        self.send_btn.setDisabled(True)
+        self.speed_label.setText("Generating...")
+
+        self.current_ai_bubble = self.add_message("", is_user=False)
+        self.current_ai_text = ""
+
+        self.worker = GenerationWorker(
+            model_path=self.model_path,
+            user_input=text,
+            history=self.history,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            top_k=self.top_k,
+            system_prompt=self.system_prompt
+        )
+        self.worker.new_token_signal.connect(self.update_ai_message)
+        self.worker.metrics_signal.connect(self.update_metrics)
+        self.worker.finished_signal.connect(self.generation_finished)
+        self.worker.start()
+
+        self.history.append(("User", text))
+
+    def update_ai_message(self, token):
+        self.current_ai_text += token
+        self.current_ai_bubble.label.setText(self.current_ai_text)
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if scrollbar.value() >= scrollbar.maximum() - 20:
+            scrollbar.setValue(scrollbar.maximum())
+
+    def update_metrics(self, speed):
+        self.speed_label.setText(f"Speed: {speed:.2f} tok/s")
+
+    def generation_finished(self):
+        self.history.append(("Assistant", self.current_ai_text))
+        self.input_field.setDisabled(False)
+        self.send_btn.setDisabled(False)
+        self.input_field.setFocus()
+
+# -------------------------------------------------------------------------
+#  Main Entry Point
+# -------------------------------------------------------------------------
+
+def chat(model_path: str = "gpt2", system_prompt: str = "You are a helpful AI assistant.",
+         temperature: float = 0.7, top_p: float = 0.9, top_k: int = 50):
     """
-    Launch a modern chat interface for interacting with a language model.
+    Launch the Neural Chat application.
     
     Args:
-        path: Path to model checkpoint (local or HuggingFace) or adapter
-        system_prompt: System prompt for the conversation
-        temperature: Sampling temperature (0.0 to 2.0)
-        top_p: Nucleus sampling parameter
-        top_k: Top-k sampling parameter
+        model_path: HuggingFace model ID or local path
+        system_prompt: System instruction for the AI
+        temperature: Sampling temperature (0.0-2.0)
+        top_p: Nucleus sampling parameter (0.0-1.0)
+        top_k: Top-k sampling parameter (>0)
     """
-    import sys
-    
-    path_str = str(path)
-    
-    # Detect model type
-    is_unsloth = detect_model_type(path)
-    
-    print(f"Loading model from: {path}")
-    print(f"Engine detected: {'Unsloth' if is_unsloth else 'Transformers'}")
-    
-    # Import and load model based on type
-    if is_unsloth:
-        # Import unsloth FIRST before anything else
-        try:
-            from unsloth import FastLanguageModel
-            UNSLOTH_AVAILABLE = True
-        except Exception as e:
-            UNSLOTH_AVAILABLE = False
-            print("⚠️  Unsloth import failed. Falling back to Transformers.")
-            print(f"Error: {e}")
-            print("\nTo fix unsloth, try:")
-            print("  pip uninstall -y zstd")
-            print("  pip install --upgrade --force-reinstall zstd")
-            print("  pip install --upgrade unsloth\n")
-            is_unsloth = False
-        
-        if UNSLOTH_AVAILABLE:
-            model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name=path_str,
-                max_seq_length=2048,
-                dtype=None,
-                load_in_4bit=True,
-            )
-            FastLanguageModel.for_inference(model)
-            engine = "unsloth"
-    
-    if not is_unsloth:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        
-        tokenizer = AutoTokenizer.from_pretrained(path_str)
-        model = AutoModelForCausalLM.from_pretrained(
-            path_str,
-            device_map="auto",
-            torch_dtype="auto",
-        )
-        model.eval()
-        engine = "transformers"
-    
-    print("Model loaded successfully!")
-    
-    # Launch Qt application
-    from PyQt6.QtWidgets import QApplication
-    
-    # Create the ChatWindow class with proper PyQt6 inheritance
-    ChatWindow = create_chat_window_class()
-    
     app = QApplication(sys.argv)
-    window = ChatWindow(model, tokenizer, system_prompt, temperature, top_p, top_k, engine)
+    window = MainWindow(
+        model_path=model_path, 
+        system_prompt=system_prompt,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k
+    )
     window.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    chat()

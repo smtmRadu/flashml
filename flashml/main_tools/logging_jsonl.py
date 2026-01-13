@@ -45,22 +45,16 @@ def load_jsonl(
     path="flashml_logger.jsonl",
     as_df: Literal["pd", "pl"] = False,
     utf="utf-8",
-) -> list[dict]:
-    """Loads the jsonl file and returns a polars/pandas dataframe.
-
-    Args:
-        path (str, optional): Path to the jsonl file. Defaults to "flashml_logger.jsonl".
-        as_df (Literal["pd", "pl"], optional): Return a dataframe. Defaults to False. If false, returns a list of dictionaries.
-        utf (str, optional): File encoding. Defaults to "utf-8".
-    Returns:
-        list[dict] | polars/pandas df | None if file is empty or it doesn't exist.
+) -> list[dict] | None:
+    """
+    Loads a jsonl file safely. 
+    if as_df == False, it returns list[dict]
     """
     import os, json
 
     if not path.endswith((".jsonl", ".json")):
         path += ".jsonl"
-        
-    # check file exists
+
     if not os.path.exists(path):
         from flashml import bell
         bell()
@@ -72,36 +66,42 @@ def load_jsonl(
     if os.stat(path).st_size == 0:
         return None
 
-    try:
-        if as_df is False or as_df == "list_of_dicts":
-            import pandas as pd
-            r = pd.read_json(path, lines=True, encoding=utf)
-            return r.to_dict(orient="records")
-        elif as_df == "pd":
-            import pandas as pd
-            return pd.read_json(path, lines=True, encoding=utf)
-        elif as_df == "pl":
-            import polars as pl
-            return pl.read_ndjson(path)
-        else:
-            raise ValueError("Unhandled dataframe type.")
+    records = []
 
-    except ValueError as e:
-        # Fallback: scan line by line to find bad JSON
-        print(f"❌ \033[91mError while reading {path}: {e}\033[0m")
-        print("Scanning file line by line to locate issue...\n")
-        bad_lines = []
-        with open(path, "r", encoding=utf) as f:
+    try:
+        with open(path, "r", encoding=utf, errors="surrogatepass") as f:
             for lineno, line in enumerate(f, 1):
                 if not line.strip():
                     continue
                 try:
-                    json.loads(line)
-                except json.JSONDecodeError as je:
-                    bad_lines.append((lineno, je.msg, line.strip()[:200]))
-        if bad_lines:
-            for lineno, msg, sample in bad_lines:
-                print(f"Line {lineno}: {msg}\n  {sample}\n")
+                    # 🔥 Remove invalid UTF-16 surrogate chars
+                    clean = (
+                        line.encode("utf-16", "surrogatepass")
+                        .decode("utf-16", "ignore")
+                    )
+                    records.append(json.loads(clean))
+                except Exception as e:
+                    print(
+                        f"⚠️  Skipping line {lineno} due to decode/JSON error: {e}"
+                    )
+
+        if not records:
+            return None
+
+        if as_df is False or as_df == "list_of_dicts":
+            return records
+
+        elif as_df == "pd":
+            import pandas as pd
+            return pd.DataFrame(records)
+
+        elif as_df == "pl":
+            import polars as pl
+            return pl.from_dicts(records)
+
         else:
-            print("ℹ️ No obvious bad lines found (may be an encoding or quoting issue).")
+            raise ValueError("Unhandled dataframe type.")
+
+    except Exception as e:
+        print(f"❌ \033[91mFailed to load {path}: {e}\033[0m")
         raise
