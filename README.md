@@ -232,10 +232,11 @@ if conda env list | grep -qE '(^|\s)ml($|\s)'; then
   echo "'ml' Conda environment already exists. Skipping creation and setup."
 else
   echo "'ml' Conda environment not found. Creating and setting up."
-  conda config --set solver libmamba
-  conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
+  conda config --set solver libmamba
+ 
   conda create -y -n ml python=3.12.9
 
   echo "==== 6. Activating the ml environment ===="
