@@ -1,111 +1,10 @@
+from typing import Literal    
 
-from typing import Literal
+# NOTE
+### When training with unsloth | qlora, the training script uses the unsloth-bnb-4bit as base model for forward pass.
+### The adapter result cannot be merged in transformers with the unsloth-bnb-4bit model, so always pass the fp16 base_model_path for merging.
+### There should be no merge_unsloth_llm function.
 
-def merge_unsloth_llm(
-    adapter_path: str,
-    base_model_path: str = "auto",
-    dtype: Literal["fp16", "bf16", "fp32"] = "fp16",
-    max_seq_length: int = 10240,
-):
-    """
-    Merges an Unsloth LoRA adapter into its base model and saves the fully merged
-    model in the specified precision (fp16, bf16, or fp32). No quantization.
-
-    Args:
-        adapter_path (str): Path to Unsloth LoRA adapter (checkpoint dir)
-        base_model_path (str): Base model name/path or "auto"
-        dtype (str): "fp16", "bf16", or "fp32"
-        max_seq_length (int): Max sequence length for Unsloth loading
-
-    Example:
-        merge_unsloth_llm(
-            "../models/gemma-3-270m-it_2912_v6/checkpoint-155",
-            dtype="fp32"
-        )
-    """
-    import torch, json, shutil, os
-    from pathlib import Path
-    from typing import Literal
-    from unsloth import FastLanguageModel
-    from peft import PeftModel
-
-    if not os.path.exists(adapter_path):
-        raise ValueError(f"Adapter path {adapter_path} does not exist.")
-    # --- Dtype handling ---
-    dtype_map = {
-        "fp16": torch.float16,
-        "bf16": torch.bfloat16,
-        "fp32": torch.float32,
-    }
-    torch_dtype = dtype_map[dtype]
-
-    adapter_path = Path(adapter_path)
-
-    # --- Infer base model if needed ---
-    if base_model_path == "auto":
-        config_path = adapter_path / "adapter_config.json"
-        if not config_path.exists():
-            raise ValueError("Base model path not specified and adapter_config.json not found.")
-
-        with open(config_path) as f:
-            adapter_config = json.load(f)
-
-        base_model_path = adapter_config.get("base_model_name_or_path")
-        if not base_model_path:
-            raise ValueError("'base_model_name_or_path' missing from adapter_config.json")
-
-    print(f"🔄 Step 1/2: Loading base model with Unsloth ({dtype}) (load_in_4bit={'4bit' in base_model_path})...")
-    print(f"Base model: {base_model_path}")
-
-    # --- Output path ---
-    save_path = adapter_path.parent / f"{adapter_path.name}_merged_{dtype}"
-    save_path.mkdir(parents=True, exist_ok=True)
-
-    # --- Load base model via Unsloth ---
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name       = base_model_path,
-        max_seq_length   = max_seq_length,
-        torch_dtype      = torch_dtype,
-        load_in_4bit     = '4bit' in base_model_path,   # IMPORTANT: full precision merge. This will tell the from_pretrained function which version to download
-    )
-
-    # --- Load adapter ---
-    model = PeftModel.from_pretrained(
-        model,
-        adapter_path,
-        torch_dtype=torch_dtype,
-    )
-
-    # --- Merge ---
-    model = model.merge_and_unload()
-    FastLanguageModel.for_inference(model)
-    model.dequantize()
-    
-    print("✓ Models merged successfully")
-
-    # --- Save merged model ---
-    print(f"💾 Step 2/2: Saving merged model in {dtype.upper()} precision...")
-    model.to(dtype=torch_dtype)
-
-    model.save_pretrained_merged(
-        save_path,
-        tokenizer=tokenizer,
-        save_method="merged_32bit" if dtype == "fp32" else "merged_16bit",
-    )
-
-    # --- Copy extra files ---
-    for fname in ["chat_template.jinja", "README.md", "training_args.bin"]:
-        src = adapter_path / fname
-        dst = save_path / fname
-        if src.exists():
-            shutil.copy2(src, dst)
-            print(f"📎 Copied {fname}")
-
-    print(f"\n🎉 Unsloth model merged and saved to {save_path} ({dtype})")
-    return save_path
-
-    
-    
 def merge_llm(
     adapter_path: str,
     base_model_path: str = "auto",
@@ -129,6 +28,9 @@ def merge_llm(
     from pathlib import Path
     import json, os, shutil
 
+    if not os.path.exists(adapter_path):
+        raise ValueError(f"Adapter path {adapter_path} does not exist.")
+    
     # --- Dtype handling ---
     dtype_map = {
         "fp16": torch.float16,
@@ -143,7 +45,7 @@ def merge_llm(
     save_path = adapter_path_obj.parent / f"{adapter_path_obj.name}_merged{suffix}"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"🔄 Step 1/2: Loading and merging models ({dtype})...")
+    print(f"🔄 Step 1/2: Loading and merging model ({dtype})...")
 
     # --- Infer base model if needed ---
     if base_model_path == "auto":
@@ -157,6 +59,9 @@ def merge_llm(
             raise ValueError("'base_model_name_or_path' missing from adapter_config.json")
     else:
         print(f"Using {base_model_path} as the base model.")
+        
+    if "unsloth-bnb" in base_model_path:
+        raise ValueError(f"Unsloth-bnb base model path inferred ({base_model_path}). It is not allowed to merge with Unsloth-bnb models. Please consider the non-unsloth bnb-4bit or fp16 for merging.")
     # --- Load tokenizer ---
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 
@@ -361,7 +266,7 @@ quant_stage:
     print(f"\n🔄 Step 2/3: Saving quantized model...")
 
     base_model.save_pretrained(save_path, safe_serialization=True)
-    tokenizer.save_pretrained(save_path)
+    #tokenizer.save_pretrained(save_path)
 
     print(f"🎉 Model quantized and saved to {save_path}")
     return str(save_path)
@@ -390,6 +295,11 @@ def merge_and_quantize_llm(
     from pathlib import Path
     import os, shutil, tempfile, json
 
+    
+    if not os.path.exists(adapter_path):
+        raise ValueError(f"Adapter path {adapter_path} does not exist.")
+    
+    
     quant_type = quant_type.lower()
     if quant_type not in ["gptq", "awq", "bnb", "mxfp4"]:
         raise ValueError(f"Invalid quant_type: {quant_type}")
@@ -416,7 +326,7 @@ def merge_and_quantize_llm(
     save_path = adapter_path_obj.parent / f"{adapter_path_obj.name}_merged{suffix_map[quant_type]}"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"🔄 Step 1/3: Loading and merging models...")
+    print(f"🔄 Step 1/3: Loading and merging model...")
 
     if base_model_path == "auto":
         config_path = adapter_path_obj / "adapter_config.json"
@@ -428,8 +338,8 @@ def merge_and_quantize_llm(
         if not base_model_path:
             raise ValueError("Cannot infer base model path from adapter_config.json")
         
-    if base_model_path.startswith("unsloth"):
-        raise ValueError(f"Unsloth base model path inferred ({base_model_path}). Please pass the original Hhf 16bit model path so it can be quantized. ")
+    if "4bit" in base_model_path:
+        raise ValueError(f"4bit model path inferred ({base_model_path}). Please pass the original HuggingFace 16bit model path so it can be quantized.")
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 
@@ -451,7 +361,7 @@ def merge_and_quantize_llm(
         offload_folder="./offload_flashml"
     ).merge_and_unload()
 
-    print("✓ Models merged successfully")
+    print("✓ Model merged successfully")
     print(f"\n🔄 Step 2/3: Quantizing with {quant_type.upper()}...")
 
     if quant_type == "gptq":
@@ -542,27 +452,16 @@ quant_stage:
 
     elif quant_type == "bnb":
         # BitsAndBytes requires calibration dataset for proper 4-bit serialization
-        if not calibration_dataset:
-            print("⚠️  Warning: BitsAndBytes without calibration_dataset will save config only.")
-            print("    The model will quantize at runtime but won't have compressed weights.")
-        
         from transformers import BitsAndBytesConfig
         with tempfile.TemporaryDirectory() as temp_dir:
             merged_model.save_pretrained(temp_dir)
             tokenizer.save_pretrained(temp_dir)
             
-            # Save with BitsAndBytes config for runtime quantization
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch_dtype,
-                bnb_4bit_use_double_quant=True
-            )
-            
+
             # Load quantized model
             merged_model = AutoModelForCausalLM.from_pretrained(
                 temp_dir,
-                quantization_config=bnb_config,
+                quantization_config=get_bnb_4bit_quantization_config(),
                 device_map="auto",
                 torch_dtype=torch_dtype,
                 trust_remote_code=True
