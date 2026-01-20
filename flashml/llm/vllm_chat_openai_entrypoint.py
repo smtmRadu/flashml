@@ -3,8 +3,12 @@ import tempfile
 import json
 import subprocess
 import os
-from typing import Literal
 from copy import deepcopy
+import platform
+import os
+import sys
+os.environ['MKL_THREADING_LAYER'] = 'GNU'
+os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 #  python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen3-VL-2B-Thinking   --tensor-parallel-size 1 
 
 def vllm_chat_openai_entrypoint(
@@ -42,6 +46,10 @@ def vllm_chat_openai_entrypoint(
     
     Messages may contain None values.
     """
+    if platform.system() != 'Linux':
+        raise OSError(f"vLLM is only supported on Linux. Current system: {platform.system()}")
+    
+    
     vllm_config = deepcopy(vllm_config)
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
         messages = [messages]
@@ -50,7 +58,7 @@ def vllm_chat_openai_entrypoint(
         raise Exception("Input messages list has length 0.")
     
     non_none_messages = [i for i in messages if i is not None]
-    requests = []
+    vllm_req = []
     for idx, conv in enumerate(non_none_messages):
         req = {
                 "custom_id": f"request-{idx+1}",
@@ -83,7 +91,7 @@ def vllm_chat_openai_entrypoint(
                     "function": {"name": schema["title"]}
                 }
             
-        requests.append(req)    
+        vllm_req.append(req)    
          
     input_fd, input_file_path = tempfile.mkstemp(suffix='.jsonl', prefix='batch_input_')
     output_fd, output_file_path = tempfile.mkstemp(suffix='.jsonl', prefix='batch_output_')
@@ -91,7 +99,7 @@ def vllm_chat_openai_entrypoint(
     os.close(input_fd)
     os.close(output_fd)     
     with open(input_file_path, 'w') as f:
-        for rq in requests:
+        for rq in vllm_req:
                 f.write(json.dumps(rq) + '\n')
 
     vllm_config.pop("max_completion_tokens", None)
@@ -118,9 +126,11 @@ def vllm_chat_openai_entrypoint(
                     cmd.append(str(item))
             else:
                 cmd.append(str(v))
+                
+                
         print(f"Instantiating vLLM: \033[92m{' '.join(cmd)}\033[0m")
         _ = subprocess.run(cmd, text=True, check=True)
-        print(f"\033[92m============== 100% Completed | {len(requests)}/{len(requests)} ==============\033[0m")
+        print(f"\033[92m============== 100% Completed | {len(vllm_req)}/{len(vllm_req)} ==============\033[0m")
         
         # Read results
         without_none_responses = []
@@ -153,3 +163,4 @@ def vllm_chat_openai_entrypoint(
             os.unlink(output_file_path)
         except:
             pass
+        

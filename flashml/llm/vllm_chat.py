@@ -84,6 +84,8 @@ def vllm_chat(
             print(i.outputs[0].text)
         ```
     """  
+    print("⚠️⚠️⚠️This is deprecated. It works only for certain vllm versions. Please use vllm_chat_openai_entrypoint instead.⚠️⚠️⚠️")
+    
     from vllm import SamplingParams
     # from vllm.sampling_params import StructuredOutputsParams
     llm = VLLMCore.initialize(

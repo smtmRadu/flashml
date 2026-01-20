@@ -161,24 +161,33 @@ def log_figure(figure, figure_name: str = None, experiment_name: str = None) -> 
     )
 
 
-def host_mlflow(host="127.0.0.1", port="5000"):
-    """Hosts MLFlow server.
-    
-    To connect to runpod runtime from local machine, open a wsl terminal and run:\\
-    ssh -L 1234:127.0.0.1:5000 [root@... -p <port> a.k.a. SSH over exposed TCP w/o ssh] (e.g. "ssh -L 1234:127.0.0.1:5000 -y root@104.255.9.187 -p 12780")\\
-    Then connect in local browser to 127.0.0.1:1234\\
+import subprocess
+import os
+
+def host_mlflow(host="127.0.0.1", port="5000", tracking_uri=None):
+    """Hosts MLFlow server with an optional custom tracking URI.
+
+    To connect to runpod runtime from local machine, open a wsl terminal and run:
+    ssh -L 1234:127.0.0.1:5000 [root@... -p <port> a.k.a. SSH over exposed TCP w/o ssh]
+    Then connect in local browser to 127.0.0.1:1234
+
     Args:
-        host (str, optional): _description_. Defaults to "127.0.0.1".
-        port (str, optional): _description_. Defaults to "5000".
+        host (str, optional): Host to bind the server. Defaults to "127.0.0.1".
+        port (str, optional): Port for the server. Defaults to "5000".
+        tracking_uri (str, optional): Custom URI for the MLflow tracking server.
 
-    Returns: the subprocess
+    Returns:
+        subprocess.Popen: The subprocess running the MLflow server.
     """
-    import subprocess
+    if tracking_uri:
+        os.environ["MLFLOW_TRACKING_URI"] = tracking_uri
 
-    print(
-        f"\033[90mMLFlow hosted at:\033[0m \033[94mhttp://{host}:{port}\033[0m \033[95m\033[0m"
-    )
+    print(f"\033[90mMLFlow hosted at:\033[0m \033[94mhttp://{host}:{port}\033[0m \033[95m\033[0m")
+
+    # Start the MLflow server
     return subprocess.Popen(["mlflow", "ui", "--host", host, "--port", port])
+
+
 
 
 class _TrainingLogger:

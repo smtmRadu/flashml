@@ -2,8 +2,9 @@ from typing import Literal
 
 # NOTE
 ### When training with unsloth | qlora, the training script uses the unsloth-bnb-4bit as base model for forward pass.
-### The adapter result cannot be merged in transformers with the unsloth-bnb-4bit model, so always pass the fp16 base_model_path for merging.
+### The adapter result should not be merged with the unsloth-bnb-4bit model (it takes too much time and probably is shit, better with fp16 model), so always pass the fp16 base_model_path for merging.
 ### There should be no merge_unsloth_llm function.
+### 
 
 def merge_llm(
     adapter_path: str,
@@ -243,18 +244,10 @@ quant_stage:
             base_model.save_pretrained(temp_dir)
             tokenizer.save_pretrained(temp_dir)
 
-            # Save with BitsAndBytes config for runtime quantization
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch_dtype,
-                bnb_4bit_use_double_quant=True
-            )
-
             # Load quantized model
             base_model = AutoModelForCausalLM.from_pretrained(
                 temp_dir,
-                quantization_config=bnb_config,
+                quantization_config=get_bnb_4bit_quantization_config(),
                 device_map="auto",
                 torch_dtype=torch_dtype,
                 trust_remote_code=True

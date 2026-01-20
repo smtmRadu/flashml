@@ -46,7 +46,35 @@ QWEN3_VL_4B_THINKING_AWQ_VLLM_CONFIG = {
     "gpu-memory-utilization": 0.85,
 }
 
+GEMMA3_4B_IT_VLLM_CONFIG = {
+    "model": "google/gemma3-4b-it",
+    "max_model_len": 32768,
+    "max_completion_tokens": 16384,
+    "temperature": 0.9,
+    "top_p": 0.95,
+    "top_k": 100,
+    "tensor-parallel-size": 1,
+    "async-scheduling": "",
+    "gpu-memory-utilization": 0.85,
+    "limit_mm_per_prompt.image": 0,
+    "limit_mm_per_prompt.video": 0,
+}
 
+
+# text only btw (vision one requires preprocessor_config.json)
+GEMMA3_27B_IT_VLLM_CONFIG = {
+    "model": "google/gemma3-27b-it",
+    "max_model_len": 32768,
+    "max_completion_tokens": 16384,
+    "temperature": 0.9,
+    "top_p": 0.95,
+    "top_k": 100,
+    "tensor-parallel-size": 1,
+    "async-scheduling": "",
+    "gpu-memory-utilization": 0.9,
+    "limit_mm_per_prompt.image": 0,
+    "limit_mm_per_prompt.video": 0,
+}
 
 QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
     "model": "unsloth/Qwen3-VL-8B-Thinking-bnb-4bit",
