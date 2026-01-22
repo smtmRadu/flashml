@@ -4,14 +4,17 @@ from .vllm_chat import vllm_chat
 from .vllm_compute_logprobs import vllm_compute_logprobs
 from .vllm_engine import vllm_close
 from .vllm_chat_openai_entrypoint import vllm_chat_openai_entrypoint
+
+from .merging import  merge_unsloth_model, quantize_model
 from .llm_utils import (
 get_bnb_4bit_quantization_config, 
 get_boxed_answer, 
-image_to_base64,
+image_to_base64)
 
-merge_and_quantize_llm, 
-quantize_llm,
-merge_llm)
+# there are deprecated
+#merge_and_quantize_llm, 
+#quantize_llm,
+# merge_llm)
 
 
 from .vllm_configs import (
@@ -52,9 +55,13 @@ __all__ = [
     "get_bnb_4bit_quantization_config",
     "get_boxed_answer",
     "image_to_base64",
-    "merge_llm",
-    "quantize_llm",
-    "merge_and_quantize_llm",
+    
+    #"merge_llm",
+    #"quantize_llm",
+    #"merge_and_quantize_llm",
+    
+    "quantize_model",
+    "merge_unsloth_model",
     
     "vllm_chat_openai_entrypoint",
     "plot_chat",

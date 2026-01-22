@@ -62,7 +62,7 @@ def merge_llm(
         print(f"Using {base_model_path} as the base model.")
         
     if "unsloth-bnb" in base_model_path:
-        raise ValueError(f"Unsloth-bnb base model path inferred ({base_model_path}). It is not allowed to merge with Unsloth-bnb models. Please consider the non-unsloth bnb-4bit or fp16 for merging.")
+        raise ValueError(f"Unsloth-bnb base model path inferred ({base_model_path}). Use merge_unsloth_model_instead.")
     # --- Load tokenizer ---
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 
@@ -267,8 +267,7 @@ quant_stage:
 def merge_and_quantize_llm(
     adapter_path: str,
     base_model_path: str = "auto",
-    quant_type: Literal["gptq", "awq", "bnb", "mxfp4"] = "bnb",
-    calibration_dataset: list[str] | None = None,
+    quant_type: Literal["gguf", "bnb_4bit"] = "bnb_4bit",
     dtype: Literal["fp16", "bf16", "fp32"] = "bf16"
 ):
     """
@@ -294,7 +293,7 @@ def merge_and_quantize_llm(
     
     
     quant_type = quant_type.lower()
-    if quant_type not in ["gptq", "awq", "bnb", "mxfp4"]:
+    if quant_type not in ["bnb_4bit", "gguf"]:
         raise ValueError(f"Invalid quant_type: {quant_type}")
 
     # Handle dtypes
@@ -303,20 +302,10 @@ def merge_and_quantize_llm(
         "bf16": torch.bfloat16,
         "fp32": torch.float32
     }
-    torch_dtype = dtype_map.get(dtype, torch.float16)
-
-    if quant_type in ["gptq", "awq", "mxfp4"] and not calibration_dataset:
-        raise ValueError(f"{quant_type.upper()} requires calibration_dataset")
-
-    suffix_map = {
-        "awq": "_AWQ",
-        "gptq": "_GPTQ",
-        "bnb": "_bnb",
-        "mxfp4": "_MXFP4"
-    }
+    torch_dtype = dtype_map.get(dtype, torch.bfloat16)
 
     adapter_path_obj = Path(adapter_path)
-    save_path = adapter_path_obj.parent / f"{adapter_path_obj.name}_merged{suffix_map[quant_type]}"
+    save_path = adapter_path_obj.parent / f"{adapter_path_obj.name}_{quant_type}"
     save_path.mkdir(parents=True, exist_ok=True)
 
     print(f"🔄 Step 1/3: Loading and merging model...")
@@ -331,20 +320,19 @@ def merge_and_quantize_llm(
         if not base_model_path:
             raise ValueError("Cannot infer base model path from adapter_config.json")
         
-    if "4bit" in base_model_path:
-        raise ValueError(f"4bit model path inferred ({base_model_path}). Please pass the original HuggingFace 16bit model path so it can be quantized.")
-
+    if "unsloth" is base_model_path:
+        raise Exception("Use merge_unsloth_model function instead.")
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_path,
-        device_map="cpu",
-        torch_dtype=torch_dtype,
+        device_map="auto",
+        dtype=torch_dtype,
         offload_folder="./offload_flashml",
         trust_remote_code=True,
-        quantization_config=None,  # ← Add this
-        load_in_4bit=False,        # ← Add this
-        load_in_8bit=False         # ← Add this
+        quantization_config=None,  
+        load_in_4bit=False,        
+        load_in_8bit=False        
     )
 
     merged_model = PeftModel.from_pretrained(
@@ -354,96 +342,10 @@ def merge_and_quantize_llm(
         offload_folder="./offload_flashml"
     ).merge_and_unload()
 
-    print("✓ Model merged successfully")
+    print("✅ Model merged successfully")
     print(f"\n🔄 Step 2/3: Quantizing with {quant_type.upper()}...")
 
-    if quant_type == "gptq":
-        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-        examples = [
-            tokenizer(text, return_tensors="pt", truncation=True, max_length=2048).input_ids
-            for text in calibration_dataset
-        ]
-        quant_config = BaseQuantizeConfig(bits=4, group_size=128, desc_act=False, damp_percent=0.01)
-        merged_model = merged_model.to("cuda")
-        gptq_model = AutoGPTQForCausalLM.from_quantized(
-            merged_model, quantize_config=quant_config, device_map="auto"
-        )
-        gptq_model.quantize(examples)
-        merged_model = gptq_model
-
-    elif quant_type == "awq":
-        from llmcompressor.transformers import compress
-        with tempfile.TemporaryDirectory() as temp_dir:
-            merged_model.save_pretrained(temp_dir)
-            tokenizer.save_pretrained(temp_dir)
-            recipe = """
-quant_stage:
-    quant_modifiers:
-        QuantizationModifier:
-            ignore: ["lm_head"]
-            config_groups:
-                group_0:
-                    weights:
-                        num_bits: 4
-                        type: "int"
-                        symmetric: false
-                        strategy: "channel"
-                    targets: ["Linear"]
-"""
-            compress(
-                model=temp_dir,
-                dataset=calibration_dataset,
-                recipe=recipe,
-                output_dir=str(save_path),
-                num_calibration_samples=min(128, len(calibration_dataset)),
-            )
-        merged_model = None
-
-    elif quant_type == "mxfp4":
-        try:
-            from llmcompressor.transformers import oneshot
-            from llmcompressor.modifiers.quantization import QuantizationModifier
-        except ImportError:
-            raise ImportError(
-                "MX-FP4 quantization requires llm-compressor. Install with: "
-                "pip install llmcompressor[transformers]"
-            )
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            merged_model.save_pretrained(temp_dir)
-            tokenizer.save_pretrained(temp_dir)
-            
-            # MX-FP4 recipe for block-wise microscaling quantization
-            recipe = QuantizationModifier(
-                targets="Linear",
-                scheme="FP4",
-                ignore=["lm_head"],
-                config_groups={
-                    "group_0": {
-                        "weights": {
-                            "num_bits": 4,
-                            "type": "float",
-                            "strategy": "group",
-                            "group_size": 128,
-                            "block_structure": "1x128"  # MX block structure
-                        }
-                    }
-                }
-            )
-            
-            # Perform one-shot quantization with calibration data
-            oneshot(
-                model=temp_dir,
-                dataset=calibration_dataset,
-                recipe=recipe,
-                output_dir=str(save_path),
-                num_calibration_samples=min(512, len(calibration_dataset)),
-                max_seq_length=2048,
-                pad_to_max_length=False
-            )
-        merged_model = None
-
-    elif quant_type == "bnb":
+    if quant_type == "bnb_4bit":
         # BitsAndBytes requires calibration dataset for proper 4-bit serialization
         from transformers import BitsAndBytesConfig
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -459,8 +361,10 @@ quant_stage:
                 torch_dtype=torch_dtype,
                 trust_remote_code=True
             )
+    elif quant_type == "gguf":
+        raise Exception("GGUF not implemented yet")
 
-    print("✓ Quantization complete")
+    print("✅ Quantization complete")
     print("\n🔄 Step 3/3: Saving quantized model...")
 
     if merged_model is not None:
@@ -477,7 +381,7 @@ quant_stage:
     if os.path.exists("./offload_flashml"):
         shutil.rmtree("./offload_flashml")
 
-    print(f"\n🎉 Model merged, quantized, and saved to {save_path}")
+    print(f"\n✅ Adapter merged with {base_model_path}, quantized to {quant_type}, and saved to {save_path}")
     return save_path
 
 

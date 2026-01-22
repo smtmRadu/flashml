@@ -100,7 +100,7 @@ for r in resps:
         
     def step_1_build_batch_file(self, file_name = None, custom_ids: list = None):
         if file_name is None:
-            base_name = f"openai_batch_req_file_{datetime.now().strftime('%d%m')}"
+            base_name = f"batch_file_{datetime.now().strftime('%d%m')}"
             version = 1
             file_name = f"{base_name}_v{version}.jsonl"
 
@@ -109,12 +109,13 @@ for r in resps:
                 version += 1
                 file_name = f"{base_name}_v{version}.jsonl"
         
-        self.current_file_name = file_name
+        os.makedirs("openai", exist_ok=True)
+        self.current_file_name = "openai/" + file_name
         
         from flashml import log_json
         
         
-        with open(file_name, "w") as f:
+        with open(self.current_file_name, "w") as f:
             f.write("")
             
         for elem_id, mess in tqdm(enumerate(self.messages_batch), desc="Building batch file"):
@@ -147,9 +148,9 @@ for r in resps:
                     "function": {"name": schema["title"]}
                 }
                 req["body"]["response_format"] = {"type": "json_object"}
-            log_json(record=req, path=file_name, add_timestamp=False)
+            log_json(record=req, path=self.current_file_name, add_timestamp=False)
             
-        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[32m{file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
+        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[32m{self.current_file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
 
     def step_2_upload_batch_file(self, file_name = "current"):
         if file_name == "current":
