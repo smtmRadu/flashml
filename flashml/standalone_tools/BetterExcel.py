@@ -6,7 +6,7 @@ import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
 
-APP_NAME = "Better Excel v1.1"
+APP_NAME = "Better Excel v1.2"
 
 # -------------------- Utility: Dark/Light palettes & styles --------------------
 def apply_dark_palette(app: QtWidgets.QApplication):
@@ -836,7 +836,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.search_btn = QtWidgets.QToolButton()
         self.search_btn.setText("🔍")
         self.search_btn.setToolTip("Search")
-        self.search_btn.clicked.connect(self.on_search_return_pressed)
+        self.search_btn.clicked.connect(self.apply_search_only)
         toolbar.addWidget(self.search_btn)
 
         # --- Case Sensitive Toggle ---
@@ -1000,6 +1000,10 @@ class DataViewerPage(QtWidgets.QWidget):
         self.status = QtWidgets.QStatusBar()
         self.status.setFixedHeight(24)
 
+        self.size_label = QtWidgets.QLabel("")
+        self.size_label.setStyleSheet("font-weight: 500; padding-right: 10px;")
+        self.status.addPermanentWidget(self.size_label)
+
         # Background task indicator (bottom-left corner)
         self.bg_indicator = QtWidgets.QLabel("")
         self.bg_indicator.setStyleSheet("""
@@ -1046,7 +1050,16 @@ class DataViewerPage(QtWidgets.QWidget):
         
         self.table.hide()
         
-        
+    def refresh_dims_display(self):
+        """Updates the status bar with current row and column counts in bold."""
+        if self.model:
+            rows = self.model.df.shape[0]
+            cols = self.model.df.shape[1]
+            # Using HTML <b> tags to bold the specific numbers
+            self.size_label.setText(f"| <b>{rows}</b> rows x <b>{cols}</b> columns |")
+        else:
+            self.size_label.clear()
+            
     def on_case_sensitive_toggled(self, checked: bool):
         """Toggle case sensitivity and refresh search"""
         if self.model:
@@ -1246,7 +1259,26 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Always navigate to next match when Enter is pressed
         self.go_next_match()
-               
+     
+    def apply_search_only(self):
+        """Updates highlights based on search text without moving the view."""
+        if not self.model:
+            return
+            
+        search_text = self.search_edit.text()
+        
+        # Update the model's search term to trigger repainting
+        self.model.set_search_term(search_text)
+        
+        # Show/Hide replace container based on input
+        self.replace_container.setVisible(bool(search_text.strip()))
+        self._update_replace_buttons()
+        
+        # Reset match position but DON'T scroll
+        self.current_match_pos = -1
+        self.table.viewport().update()
+        self.status.showMessage(f"Search updated. Found {self.model.total_matches()} matches.", 2000)
+              
     def _select_column(self, logical_index: int):
         """Select entire column when header is clicked"""
         if not self.model:
@@ -1310,6 +1342,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.model.dataChanged.connect(self._on_cell_data_changed)
         
         self.table.setModel(self.model)
+        self.refresh_dims_display()
         self.table.setItemDelegate(HighlightDelegate(self.model))
         
         # Style setup
@@ -1582,6 +1615,7 @@ class DataViewerPage(QtWidgets.QWidget):
                     self.model._df.drop(columns=cols_to_drop, inplace=True)
                     self.model.is_dirty = True
                     self.model.layoutChanged.emit()
+                    self.refresh_dims_display()
                 return
 
             # --- Case 2: Delete Selected Rows ---
@@ -2010,6 +2044,7 @@ class DataViewerPage(QtWidgets.QWidget):
             )
             if ok and new_name.strip():
                 self.model.add_new_column(new_name.strip())
+                self.refresh_dims_display()
                 self.autosize_columns(force=True)
                 self._autosize_all_rows()
                 self.status.showMessage(f"Added column: {new_name}")

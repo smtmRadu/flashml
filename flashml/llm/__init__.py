@@ -5,7 +5,8 @@ from .vllm_compute_logprobs import vllm_compute_logprobs
 from .vllm_engine import vllm_close
 from .vllm_chat_openai_entrypoint import vllm_chat_openai_entrypoint
 
-from .merging import  merge_unsloth_model, quantize_model
+from .llm_merging import  merge_unsloth_model
+from .llm_quantization import quantize_model
 from .llm_utils import (
 get_bnb_4bit_quantization_config, 
 get_boxed_answer, 

@@ -9,6 +9,7 @@ authors = [{ name = "kbradu" }]
 dependencies = [
     "torch", # let it first
     "PyPDF2",
+    "flash-attn",
     "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
     "ipywidgets",
     "pydantic", # used here for BaseClass in structured output with llms

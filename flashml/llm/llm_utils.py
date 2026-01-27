@@ -23,6 +23,7 @@ def merge_llm(
     Example:
         merge_llm("./my_adapter", "Qwen/Qwen3-7B-Instruct", dtype="bf16")
     """
+    
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
@@ -320,7 +321,7 @@ def merge_and_quantize_llm(
         if not base_model_path:
             raise ValueError("Cannot infer base model path from adapter_config.json")
         
-    if "unsloth" is base_model_path:
+    if "unsloth" in base_model_path:
         raise Exception("Use merge_unsloth_model function instead.")
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
 

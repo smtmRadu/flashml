@@ -186,165 +186,97 @@ Enumerate **GQA**, **SwiGLU**, **FFN**, **MinGRU** ...
 
 
 
-### RUNPOD SETUP SH (as by 15 Jan 2026 - one shot install)
-
-```bash
-#!/bin/bash
-set -e
-
-echo "==== 1. Installing essential system packages ===="
-apt-get update
-apt-get install -y build-essential curl git bzip2 wget nvtop
-
-echo "==== 2. Checking if Anaconda is installed ===="
-INSTALLER="/workspace/Anaconda3-2025.06-0-Linux-x86_64.sh"
-INSTALL_DIR="/workspace/anaconda3"
-BASHRC="$HOME/.bashrc"
-
-# Download and install if needed
-if [ -f "$INSTALLER" ]; then
-    echo "File $INSTALLER already exists."
-else
-    echo "Downloading Anaconda..."
-    wget https://repo.anaconda.com/archive/Anaconda3-2025.06-0-Linux-x86_64.sh -P /workspace
-    bash "$INSTALLER" -b -p "$INSTALL_DIR"
-fi
-
-# Initialize conda FIRST (before using any conda commands)
-"$INSTALL_DIR/bin/conda" init bash
-
-# Add to current session PATH
-export PATH="$INSTALL_DIR/bin:$PATH"
-
-# Source conda for THIS script session
-source "$INSTALL_DIR/etc/profile.d/conda.sh"
-
-# Add HF_HOME to bashrc if not present
-if ! grep -q 'HF_HOME' "$BASHRC"; then
-    echo 'export HF_HOME=/workspace/hf_cache' >> "$BASHRC"
-fi
-
-echo "==== 3. Checking if 'ml' environment exists ===="
-if conda env list | grep -qE '(^|\s)ml($|\s)'; then
-    echo "'ml' environment already exists."
-else
-    echo "Creating 'ml' environment..."
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-    conda config --set solver libmamba
-    conda create -y -n ml python=3.12.9
-fi
-
-echo "==== 4. Activating ml environment ===="
-conda activate ml
-
-# Install packages
-pip install --upgrade pip setuptools wheel
-conda install -n ml ipykernel --update-deps --force-reinstall -y
-
-echo "==== 5. Installing flashml package ===="
-if [ ! -d "/workspace/flashml" ]; then
-    cd /workspace
-    git clone https://github.com/smtmRadu/flashml flashml
-    cd flashml
-    pip install -e .
-else
-    echo "flashml already exists, skipping clone"
-    cd /workspace/flashml
-    pip install -e .
-fi
-
-# Install additional packages
-pip install vllm
-
-# Make 'ml' auto-activate on new terminals
-if ! grep -q "conda activate ml" "$BASHRC"; then
-    echo "conda activate ml" >> "$BASHRC"
-fi
-
-echo "==== Setup completed! ===="
-echo "Run: source ~/.bashrc"
-echo "Or restart your terminal to use conda"
-```
-
-### used after (first) init (to be checked if can be used solely)
+### RUNPOD SETUP SH (as by 27 Jan 2026 - one shot install)
 ```bash 
 #!/bin/bash
 set -e
 
+# Define variables for clarity
+INSTALLER_PATH="/workspace/Anaconda3-2025.06-0-Linux-x86_64.sh"
+INSTALL_DIR="/workspace/anaconda3"
+BASHRC="$HOME/.bashrc"
+ENV_NAME="ml"
+
 echo "==== 1. Installing essential system packages ===="
 apt-get update
 apt-get install -y build-essential curl git bzip2 wget nvtop
 
 echo "==== 2. Checking if Anaconda is installed ===="
-INSTALLER="/workspace/Anaconda3-2025.06-0-Linux-x86_64.sh"
-INSTALL_DIR="/workspace/anaconda3"
-BASHRC="$HOME/.bashrc"
-
-# Download and install if needed
-if [ -f "$INSTALLER" ]; then
-    echo "File $INSTALLER already exists."
+# Logic Fix: Check if the DIRECTORY exists to determine if we need to install
+if [ -d "$INSTALL_DIR" ]; then
+    echo "Anaconda directory ($INSTALL_DIR) already exists. Skipping installation."
 else
-    echo "Downloading Anaconda..."
-    wget https://repo.anaconda.com/archive/Anaconda3-2025.06-0-Linux-x86_64.sh -P /workspace
-    bash "$INSTALLER" -b -p "$INSTALL_DIR"
+    echo "Anaconda not found. Checking for installer..."
+    
+    # Check if installer file exists, download if not
+    if [ ! -f "$INSTALLER_PATH" ]; then
+        echo "Downloading Anaconda..."
+        wget https://repo.anaconda.com/archive/Anaconda3-2025.06-0-Linux-x86_64.sh -P /workspace
+    fi
+    
+    echo "Running Anaconda Installer..."
+    bash "$INSTALLER_PATH" -b -p "$INSTALL_DIR"
 fi
 
-# Initialize conda FIRST (before using any conda commands)
-"$INSTALL_DIR/bin/conda" init bash
-
-# Add to current session PATH
+# Initialize conda logic
 export PATH="$INSTALL_DIR/bin:$PATH"
-
-# Source conda for THIS script session
 source "$INSTALL_DIR/etc/profile.d/conda.sh"
+conda init bash
 
-# Accept TOS BEFORE any conda commands that need packages
+# Accept TOS
 echo "==== Accepting Anaconda Terms of Service ===="
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+# Note: This command is specific to newer Anaconda versions/paid tiers. 
+# If this fails, you may simply not need it on the free tier.
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main || true
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r || true
 
-# Set libmamba solver
+# Set solver
 conda config --set solver libmamba
 
-# Add HF_HOME to bashrc if not present
+# Add HF_HOME to bashrc
 if ! grep -q 'HF_HOME' "$BASHRC"; then
     echo 'export HF_HOME=/workspace/hf_cache' >> "$BASHRC"
 fi
 
-echo "==== 3. Checking if 'ml' environment exists ===="
-if conda env list | grep -qE '(^|\s)ml($|\s)'; then
-    echo "'ml' environment already exists."
+echo "==== 3. Checking if '$ENV_NAME' environment exists ===="
+if conda env list | grep -qE "(^|\s)$ENV_NAME($|\s)"; then
+    echo "'$ENV_NAME' environment already exists."
 else
-    echo "Creating 'ml' environment..."
-    conda create -y -n ml python=3.12.9
+    echo "Creating '$ENV_NAME' environment..."
+    conda create -y -n $ENV_NAME python=3.12.9
 fi
 
-echo "==== 4. Activating ml environment ===="
-conda activate ml
+echo "==== 4. Installing Packages into '$ENV_NAME' ===="
+# We use 'conda run' or full paths to ensure we install INTO the environment
+# strictly, avoiding the 'pip runs as root' warning.
 
-# Install packages
-pip install --upgrade vllm pip setuptools wheel
-conda install -n ml --update-deps --force-reinstall -y
+# Install Pip packages
+"$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install --upgrade pip setuptools wheel
+
+# ERROR FIX:
+# I commented out the broken line. 
+# If you meant to install specific conda packages, add them after 'install -y'
+# conda install -n $ENV_NAME --update-deps --force-reinstall -y <PUT_PACKAGE_NAMES_HERE>
 
 echo "==== 5. Installing flashml package ===="
 if [ ! -d "/workspace/flashml" ]; then
     cd /workspace
     git clone https://github.com/smtmRadu/flashml flashml
     cd flashml
-    pip install -e .
+    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
+    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install vllm
 else
-    echo "flashml already exists, skipping clone"
-    # cd /workspace/flashml
-    # pip install -e .
+    echo "flashml already exists, updating..."
+    cd /workspace/flashml
+    git pull
+    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
 fi 
 
 # Make 'ml' auto-activate on new terminals
-if ! grep -q "conda activate ml" "$BASHRC"; then
-    echo "conda activate ml" >> "$BASHRC"
+if ! grep -q "conda activate $ENV_NAME" "$BASHRC"; then
+    echo "conda activate $ENV_NAME" >> "$BASHRC"
 fi
 
 echo "==== Setup completed! ===="
-source ~/.bashrc
-echo "Restart your terminal!"
+echo "Please restart your terminal or run: source ~/.bashrc"
 ```
