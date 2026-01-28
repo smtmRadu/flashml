@@ -266,10 +266,7 @@ if [ ! -d "/workspace/flashml" ]; then
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install vllm
 else
-    echo "flashml already exists, updating..."
-    cd /workspace/flashml
-    git pull
-    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
+    echo "flashml already exists, skipping..."
 fi 
 
 # Make 'ml' auto-activate on new terminals
