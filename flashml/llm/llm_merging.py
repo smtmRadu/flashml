@@ -10,8 +10,9 @@ RED = "\033[31m"
 
 def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
     """
-    When training with unsloth, merge the adapter to the base model using this function and save it to fp16.
-    You can quantize it afterwards and save it in 4bit (or quantize it at runtime).
+    Merge the adapter to the base model using this function and save it to fp16.
+    Unified for unsloth and non-unsloth models.
+    You can quantize it afterwards using `quantize_model` function for 4bit saving (or quantize it at runtime in vllm).
     """
     if not os.path.exists(adapter_path):
         raise ValueError(f"Adapter path {adapter_path} does not exist.")
@@ -25,7 +26,10 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
     
     base_model_path_or_path = adapter_config.get("base_model_name_or_path")
     if base_model_path_or_path.startswith("unsloth"):
-        raise ValueError("This is an unsloth model. Please use the `merge_unsloth_model` function to merge in unsloth.")
+        print(f"{BLUE}[INFO] {RED}Unsloth model detected.{RESET} Using unsloth merging method...{RESET}")
+        _merge_unsloth_model(adapter_path, save_method)
+        return 
+        #raise ValueError("This is an unsloth model. Please use the `merge_unsloth_model` function to merge in unsloth.")
     ## Just a little warning
     if "gemma" in base_model_path_or_path.lower() and not os.path.exists(adapter_path + "/preprocessor_config.json"):
         raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download it from https://huggingface.co/google/gemma-3-4b-it/tree/main and add it manually to the adapter.")
@@ -57,9 +61,9 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
         adapter_path,
         torch_dtype=torch.bfloat16,
         offload_folder="./offload_flashml"
-    ).merge_and_unload() 
+    )
     
-    print(f"{BLUE}[Step 3] merge adapter with base model...")
+    print(f"{BLUE}[Step 3] Merge adapter with base model...")
     merged_model = merged_model.merge_and_unload()
     
     print(f"{BLUE}[Step 4] Saving {GREEN}{adapter_path + "_fp16"}{RESET} ...")
@@ -72,7 +76,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
         shutil.rmtree("./offload_flashml")
 
     
-def merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] = "fp16"):
+def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] = "fp16"):
     """
     When training with unsloth, merge the adapter to the base model using this function and save it to fp16.
     You can quantize it afterwards and save it in 4bit (or quantize it at runtime).

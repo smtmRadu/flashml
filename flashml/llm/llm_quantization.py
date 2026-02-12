@@ -47,8 +47,6 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
             dtype=None,
             offload_folder="./offload_flashml",
             trust_remote_code=True, 
-            load_in_4bit=False,        
-            load_in_8bit=False 
             )
         
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)

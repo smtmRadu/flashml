@@ -99,21 +99,21 @@ for r in resps:
         self.current_file_name = None
         
     def step_1_build_batch_file(self, file_name = None, custom_ids: list = None):
+        os.makedirs("openai", exist_ok=True)  # Create folder first
+        
         if file_name is None:
             base_name = f"batch_file_{datetime.now().strftime('%d%m')}"
             version = 1
             file_name = f"{base_name}_v{version}.jsonl"
-
-            # Increment version number until a non-existing filename is found
-            while os.path.exists(file_name):
+            
+            # Check for file existence inside the openai folder
+            while os.path.exists(f"openai/{file_name}"):
                 version += 1
                 file_name = f"{base_name}_v{version}.jsonl"
         
-        os.makedirs("openai", exist_ok=True)
         self.current_file_name = "openai/" + file_name
         
         from flashml import log_json
-        
         
         with open(self.current_file_name, "w") as f:
             f.write("")
