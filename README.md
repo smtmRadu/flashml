@@ -246,23 +246,12 @@ else
     conda create -y -n $ENV_NAME python=3.12.9
 fi
 
-echo "==== 4. Installing Packages into '$ENV_NAME' ===="
-# We use 'conda run' or full paths to ensure we install INTO the environment
-# strictly, avoiding the 'pip runs as root' warning.
-
-# Install Pip packages
-"$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install --upgrade pip setuptools wheel
-
-# ERROR FIX:
-# I commented out the broken line. 
-# If you meant to install specific conda packages, add them after 'install -y'
-# conda install -n $ENV_NAME --update-deps --force-reinstall -y <PUT_PACKAGE_NAMES_HERE>
-
-echo "==== 5. Installing flashml package ===="
+echo "==== 4. Installing flashml package ===="
 if [ ! -d "/workspace/flashml" ]; then
     cd /workspace
     git clone https://github.com/smtmRadu/flashml flashml
     cd flashml
+    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install --upgrade pip setuptools wheel
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install vllm
 else
@@ -274,6 +263,6 @@ if ! grep -q "conda activate $ENV_NAME" "$BASHRC"; then
     echo "conda activate $ENV_NAME" >> "$BASHRC"
 fi
 
-echo "==== Setup completed! ===="
+echo "==== 5. Setup completed! ===="
 echo "Please restart your terminal or run: source ~/.bashrc"
 ```

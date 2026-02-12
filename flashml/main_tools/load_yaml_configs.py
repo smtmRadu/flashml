@@ -3,6 +3,15 @@ from pathlib import Path
 from typing import Any
 
 
+# ANSI color codes
+class Colors:
+    BRIGHT_CYAN = '\033[96m'      # Tree lines
+    WHITE = '\033[97m'            # Field names
+    YELLOW = '\033[33m'  # Values (bold)
+    THIN_MAGENTA = '\033[2;35m'   # Types (dim/thin)
+    RESET = '\033[0m'             # Reset to default
+
+
 def _auto_convert_type(value: Any) -> Any:
     """
     Automatically convert string representations to appropriate types.
@@ -69,7 +78,7 @@ class ConfigObject:
         return f"ConfigObject({attrs})"
 
     def __str__(self) -> str:
-        """Return a pretty, fully-expanded tree of the whole config."""
+        """Return a pretty, fully-expanded tree of the whole config with colors."""
         lines = []
         self._build_tree(lines, prefix="", is_last=True)
         return "\n".join(lines)
@@ -81,7 +90,7 @@ class ConfigObject:
         is_last: bool = True,
     ) -> None:
         """
-        Recursively build an ASCII tree similar to the Linux `tree` command.
+        Recursively build an ASCII tree similar to the Linux `tree` command with colors.
         
         Args:
             lines: List to accumulate output lines
@@ -96,13 +105,20 @@ class ConfigObject:
             
             if isinstance(value, ConfigObject):
                 # Add the key as a branch node
-                lines.append(f"{prefix}{corner}{key}")
+                # Tree lines in bright cyan, field name in white
+                lines.append(
+                    f"{Colors.BRIGHT_CYAN}{prefix}{corner}{Colors.RESET}"
+                    f"{Colors.WHITE}{key}{Colors.RESET}"
+                )
                 # Recursively build the tree for nested ConfigObject
                 extension = "    " if is_last_item else "│   "
                 value._build_tree(lines, prefix + extension, is_last_item)
             elif isinstance(value, list):
                 # Add the key as a branch node
-                lines.append(f"{prefix}{corner}{key}")
+                lines.append(
+                    f"{Colors.BRIGHT_CYAN}{prefix}{corner}{Colors.RESET}"
+                    f"{Colors.WHITE}{key}{Colors.RESET}"
+                )
                 # Print list elements
                 extension = "    " if is_last_item else "│   "
                 for i, elem in enumerate(value):
@@ -110,17 +126,30 @@ class ConfigObject:
                     elem_corner = "└── " if elem_is_last else "├── "
                     
                     if isinstance(elem, ConfigObject):
-                        lines.append(f"{prefix}{extension}{elem_corner}[{i}]")
+                        lines.append(
+                            f"{Colors.BRIGHT_CYAN}{prefix}{extension}{elem_corner}{Colors.RESET}"
+                            f"{Colors.WHITE}[{i}]{Colors.RESET}"
+                        )
                         elem_extension = "    " if elem_is_last else "│   "
                         elem._build_tree(lines, prefix + extension + elem_extension, elem_is_last)
                     else:
                         # Show type and value for leaf elements
                         type_str = type(elem).__name__
-                        lines.append(f"{prefix}{extension}{elem_corner}[{i}]: {elem!r} ({type_str})")
+                        lines.append(
+                            f"{Colors.BRIGHT_CYAN}{prefix}{extension}{elem_corner}{Colors.RESET}"
+                            f"{Colors.WHITE}[{i}]: {Colors.RESET}"
+                            f"{Colors.YELLOW}{elem!r}{Colors.RESET} "
+                            f"{Colors.THIN_MAGENTA}({type_str}){Colors.RESET}"
+                        )
             else:
                 # Leaf value - show type to verify it's preserved
                 type_str = type(value).__name__
-                lines.append(f"{prefix}{corner}{key}: {value!r} ({type_str})")
+                lines.append(
+                    f"{Colors.BRIGHT_CYAN}{prefix}{corner}{Colors.RESET}"
+                    f"{Colors.WHITE}{key}: {Colors.RESET}"
+                    f"{Colors.YELLOW}{value!r}{Colors.RESET} "
+                    f"{Colors.THIN_MAGENTA}({type_str}){Colors.RESET}"
+                )
                 
     def __getitem__(self, key: str) -> Any:
         """Allow dictionary-style access."""

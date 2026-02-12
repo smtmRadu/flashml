@@ -8,6 +8,68 @@ BLUE = '\033[34m'
 RED = "\033[31m"
 
 
+def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
+    """
+    When training with unsloth, merge the adapter to the base model using this function and save it to fp16.
+    You can quantize it afterwards and save it in 4bit (or quantize it at runtime).
+    """
+    if not os.path.exists(adapter_path):
+        raise ValueError(f"Adapter path {adapter_path} does not exist.")
+    
+    config_path = adapter_path + "/adapter_config.json"
+    if not os.path.exists(config_path):
+        raise ValueError(f"adapter_config.json not found in {adapter_path}.")
+    
+    with open(config_path) as f:
+        adapter_config = json.load(f)    
+    
+    base_model_path_or_path = adapter_config.get("base_model_name_or_path")
+    if base_model_path_or_path.startswith("unsloth"):
+        raise ValueError("This is an unsloth model. Please use the `merge_unsloth_model` function to merge in unsloth.")
+    ## Just a little warning
+    if "gemma" in base_model_path_or_path.lower() and not os.path.exists(adapter_path + "/preprocessor_config.json"):
+        raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download it from https://huggingface.co/google/gemma-3-4b-it/tree/main and add it manually to the adapter.")
+    if "ministral" in base_model_path_or_path.lower():
+        print("\033[0;34mRemember to add .json files to the merge of ministral 3b model!!!\033[0m")
+        
+    was_4bit_training = "4bit" in base_model_path_or_path   
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftModel
+    import torch
+    
+    print(f"{BLUE}[Step 1] Loading {RED}(model) {base_model_path_or_path}{RESET} + {GREEN}(adapter) {adapter_path}{RESET}...")
+    tokenizer = AutoTokenizer.from_pretrained(
+        pretrained_model_name_or_path=adapter_path,
+        trust_remote_code=True
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model_path_or_path,
+        device_map="cpu",
+        torch_dtype=torch.bfloat16,
+        offload_folder="./offload_flashml",
+        trust_remote_code=True
+    )       
+    
+    print(f"{BLUE}[Step 2] Loading adapter...")
+    merged_model = PeftModel.from_pretrained(
+        model,
+        adapter_path,
+        torch_dtype=torch.bfloat16,
+        offload_folder="./offload_flashml"
+    ).merge_and_unload() 
+    
+    print(f"{BLUE}[Step 3] merge adapter with base model...")
+    merged_model = merged_model.merge_and_unload()
+    
+    print(f"{BLUE}[Step 4] Saving {GREEN}{adapter_path + "_fp16"}{RESET} ...")
+    merged_model.to(dtype=torch.bfloat16)
+    merged_model.save_pretrained(adapter_path + "_fp16", safe_serialization=True)
+    tokenizer.save_pretrained(adapter_path + "_fp16")
+
+    # --- Cleanup ---
+    if os.path.exists("./offload_flashml"):
+        shutil.rmtree("./offload_flashml")
 
     
 def merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] = "fp16"):
@@ -29,10 +91,12 @@ def merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] =
     if not base_model_path_or_path.startswith("unsloth"):
         raise ValueError("This is not an unsloth model. Please use the normal `merge_model` function to merge in transformers.")
     ## Just a little warning
-    if "gemma" in base_model_path_or_path and not os.path.exists(adapter_path + "/preprocessor_config.json"):
-        raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download them from https://huggingface.co/google/gemma-3-4b-it/tree/main and add them manually to the adapter.")
-    
-    
+    if "gemma" in base_model_path_or_path.lower() and not os.path.exists(adapter_path + "/preprocessor_config.json"):
+        raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download it from https://huggingface.co/google/gemma-3-4b-it/tree/main and add it manually to the adapter.")
+    if "ministral" in base_model_path_or_path.lower():
+        print("Remember to add .json files to the merge of ministral 3b model!!!")
+        
+        
     was_4bit_training = "4bit" in base_model_path_or_path   
     print(f"{BLUE}[Step 1] Loading {RED}(model) {base_model_path_or_path}{RESET} + {GREEN}(adapter) {adapter_path}{RESET}...")
     from unsloth import FastModel

@@ -1,10 +1,13 @@
+
+
 ## This works only with mlflow==3.3.0
 ## (tried to adapt it to newer version > 3.3.0 but is not that easy. Better let it like this, 3.3.0 is not bad at all)
+## if ever getting error something like RUN_WITH_ID0, just restart the PC.
 from typing import Any, Tuple
 
 def make_run_name(base_name:str, experiment_name:str=None):
-    """Returns a new run name for the experiment with the following template:
-    {base_name}_{DD}{MM}_v{version_number}
+    """Returns a new run name for the experiment with the following template: <br>
+    **{base_name}_{DD}{MM}_v{version_number}**
     
     Recommended base_name: type(model).__name__
     """
@@ -239,6 +242,8 @@ class _TrainingLogger:
         # now = datetime.now()
         if mlflow.active_run():
             mlflow.end_run()
+        mlflow.set_tracking_uri(f"http://{self.host}:{self.port}")
+
         self.mlflow_op = mlflow.start_run(
             run_name=run_name,
             log_system_metrics=True if log_system_params_interval>0 else False,
@@ -248,7 +253,7 @@ class _TrainingLogger:
         if log_system_params_interval:
             mlflow.set_system_metrics_sampling_interval(log_system_params_interval)
             mlflow.set_system_metrics_samples_before_logging(log_system_params_interval)
-        mlflow.set_tracking_uri(f"http://{self.host}:{self.port}")
+        # mlflow.set_tracking_uri(f"http://{self.host}:{self.port}")
         print(
             f"\033[90mAccess MLFlow run at:\033[0m \033[94mhttp://{self.host}:{self.port}\033[0m \033[95m({self.mlflow_op.info.run_name})\033[0m"
         )

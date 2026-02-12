@@ -144,6 +144,18 @@ GPT_OSS_20B_LOW_VLLM_CONFIG = {
     "ignore-patterns": ["original/**", "metal/**"]
 }
 
+MINISTRAL_3_3B_INSTRUCT_2512_FINETUNED_VLLM_CONFIG = {
+    "max_model_len": 4096,
+    "tensor-parallel-size": 1,
+    "temperature": 0.1,
+    "top_p": 0.95,
+    "top_k": 128,
+    #"quantization" : "bitsandbytes", #in practice not ok to quantize at runtime.. but because i didn't manage to quantize it keep it like this.
+    "gpu-memory-utilization": 0.85,
+    "tokenizer-mode": "mistral",
+    "config_format": "auto",
+    "load_format": "safetensors",
+}
 
 MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
     "model": "mistralai/Ministral-3-3B-Instruct-2512",

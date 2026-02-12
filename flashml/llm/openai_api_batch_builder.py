@@ -118,7 +118,7 @@ for r in resps:
         with open(self.current_file_name, "w") as f:
             f.write("")
             
-        for elem_id, mess in tqdm(enumerate(self.messages_batch), desc="Building batch file"):
+        for elem_id, mess in tqdm(enumerate(self.messages_batch), desc="Building batch file", total=len(self.messages_batch)):
             req = {
                 "custom_id" : f"async-req-{elem_id}" if custom_ids is None else str(custom_ids[elem_id]), #note custom_ids must be string as openai api says
                 "method": "POST",

@@ -7,13 +7,19 @@ name = "flashml"
 version = "0.6.7"
 authors = [{ name = "kbradu" }]
 dependencies = [
-    "torch", # let it first
-    "PyPDF2",
-    # "flash-attn", don't add flash_attn please
-    "magic-wormhole", # used for file transfer (call wormhole send <foldername>) - it handles cross-platform file transfer
-    "ipywidgets",
-    "pydantic", # used here for BaseClass in structured output with llms
+    # do not add flash_attn, xformers etc.
+    #"unsloth",
+    #"transformers",
+    #"trl",
+    "hydra-core",
     "mlflow==3.3.0",
+    "python-telegram-bot",
+
+    "magic-wormhole",
+
+    "PyPDF2",
+    "pydantic", # used here for BaseClass in structured output with llms
+    
     "matplotlib",
     "plotly",
     "numpy",
@@ -41,29 +47,18 @@ dependencies = [
     "lorem",
     "Faker", #lipsum but in english
 
-    # extras
-    
-    "torchtune",
-    "torchao",
-    "torchinfo",
     "python-dotenv",
-    "ollama",
-    "torch-optimi",
-    "gymnasium",
-    "transformers",
-    "sentence-transformers",
-    "unsloth",
-    "trl",
+    #"ollama",
+    #"torch-optimi",
+    #"gymnasium",
+    #"sentence-transformers",
     "weave",
     "wandb",
     "evaluate",
-    "hydra-core",
+    
     "rouge_score",
-    "peft",
-    "bitsandbytes",
-    "ipykernel",
-    "notebook",
-    "jupyterlab",
+    
+
     "opencv-python",
     "sphinx",
     "sphinx-rtd-theme",
@@ -71,14 +66,16 @@ dependencies = [
     "dspy",
     "fuzzywuzzy",
     "python-Levenshtein",
-    #,
 
-    
+    #"ipywidgets",
+    #"ipykernel",
+    #"notebook",
+    #"jupyterlab",
     #"auto-gptq",
     #"llmcompressor",
     #"vllm",
 
-    "python-telegram-bot",
+    
 ]
 
 

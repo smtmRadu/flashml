@@ -8,8 +8,8 @@ class LRScheduler:
         `warmup_steps_ratio` = 3%-10% of max_steps (use warmup_steps_ratio instead of warmup_steps to set it)\\
         `constant_steps_ratio` = ~10% of max_steps (use constant_steps_ratio instead of constant_steps to set it)\\
         `cycles` = number of cycles to anneal over (default 1)\\
-        `max_lr_decay_factor` = factor to decay max_lr per cycle (default 1=no decay)\\
-        `min_lr` = minimum learning rate (at the end of a cycle) (default 1e-8)\\
+        `max_lr_decay_factor` = factor to decay max_lr per cycle (default 1=no decay), e.g.: with this value set at 0.5 and lr = 1e-3, the 1st cycle ends with lr=5e-4, 2nd cycle ends with 2.5e-4 ...\\
+        `min_lr` = minimum learning rate (at the end of any cycle) (default 1e-8)\\
         `gamma` = (if selected) gamma for exponential/logarithmic decay (default 0.95)\
     """
     def __init__(
@@ -30,11 +30,17 @@ class LRScheduler:
         constant_steps_ratio = kwargs.pop("constant_steps_ratio", None)
         
         if warmup_steps_ratio is not None:
-            assert 0.0 < warmup_steps_ratio < 1.0
-            warmup_steps = int(warmup_steps_ratio * max_steps)
+            if warmup_steps_ratio == 0.0:
+                print("Warmup steps ratio set to 0. Warm-up omitted.")
+            else:
+                assert 0.0 < warmup_steps_ratio < 1.0
+                warmup_steps = int(warmup_steps_ratio * max_steps)
         if constant_steps_ratio is not None:
-            assert 0.0 <= constant_steps_ratio < 1.0
-            constant_steps = int(constant_steps_ratio * max_steps)
+            if constant_steps_ratio == 0.0:
+                print("Constant steps ratio set to 0. Constant lr omitted")
+            else:
+                assert 0.0 < constant_steps_ratio < 1.0
+                constant_steps = int(constant_steps_ratio * max_steps)
         
 
         self.optimizer = optimizer

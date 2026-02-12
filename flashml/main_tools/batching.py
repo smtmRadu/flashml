@@ -50,17 +50,25 @@ class Batch:
 class _InternalDataset(Dataset):
     """Internal Dataset wrapper for PyTorch DataLoader."""
     
-    def __init__(self, df, transform=None):
+    def __init__(self, data, transform=None):
+        # Check if it's already a PyTorch Dataset
+        if isinstance(data, Dataset):
+            self.data = data
+            self.data_type = "pytorch_dataset"
+            self.is_wrapper = True
         # Convert DataFrame to list for better pickling compatibility
-        if hasattr(df, "to_dicts"):  # Polars - check this FIRST
-            self.data = df.to_dicts()
+        elif hasattr(data, "to_dicts"):  # Polars - check this FIRST
+            self.data = data.to_dicts()
             self.data_type = "dict"
-        elif hasattr(df, "to_dict"):  # Pandas
-            self.data = df.to_dict('records')
+            self.is_wrapper = False
+        elif hasattr(data, "to_dict"):  # Pandas
+            self.data = data.to_dict('records')
             self.data_type = "dict"
+            self.is_wrapper = False
         else:  # Already a list/tuple
-            self.data = list(df)
+            self.data = list(data)
             self.data_type = "list"
+            self.is_wrapper = False
         
         self.transform = transform
     
@@ -69,9 +77,14 @@ class _InternalDataset(Dataset):
     
     def __getitem__(self, idx):
         """Get a single item with optional transform."""
-        sample = self.data[idx]
+        # If wrapping a PyTorch Dataset, get item from it
+        if self.is_wrapper:
+            sample = self.data[idx]
+        else:
+            sample = self.data[idx]
         
-        if self.transform:
+        # Apply transform only if not wrapping a PyTorch Dataset (assume dataset handles its own transforms)
+        if self.transform and not self.is_wrapper:
             try:
                 sample = self.transform(sample)
             except Exception as e:
@@ -92,11 +105,11 @@ def _collate_with_indices(batch):
 
 class BatchIterator:
     """
-    Automatic build batch elements from a dataframe/list for training or testing.
+    Automatic build batch elements from data (dataframe/list/PyTorch Dataset) for training or testing.
     Now uses PyTorch DataLoader as backend for true parallel preprocessing.
 
 Examples:
->>> for batch in BatchIterator(df=train_df, num_epochs=10, batch_size=32, mode="train"):
+>>> for batch in BatchIterator(data=train_data, num_epochs=10, batch_size=32, mode="train"):
 ...     # batch.index is the batch index (int), e.g.: 0, 1, 2, 3, ...
 ...     # batch.optim_step is the optimization step out of total optim steps (tuple(step, total_steps)), e.g.: (1,60), (1,60), (2,60), (2,60) ... (if grad_accum=2)
 ...     # batch.value is a list with batch_size elements
@@ -109,11 +122,11 @@ Examples:
 
     def __init__(
         self,
-        df,
+        data,
         batch_size: int,
         num_epochs: int = 1,
         gradient_accumulation_steps: int = 1,
-        mode: Literal["train", "test"] = "train",
+        mode: Literal["train", "test", "eval", "val"] = "train",
         eval_ratio: float = None,
         save_ratio: float = None,
         transform: Optional[Callable[[Any], Any]] = None,
@@ -124,7 +137,7 @@ Examples:
     ):
         """
         Args:
-            df: DataFrame (Polars or Pandas) or list/tuple of elements
+            data: DataFrame (Polars or Pandas), PyTorch Dataset, or list/tuple of elements
             batch_size: Size of each batch
             num_epochs: Number of epochs to iterate over the dataset
             gradient_accumulation_steps: Number of steps to accumulate gradients
@@ -133,6 +146,7 @@ Examples:
             save_ratio: (0,1) Ratio of saving checkpoints wrt total batches
             transform: A function that takes a single sample and returns a transformed sample
                        (executed in parallel workers). Must be picklable (defined at module level).
+                       Note: Ignored if data is already a PyTorch Dataset (assumes dataset handles transforms)
             num_workers: Number of worker processes for data loading. 
                         - None = auto-detect (0 for notebooks, 4 for scripts)
                         - 0 = single process (safest for notebooks)
@@ -143,29 +157,23 @@ Examples:
         """
         assert batch_size >= 1, "Batch size must be a positive integer."
         assert num_epochs >= 1, "Number of epochs must be a positive integer."
-        assert len(df) >= batch_size, "Batch size must be smaller than or equal to the length of the dataset."
+        assert len(data) >= batch_size, "Batch size must be smaller than or equal to the length of the dataset."
         assert gradient_accumulation_steps >= 1, "Gradient accumulation steps must be a positive integer."
         
-        if mode not in ["train", "test"]:
-            raise ValueError("Mode must be either 'train' or 'test'.")
-        if mode == "test" and num_epochs != 1:
-            raise ValueError("For 'test' mode, num_epochs must be 1.")
+        if mode not in ["train", "test", "eval", "val"]:
+            raise ValueError(f"Unknown mode type ({mode}).")
+        if mode in ["test", "eval", "val"] and num_epochs != 1:
+            raise ValueError("For 'test'/'eval'/'val' modes, num_epochs must be 1.")
 
         # Auto-detect num_workers based on environment
         if num_workers is None:
             if _is_notebook():
                 num_workers = 0
                 print("[⚠️ BatchIterator] Detected Jupyter notebook environment. Setting num_workers=0 for compatibility.")
-                # import warnings
-                # warnings.warn(
-                #     "Detected Jupyter notebook environment. Setting num_workers=0 for compatibility. "
-                #     "To use multiprocessing, explicitly set num_workers > 0 (may cause issues).",
-                #     UserWarning
-                # )
             else:
-                num_workers = 4  # Safe default for scripts
+                num_workers = 0 # Safe default for scripts
 
-        self.df = df
+        self.data = data
         self.num_epochs = num_epochs
         self.batch_size = batch_size
         self.mode = mode
@@ -179,13 +187,13 @@ Examples:
         if persistent_workers is None:
             persistent_workers = num_workers > 0
         
-        # Create internal dataset
-        self.dataset = _InternalDataset(df, transform=transform)
+        # Create internal dataset (wraps PyTorch datasets or converts data to dataset)
+        self.dataset = _InternalDataset(data, transform=transform)
         
         # Calculate total batches per epoch
         drop_last = (mode == "train")
-        batches_per_epoch = len(df) // batch_size
-        if not drop_last and len(df) % batch_size != 0:
+        batches_per_epoch = len(data) // batch_size
+        if not drop_last and len(data) % batch_size != 0:
             batches_per_epoch += 1
         self.total_batches = batches_per_epoch * num_epochs
         self.total_optim_steps = self.total_batches // gradient_accumulation_steps
@@ -238,7 +246,6 @@ Examples:
 
     def __next__(self):
         if self.current_batch >= self.total_batches:
-            # print("ℹ️ BatchIterator: End of dataset reached.")
             raise StopIteration
         
         # Initialize iterator if needed
@@ -255,10 +262,10 @@ Examples:
             self.dataloader_iter = iter(self.dataloader)
             batch_value, batch_idcs = next(self.dataloader_iter)
         
-        # Add after: self.current_batch >= self.total_batches check
+        # Calculate current optimization step
         current_optim_step = (self.current_batch // self.gradient_accumulation_steps) + 1
 
-        # Then update Batch creation:
+        # Create Batch object
         batch_elem = Batch(
             batch_index=self.current_batch,
             optim_step_index=current_optim_step,
@@ -268,7 +275,6 @@ Examples:
             is_optim_step_time=self._should_optim_step(self.current_batch),
             is_eval_time=self._should_eval(self.current_batch),
             is_save_time=self._should_save(self.current_batch),
-            
         )
         
         self.current_batch += 1
@@ -312,7 +318,7 @@ Examples:
         
     def size(self):
         """Return the total number of samples in the dataset."""
-        return len(self.df)
+        return len(self.data)
     
     def get_batch_size(self):
         """Return the batch size."""
