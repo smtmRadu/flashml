@@ -7,19 +7,17 @@ name = "flashml"
 version = "0.6.7"
 authors = [{ name = "kbradu" }]
 dependencies = [
-    # do not add flash_attn, xformers etc.
-    #"unsloth",
-    #"transformers",
-    #"trl",
+    
+
+
+    "python-dotenv",
     "hydra-core",
     "mlflow==3.3.0",
+    "bitsandbytes",
     "python-telegram-bot",
-
     "magic-wormhole",
-
     "PyPDF2",
     "pydantic", # used here for BaseClass in structured output with llms
-    
     "matplotlib",
     "plotly",
     "numpy",
@@ -46,27 +44,27 @@ dependencies = [
     "glances", # used to monitor system resources (for linux use nvtop)
     "lorem",
     "Faker", #lipsum but in english
-
-    "python-dotenv",
-    #"ollama",
-    #"torch-optimi",
-    #"gymnasium",
-    #"sentence-transformers",
     "weave",
     "wandb",
     "evaluate",
-    
     "rouge_score",
-    
-
-    "opencv-python",
-    "sphinx",
-    "sphinx-rtd-theme",
-    "sphinx-autodoc-typehints",
     "dspy",
     "fuzzywuzzy",
     "python-Levenshtein",
 
+
+    # do not add flash_attn, xformers etc.
+    #"unsloth",
+    #"transformers",
+    #"trl",
+    #"ollama",
+    #"torch-optimi", # no more needed, Muon rocks!
+    #"gymnasium",
+    #"sentence-transformers",
+    #"opencv-python",
+    #"sphinx",
+    #"sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
     #"ipywidgets",
     #"ipykernel",
     #"notebook",
@@ -74,8 +72,6 @@ dependencies = [
     #"auto-gptq",
     #"llmcompressor",
     #"vllm",
-
-    
 ]
 
 

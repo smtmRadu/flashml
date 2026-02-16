@@ -26,7 +26,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
     
     base_model_path_or_path = adapter_config.get("base_model_name_or_path")
     if base_model_path_or_path.startswith("unsloth"):
-        print(f"{BLUE}[INFO] {RED}Unsloth model detected.{RESET} Using unsloth merging method...{RESET}")
+        print(f"{BLUE}[INFO] {GREEN}🦥 Unsloth model detected.{RESET} Using unsloth merging method (in {save_method})...{RESET}")
         _merge_unsloth_model(adapter_path, save_method)
         return 
         #raise ValueError("This is an unsloth model. Please use the `merge_unsloth_model` function to merge in unsloth.")
@@ -49,7 +49,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
 
     model = AutoModelForCausalLM.from_pretrained(
         base_model_path_or_path,
-        device_map="cpu",
+        device_map="auto",
         torch_dtype=torch.bfloat16,
         offload_folder="./offload_flashml",
         trust_remote_code=True
@@ -107,7 +107,7 @@ def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] 
     model, tokenizer = FastModel.from_pretrained(
         model_name =  adapter_path, 
         max_seq_length = 2048, 
-        device_map="cpu",
+        device_map="auto",
         offload_folder="./offload_flashml",
         # local_files_only = True,  # Force local cache usage
         dtype = None,          
@@ -126,7 +126,7 @@ def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] 
         )
     elif save_method == "fp16":
         merge_name = adapter_path + "_fp16"
-        print(f"{BLUE}[Step 2] Saving {GREEN}{merge_name}{RESET} ...")
+        print(f"{BLUE}[Step 2] Saving in fp16 {GREEN}{merge_name}{RESET} ...")
         model.save_pretrained_merged(
             merge_name, 
             tokenizer,

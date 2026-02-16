@@ -253,7 +253,8 @@ if [ ! -d "/workspace/flashml" ]; then
     cd flashml
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install --upgrade pip setuptools wheel
     "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install -e .
-    "$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install vllm
+    #"$INSTALL_DIR/envs/$ENV_NAME/bin/pip" install vllm
+    # i comment the vllm install because unsloth doesn't really match with the newest version, and installs an outdated pytorch version. So install it separately, manually
 else
     echo "flashml already exists, skipping..."
 fi 

@@ -43,7 +43,7 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16
             ),
-            device_map="cpu",
+            device_map="auto",
             dtype=None,
             offload_folder="./offload_flashml",
             trust_remote_code=True, 
@@ -84,7 +84,7 @@ def _quantize_mistral_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4b
         
         model = Mistral3ForConditionalGeneration.from_pretrained(
             model_path,
-            device_map="cpu",
+            device_map="auto",
             offload_folder="./offload_flashml",
             quantization_config=bnb_config,
             trust_remote_code=True,

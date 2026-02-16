@@ -2,11 +2,46 @@ from pathlib import Path
 import sys
 import typing as t
 import re
+from copy import copy
+from xml.etree import ElementTree as ET
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
+try:
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.styles import Font, PatternFill, Color
+    from openpyxl.styles.colors import COLOR_INDEX
+    try:
+        from openpyxl.cell.rich_text import CellRichText, TextBlock
+        from openpyxl.cell.text import InlineFont
+        OPENPYXL_RICH_TEXT_AVAILABLE = True
+    except Exception:
+        CellRichText = None
+        TextBlock = None
+        InlineFont = None
+        OPENPYXL_RICH_TEXT_AVAILABLE = False
+    OPENPYXL_AVAILABLE = True
+except Exception:
+    Workbook = None
+    load_workbook = None
+    Font = None
+    PatternFill = None
+    Color = None
+    CellRichText = None
+    TextBlock = None
+    InlineFont = None
+    OPENPYXL_RICH_TEXT_AVAILABLE = False
+    COLOR_INDEX = []
+    OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.2"
+APP_NAME = "Better Excel v1.3"
+TABLE_LINE_HEIGHT_PERCENT = 112
+TABLE_VERTICAL_TEXT_PADDING = 10
+QA_TEXT_BG_COLOR = QtGui.QColor(255, 235, 90)
+QA_TEXT_FG_COLOR = QtGui.QColor(200, 0, 0)
+QA_METADATA_SHEET_NAME = "__betterexcel_qa_spans__"
+DEFAULT_DISPLAY_FONT_FAMILY = "Inter"
+DEFAULT_DISPLAY_FONT_SIZE = 10
 
 # -------------------- Utility: Dark/Light palettes & styles --------------------
 def apply_dark_palette(app: QtWidgets.QApplication):
@@ -43,12 +78,779 @@ def column_shade_color(is_dark: bool, index: int) -> QtGui.QColor:
     lightness = 30
     return QtGui.QColor.fromHsl(hue, saturation, lightness)
 
+
+def _qcolor_from_argb_hex(value: str) -> t.Optional[QtGui.QColor]:
+    if not value:
+        return None
+    val = value.strip().lstrip("#")
+    if len(val) == 8:
+        a = int(val[0:2], 16)
+        if a == 0:
+            return None
+        r = int(val[2:4], 16)
+        g = int(val[4:6], 16)
+        b = int(val[6:8], 16)
+        color = QtGui.QColor(r, g, b)
+        color.setAlpha(a)
+        return color
+    if len(val) == 6:
+        return QtGui.QColor(f"#{val}")
+    return None
+
+
+def _argb_hex_from_qcolor(color: QtGui.QColor) -> str:
+    a = max(0, min(255, color.alpha()))
+    r = max(0, min(255, color.red()))
+    g = max(0, min(255, color.green()))
+    b = max(0, min(255, color.blue()))
+    return f"{a:02X}{r:02X}{g:02X}{b:02X}"
+
+
+def _apply_excel_tint(color: QtGui.QColor, tint: t.Optional[float]) -> QtGui.QColor:
+    if tint is None:
+        return color
+    try:
+        tint_value = float(tint)
+    except Exception:
+        return color
+    if abs(tint_value) < 1e-9:
+        return color
+
+    def _apply_channel(ch: int) -> int:
+        if tint_value < 0:
+            return max(0, min(255, int(ch * (1.0 + tint_value))))
+        return max(0, min(255, int(ch * (1.0 - tint_value) + 255.0 * tint_value)))
+
+    tinted = QtGui.QColor(_apply_channel(color.red()), _apply_channel(color.green()), _apply_channel(color.blue()))
+    tinted.setAlpha(color.alpha())
+    return tinted
+
+
+def _extract_excel_theme_palette(workbook) -> dict[int, QtGui.QColor]:
+    palette: dict[int, QtGui.QColor] = {}
+    if not workbook:
+        return palette
+
+    raw_theme = getattr(workbook, "loaded_theme", None)
+    if not raw_theme:
+        return palette
+
+    if isinstance(raw_theme, bytes):
+        raw_theme = raw_theme.decode("utf-8", errors="ignore")
+
+    try:
+        root = ET.fromstring(raw_theme)
+    except Exception:
+        return palette
+
+    ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    clr_scheme = root.find(".//a:themeElements/a:clrScheme", ns)
+    if clr_scheme is None:
+        return palette
+
+    scheme_names = [
+        "lt1",
+        "dk1",
+        "lt2",
+        "dk2",
+        "accent1",
+        "accent2",
+        "accent3",
+        "accent4",
+        "accent5",
+        "accent6",
+        "hlink",
+        "folHlink",
+    ]
+
+    for idx, name in enumerate(scheme_names):
+        color_node = clr_scheme.find(f"a:{name}", ns)
+        if color_node is None:
+            continue
+
+        srgb = color_node.find("a:srgbClr", ns)
+        if srgb is not None and srgb.get("val"):
+            candidate = QtGui.QColor(f"#{srgb.get('val')}")
+            if candidate.isValid():
+                palette[idx] = candidate
+            continue
+
+        sys_clr = color_node.find("a:sysClr", ns)
+        if sys_clr is not None:
+            fallback = sys_clr.get("lastClr") or sys_clr.get("val")
+            if fallback:
+                candidate = QtGui.QColor(f"#{fallback}")
+                if candidate.isValid():
+                    palette[idx] = candidate
+
+    return palette
+
+
+def _qcolor_from_openpyxl_color(color, theme_palette: t.Optional[dict[int, QtGui.QColor]] = None) -> t.Optional[QtGui.QColor]:
+    if color is None:
+        return None
+
+    if getattr(color, "type", None) == "rgb" and getattr(color, "rgb", None):
+        return _qcolor_from_argb_hex(color.rgb)
+
+    if getattr(color, "type", None) == "indexed" and getattr(color, "indexed", None) is not None:
+        try:
+            idx = int(color.indexed)
+        except Exception:
+            return None
+        if 0 <= idx < len(COLOR_INDEX):
+            return _qcolor_from_argb_hex(COLOR_INDEX[idx])
+
+    if getattr(color, "type", None) == "theme" and getattr(color, "theme", None) is not None:
+        if not theme_palette:
+            return None
+        try:
+            theme_idx = int(color.theme)
+        except Exception:
+            return None
+        base = theme_palette.get(theme_idx)
+        if base is None:
+            return None
+        tinted = _apply_excel_tint(base, getattr(color, "tint", None))
+        return tinted if tinted.isValid() else None
+
+    return None
+
+
+def _is_default_excel_font_color(color) -> bool:
+    if color is None:
+        return True
+
+    if getattr(color, "type", None) != "theme" or getattr(color, "theme", None) is None:
+        return False
+
+    try:
+        theme_idx = int(color.theme)
+    except Exception:
+        return False
+
+    tint = getattr(color, "tint", None)
+    try:
+        tint_is_zero = tint is None or abs(float(tint)) < 1e-9
+    except Exception:
+        tint_is_zero = False
+
+    # Excel's default text color in the common Office theme is Dark1 (theme index 1).
+    return theme_idx == 1 and tint_is_zero
+
+
+def _is_effectively_default_excel_font(font) -> bool:
+    if font is None or not OPENPYXL_AVAILABLE:
+        return True
+
+    default_font = DEFAULT_XLSX_FONT
+    if default_font is None:
+        return False
+
+    def _norm_opt(value):
+        return None if value is None else str(value)
+
+    def _norm_underline(value):
+        if value is None:
+            return None
+        val = str(value).strip().lower()
+        return None if not val or val == "none" else val
+
+    def _norm_size(value, fallback):
+        if value is None:
+            return fallback
+        try:
+            return float(value)
+        except Exception:
+            return fallback
+
+    default_name = _norm_opt(getattr(default_font, "name", None))
+    default_size = _norm_size(getattr(default_font, "sz", None), 11.0)
+
+    name = _norm_opt(getattr(font, "name", None))
+    if name is not None and default_name is not None and name != default_name:
+        return False
+
+    size = _norm_size(getattr(font, "sz", None), default_size)
+    if abs(size - default_size) > 1e-6:
+        return False
+
+    if bool(getattr(font, "bold", False)):
+        return False
+    if bool(getattr(font, "italic", False)):
+        return False
+    if bool(getattr(font, "strike", False)):
+        return False
+
+    if _norm_underline(getattr(font, "underline", None)) != _norm_underline(getattr(default_font, "underline", None)):
+        return False
+
+    if _norm_opt(getattr(font, "vertAlign", None)) != _norm_opt(getattr(default_font, "vertAlign", None)):
+        return False
+
+    if _norm_opt(getattr(font, "charset", None)) not in (None, _norm_opt(getattr(default_font, "charset", None))):
+        return False
+    if _norm_opt(getattr(font, "family", None)) not in (None, _norm_opt(getattr(default_font, "family", None))):
+        return False
+    if _norm_opt(getattr(font, "scheme", None)) not in (None, _norm_opt(getattr(default_font, "scheme", None))):
+        return False
+
+    return _is_default_excel_font_color(getattr(font, "color", None))
+
+
+def _color_luminance(color: QtGui.QColor) -> float:
+    return 0.2126 * color.red() + 0.7152 * color.green() + 0.0722 * color.blue()
+
+
+def _colors_close(a: QtGui.QColor, b: QtGui.QColor, tol: int = 8) -> bool:
+    return (
+        abs(a.red() - b.red()) <= tol
+        and abs(a.green() - b.green()) <= tol
+        and abs(a.blue() - b.blue()) <= tol
+        and abs(a.alpha() - b.alpha()) <= tol
+    )
+
+
+def _normalize_qa_spans(
+    spans: t.Optional[list[dict[str, t.Any]]],
+    text_len: int,
+) -> list[dict[str, t.Any]]:
+    max_len = max(0, int(text_len))
+    clean: list[dict[str, t.Any]] = []
+    for span in spans or []:
+        try:
+            start = int(span.get("start", 0))
+            length = int(span.get("length", 0))
+            kind = str(span.get("kind", ""))
+        except Exception:
+            continue
+        if kind not in ("big", "small") or length <= 0:
+            continue
+        start = max(0, start)
+        if start >= max_len:
+            continue
+        end = min(max_len, start + length)
+        if end <= start:
+            continue
+        clean.append({"start": start, "length": end - start, "kind": kind})
+
+    if not clean:
+        return []
+
+    ordered = sorted(clean, key=lambda s: (int(s["start"]), int(s["length"])))
+    merged: list[dict[str, t.Any]] = [ordered[0]]
+    for span in ordered[1:]:
+        prev = merged[-1]
+        prev_end = int(prev["start"]) + int(prev["length"])
+        cur_start = int(span["start"])
+        cur_end = cur_start + int(span["length"])
+        if span["kind"] == prev["kind"] and cur_start <= prev_end:
+            prev["length"] = max(prev_end, cur_end) - int(prev["start"])
+        else:
+            merged.append(span)
+    return merged
+
+
+def _normalize_text_and_qa_spans_for_rich_text(
+    text: str,
+    spans: t.Optional[list[dict[str, t.Any]]],
+) -> tuple[str, list[dict[str, t.Any]]]:
+    src = text or ""
+    if not src:
+        return "", []
+
+    normalized_spans = _normalize_qa_spans(spans, len(src))
+    if not any(ch in src for ch in ("\r", "\u2028", "\u2029")):
+        return src, normalized_spans
+
+    boundary_map = [0] * (len(src) + 1)
+    out_chars: list[str] = []
+    i = 0
+    j = 0
+    while i < len(src):
+        boundary_map[i] = j
+        ch = src[i]
+
+        if ch == "\r":
+            if i + 1 < len(src) and src[i + 1] == "\n":
+                boundary_map[i + 1] = j
+                out_chars.append("\n")
+                j += 1
+                i += 2
+                boundary_map[i] = j
+                continue
+            out_chars.append("\n")
+            j += 1
+            i += 1
+            boundary_map[i] = j
+            continue
+
+        if ch == "\n":
+            if i + 1 < len(src) and src[i + 1] == "\r":
+                boundary_map[i + 1] = j
+                out_chars.append("\n")
+                j += 1
+                i += 2
+                boundary_map[i] = j
+                continue
+            out_chars.append("\n")
+            j += 1
+            i += 1
+            boundary_map[i] = j
+            continue
+
+        if ch in ("\u2028", "\u2029"):
+            out_chars.append("\n")
+            j += 1
+            i += 1
+            boundary_map[i] = j
+            continue
+
+        out_chars.append(ch)
+        j += 1
+        i += 1
+        boundary_map[i] = j
+
+    normalized_text = "".join(out_chars)
+    remapped_spans: list[dict[str, t.Any]] = []
+    for span in normalized_spans:
+        start = max(0, min(len(src), int(span["start"])))
+        end = max(start, min(len(src), start + int(span["length"])))
+        kind = str(span["kind"])
+        remapped_start = boundary_map[start]
+        remapped_end = boundary_map[end]
+        if remapped_end <= remapped_start:
+            continue
+        remapped_spans.append(
+            {"start": remapped_start, "length": remapped_end - remapped_start, "kind": kind}
+        )
+
+    return normalized_text, _normalize_qa_spans(remapped_spans, len(normalized_text))
+
+
+def _load_workbook_with_rich_text(path: Path):
+    if OPENPYXL_RICH_TEXT_AVAILABLE:
+        try:
+            return load_workbook(path, data_only=False, rich_text=True)
+        except TypeError:
+            pass
+    return load_workbook(path, data_only=False)
+
+
+def _qa_kind_from_openpyxl_font(font, theme_palette: t.Optional[dict[int, QtGui.QColor]] = None) -> t.Optional[str]:
+    if font is None:
+        return None
+
+    color_value = getattr(font, "color", None)
+    if isinstance(color_value, str):
+        qcolor = _qcolor_from_argb_hex(color_value)
+    else:
+        qcolor = _qcolor_from_openpyxl_color(color_value, theme_palette)
+    if qcolor is None or not _colors_close(qcolor, QA_TEXT_FG_COLOR, tol=20):
+        return None
+
+    is_bold = bool(getattr(font, "b", False))
+    is_italic = bool(getattr(font, "i", False))
+    if is_bold and not is_italic:
+        return "big"
+    if is_italic and not is_bold:
+        return "small"
+    return None
+
+
+def _extract_qa_spans_from_rich_text(
+    rich_value,
+    theme_palette: t.Optional[dict[int, QtGui.QColor]] = None,
+) -> list[dict[str, t.Any]]:
+    if not OPENPYXL_RICH_TEXT_AVAILABLE or CellRichText is None or TextBlock is None:
+        return []
+    if not isinstance(rich_value, CellRichText):
+        return []
+
+    spans: list[dict[str, t.Any]] = []
+    cursor = 0
+    for part in rich_value:
+        if isinstance(part, str):
+            cursor += len(part)
+            continue
+
+        if isinstance(part, TextBlock):
+            text = part.text or ""
+            kind = _qa_kind_from_openpyxl_font(part.font, theme_palette)
+            if kind and text:
+                spans.append({"start": cursor, "length": len(text), "kind": kind})
+            cursor += len(text)
+            continue
+
+        raw_text = str(getattr(part, "text", "") or "")
+        cursor += len(raw_text)
+
+    return _normalize_qa_spans(spans, cursor)
+
+
+def _build_inline_font_for_qa(base_font, kind: str):
+    if not OPENPYXL_RICH_TEXT_AVAILABLE or InlineFont is None:
+        return None
+    if kind not in ("big", "small"):
+        return None
+
+    run_font = InlineFont()
+    if base_font is not None:
+        family = getattr(base_font, "name", None)
+        size = getattr(base_font, "sz", None)
+        charset = getattr(base_font, "charset", None)
+        family_id = getattr(base_font, "family", None)
+        underline = getattr(base_font, "u", None)
+        scheme = getattr(base_font, "scheme", None)
+
+        if family:
+            run_font.rFont = str(family)
+        if size:
+            try:
+                run_font.sz = float(size)
+            except Exception:
+                pass
+        if charset is not None:
+            run_font.charset = charset
+        if family_id is not None:
+            run_font.family = family_id
+        if underline:
+            run_font.u = underline
+        if scheme:
+            run_font.scheme = scheme
+
+    qa_color = _argb_hex_from_qcolor(QA_TEXT_FG_COLOR)
+    try:
+        run_font.color = Color(rgb=qa_color) if Color is not None else qa_color
+    except Exception:
+        run_font.color = qa_color
+
+    run_font.b = kind == "big"
+    run_font.i = kind == "small"
+    return run_font
+
+
+def _build_rich_text_value_for_cell(text: str, qa_spans: list[dict[str, t.Any]], base_font):
+    safe_text, normalized_spans = _normalize_text_and_qa_spans_for_rich_text(text or "", qa_spans)
+    if not OPENPYXL_RICH_TEXT_AVAILABLE or CellRichText is None or TextBlock is None:
+        return safe_text
+
+    if not normalized_spans:
+        return safe_text
+
+    rich_value = CellRichText()
+    cursor = 0
+    for span in normalized_spans:
+        start = int(span["start"])
+        end = start + int(span["length"])
+        kind = str(span["kind"])
+
+        if cursor < start:
+            rich_value.append(safe_text[cursor:start])
+
+        chunk = safe_text[start:end]
+        if chunk:
+            inline_font = _build_inline_font_for_qa(base_font, kind)
+            if inline_font is not None:
+                try:
+                    rich_value.append(TextBlock(inline_font, chunk))
+                except Exception:
+                    rich_value.append(chunk)
+            else:
+                rich_value.append(chunk)
+        cursor = end
+
+    if cursor < len(safe_text):
+        rich_value.append(safe_text[cursor:])
+
+    return rich_value
+
+
+def _collect_qa_spans_metadata_rows(
+    sheet_name: str,
+    df: pd.DataFrame,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> list[tuple[str, int, int, int, int, str]]:
+    rows: list[tuple[str, int, int, int, int, str]] = []
+    for (row_idx, col_idx), style in cell_styles.items():
+        qa_spans = style.get("qa_spans", [])
+        if not qa_spans:
+            continue
+        if row_idx < 0 or col_idx < 0 or row_idx >= df.shape[0] or col_idx >= df.shape[1]:
+            continue
+        value = df.iat[row_idx, col_idx]
+        text_value = "" if pd.isna(value) else str(value)
+        _, normalized_spans = _normalize_text_and_qa_spans_for_rich_text(text_value, qa_spans)
+        for span in normalized_spans:
+            rows.append(
+                (
+                    sheet_name,
+                    int(row_idx),
+                    int(col_idx),
+                    int(span["start"]),
+                    int(span["length"]),
+                    str(span["kind"]),
+                )
+            )
+    return rows
+
+
+def _write_qa_spans_metadata_sheet(
+    wb,
+    sheet_name: str,
+    df: pd.DataFrame,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+):
+    if QA_METADATA_SHEET_NAME in wb.sheetnames:
+        stale = wb[QA_METADATA_SHEET_NAME]
+        wb.remove(stale)
+
+    rows = _collect_qa_spans_metadata_rows(sheet_name, df, cell_styles)
+    if not rows:
+        return
+
+    meta_ws = wb.create_sheet(QA_METADATA_SHEET_NAME)
+    meta_ws.sheet_state = "veryHidden"
+    meta_ws.append(["sheet", "row", "col", "start", "length", "kind"])
+    for row in rows:
+        meta_ws.append(list(row))
+
+
+def _read_qa_spans_metadata_sheet(wb, target_sheet_name: str) -> dict[tuple[int, int], list[dict[str, t.Any]]]:
+    result: dict[tuple[int, int], list[dict[str, t.Any]]] = {}
+    if QA_METADATA_SHEET_NAME not in wb.sheetnames:
+        return result
+
+    meta_ws = wb[QA_METADATA_SHEET_NAME]
+    for values in meta_ws.iter_rows(min_row=2, values_only=True):
+        if not values or len(values) < 6:
+            continue
+        sheet_name, row_idx, col_idx, start, length, kind = values[:6]
+        if str(sheet_name) != str(target_sheet_name):
+            continue
+        try:
+            r = int(row_idx)
+            c = int(col_idx)
+            s = int(start)
+            l = int(length)
+            k = str(kind)
+        except Exception:
+            continue
+        if r < 0 or c < 0 or s < 0 or l <= 0 or k not in ("big", "small"):
+            continue
+        result.setdefault((r, c), []).append({"start": s, "length": l, "kind": k})
+
+    return result
+
+
+def _is_effectively_white(color: t.Optional[QtGui.QColor], threshold: int = 242) -> bool:
+    if color is None or not color.isValid() or color.alpha() == 0:
+        return True
+    return color.red() >= threshold and color.green() >= threshold and color.blue() >= threshold
+
+
+def _invert_black_white_display_color(color: QtGui.QColor) -> QtGui.QColor:
+    if not color.isValid():
+        return color
+    if color.alpha() == 0:
+        return color
+
+    # Display-only swap: dark -> white, light -> black.
+    if _color_luminance(color) <= 24:
+        inverted = QtGui.QColor(255, 255, 255)
+        inverted.setAlpha(color.alpha())
+        return inverted
+    if _color_luminance(color) >= 231:
+        inverted = QtGui.QColor(0, 0, 0)
+        inverted.setAlpha(color.alpha())
+        return inverted
+    return color
+
+
+def _apply_document_line_spacing(doc: QtGui.QTextDocument):
+    doc.setDocumentMargin(1.0)
+    cursor = QtGui.QTextCursor(doc)
+    cursor.select(QtGui.QTextCursor.SelectionType.Document)
+    block_format = QtGui.QTextBlockFormat()
+    line_height_type = int(QtGui.QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+    block_format.setLineHeight(TABLE_LINE_HEIGHT_PERCENT, line_height_type)
+    cursor.mergeBlockFormat(block_format)
+
+
+DEFAULT_XLSX_FONT = Font() if OPENPYXL_AVAILABLE else None
+DEFAULT_XLSX_FILL = PatternFill() if OPENPYXL_AVAILABLE else None
+DEFAULT_EXPORT_XLSX_FONT = (
+    Font(name=DEFAULT_DISPLAY_FONT_FAMILY, sz=DEFAULT_DISPLAY_FONT_SIZE)
+    if OPENPYXL_AVAILABLE
+    else None
+)
+
+
+def load_xlsx_dataframe_with_styles(
+    path: Path,
+    sheet_name: t.Optional[str] = None,
+) -> tuple[pd.DataFrame, dict[tuple[int, int], dict[str, t.Any]], str, list[str], t.Any]:
+    if not OPENPYXL_AVAILABLE:
+        target = sheet_name if sheet_name else 0
+        df = pd.read_excel(path, sheet_name=target)
+        resolved_name = sheet_name or "Sheet1"
+        return df, {}, resolved_name, [resolved_name], None
+
+    wb = _load_workbook_with_rich_text(path)
+    sheet_names = [name for name in wb.sheetnames if name != QA_METADATA_SHEET_NAME]
+    if not sheet_names:
+        return pd.DataFrame(), {}, "Sheet1", [], None
+
+    workbook_base_font = None
+    workbook_fonts = getattr(wb, "_fonts", None)
+    if workbook_fonts:
+        try:
+            workbook_base_font = copy(workbook_fonts[0])
+        except Exception:
+            workbook_base_font = None
+    if workbook_base_font is None and DEFAULT_XLSX_FONT is not None:
+        workbook_base_font = copy(DEFAULT_XLSX_FONT)
+
+    target_sheet = sheet_name if sheet_name in sheet_names else sheet_names[0]
+    ws = wb[target_sheet]
+    df = pd.read_excel(path, engine="openpyxl", sheet_name=target_sheet)
+    theme_palette = _extract_excel_theme_palette(wb)
+    qa_spans_metadata = _read_qa_spans_metadata_sheet(wb, target_sheet)
+
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+    for r in range(df.shape[0]):
+        for c in range(df.shape[1]):
+            cell = ws.cell(row=r + 2, column=c + 1)
+            style: dict[str, t.Any] = {}
+            cell_font = copy(cell.font) if getattr(cell, "font", None) is not None else None
+
+            fill_is_custom = bool(cell.fill and cell.fill != DEFAULT_XLSX_FILL and cell.fill.fill_type)
+            font_is_custom = bool(cell_font) and not _is_effectively_default_excel_font(cell_font)
+
+            if fill_is_custom:
+                bg = (
+                    _qcolor_from_openpyxl_color(cell.fill.fgColor, theme_palette)
+                    or _qcolor_from_openpyxl_color(cell.fill.bgColor, theme_palette)
+                    or _qcolor_from_openpyxl_color(getattr(cell.fill, "start_color", None), theme_palette)
+                )
+                if bg is not None and not _is_effectively_white(bg):
+                    style["has_xlsx_bg"] = True
+                    style["bg"] = bg
+                style["xlsx_fill"] = copy(cell.fill)
+
+            if font_is_custom:
+                qfont = QtGui.QFont(QtWidgets.QApplication.font())
+                if cell_font.name:
+                    qfont.setFamily(str(cell_font.name))
+                if cell_font.sz:
+                    qfont.setPointSizeF(float(cell_font.sz))
+                qfont.setBold(bool(cell_font.bold))
+                qfont.setItalic(bool(cell_font.italic))
+                qfont.setUnderline(bool(cell_font.underline and cell_font.underline != "none"))
+                qfont.setStrikeOut(bool(cell_font.strike))
+                style["font"] = qfont
+
+                if not _is_default_excel_font_color(cell_font.color):
+                    fg = _qcolor_from_openpyxl_color(cell_font.color, theme_palette)
+                    if fg is not None:
+                        style["fg"] = fg
+                style["xlsx_font"] = cell_font
+
+            qa_spans = qa_spans_metadata.get((r, c), [])
+            if qa_spans:
+                cell_value = df.iat[r, c]
+                text_value = "" if pd.isna(cell_value) else str(cell_value)
+                _, qa_spans = _normalize_text_and_qa_spans_for_rich_text(text_value, qa_spans)
+            else:
+                qa_spans = _extract_qa_spans_from_rich_text(cell.value, theme_palette)
+            if qa_spans:
+                style["qa_spans"] = qa_spans
+
+            if style:
+                cell_styles[(r, c)] = style
+
+    return df, cell_styles, ws.title, sheet_names, workbook_base_font
+
+
+def write_xlsx_with_styles(
+    path: Path,
+    df: pd.DataFrame,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+    sheet_name: str = "Sheet1",
+    base_font = None,
+):
+    if not OPENPYXL_AVAILABLE:
+        df.to_excel(path, index=False)
+        return
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name or "Sheet1"
+    effective_base_font = copy(base_font) if base_font is not None else None
+
+    for c, col_name in enumerate(df.columns, start=1):
+        header_cell = ws.cell(row=1, column=c, value=str(col_name))
+        if effective_base_font is not None:
+            header_cell.font = copy(effective_base_font)
+
+    for r in range(df.shape[0]):
+        for c in range(df.shape[1]):
+            value = df.iat[r, c]
+            if pd.isna(value):
+                value = None
+            elif isinstance(value, str):
+                value = (
+                    value.replace("\r\n", "\n")
+                    .replace("\n\r", "\n")
+                    .replace("\r", "\n")
+                    .replace("\u2028", "\n")
+                    .replace("\u2029", "\n")
+                )
+            cell = ws.cell(row=r + 2, column=c + 1, value=value)
+            if effective_base_font is not None:
+                cell.font = copy(effective_base_font)
+
+            style = cell_styles.get((r, c))
+            if not style:
+                continue
+
+            if style.get("xlsx_font") is not None:
+                cell.font = copy(style["xlsx_font"])
+            qa_bg = style.get("qa_bg")
+            if isinstance(qa_bg, QtGui.QColor) and qa_bg.isValid():
+                cell.fill = PatternFill(fill_type="solid", fgColor=_argb_hex_from_qcolor(qa_bg))
+            elif style.get("xlsx_fill") is not None:
+                cell.fill = copy(style["xlsx_fill"])
+
+            qa_spans = style.get("qa_spans", [])
+            if qa_spans and value is not None:
+                text_value = str(value)
+                normalized_text, _ = _normalize_text_and_qa_spans_for_rich_text(text_value, qa_spans)
+                # Rich-text runs can introduce display line-break artifacts in some Excel cells.
+                # Keep multiline cells plain and rely on metadata for restoring QA spans.
+                if "\n" in normalized_text:
+                    cell.value = normalized_text
+                else:
+                    cell.value = _build_rich_text_value_for_cell(text_value, qa_spans, cell.font)
+
+    _write_qa_spans_metadata_sheet(wb, ws.title, df, cell_styles)
+
+    wb.save(path)
+
+
 # -------------------- Data Model for DataFrame --------------------
 class DataFrameModel(QtCore.QAbstractTableModel):
     dataChangedHard = QtCore.pyqtSignal()     
     matchesChanged = QtCore.pyqtSignal(int)    
     dirtyStateChanged = QtCore.pyqtSignal(bool)
-    def __init__(self, df: pd.DataFrame):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        cell_styles: t.Optional[dict[tuple[int, int], dict[str, t.Any]]] = None,
+        source_format: str = "",
+        xlsx_sheet_name: str = "Sheet1",
+        xlsx_base_font = None,
+    ):
         super().__init__()
         self._df = df
         self.search_term: str = ""
@@ -57,6 +859,10 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._matches: list[QtCore.QModelIndex] = []
         self.case_sensitive: bool = False
         self._is_dirty = False
+        self._cell_styles: dict[tuple[int, int], dict[str, t.Any]] = cell_styles or {}
+        self.source_format = source_format
+        self.xlsx_sheet_name = xlsx_sheet_name
+        self.xlsx_base_font = xlsx_base_font
         
     @property
     def df(self) -> pd.DataFrame:
@@ -78,18 +884,150 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             self.dirtyStateChanged.emit(value)
 
     def rowCount(self, parent=None):
-        return len(self._df.index)
+        return self.data_row_count() + 1
 
     def columnCount(self, parent=None):
-        return len(self._df.columns) + 1
+        return self.data_column_count() + 1
+
+    def data_row_count(self) -> int:
+        return len(self._df.index)
+
+    def data_column_count(self) -> int:
+        return len(self._df.columns)
+
+    def has_cell_styles(self) -> bool:
+        return bool(self._cell_styles)
+
+    def cell_styles(self) -> dict[tuple[int, int], dict[str, t.Any]]:
+        return self._cell_styles
+
+    def _cell_style(self, row: int, col: int) -> dict[str, t.Any]:
+        return self._cell_styles.get((row, col), {})
+
+    def reorder_cell_styles(self, visual_order: list[int]):
+        if not self._cell_styles:
+            return
+        col_map = {old_col: new_col for new_col, old_col in enumerate(visual_order)}
+        new_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+        for (row, col), style in self._cell_styles.items():
+            if col in col_map:
+                new_styles[(row, col_map[col])] = style
+        self._cell_styles = new_styles
+
+    def drop_style_columns(self, col_indices: list[int]):
+        if not self._cell_styles:
+            return
+        to_drop = sorted(set(col_indices))
+        to_drop_set = set(to_drop)
+        new_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+        for (row, col), style in self._cell_styles.items():
+            if col in to_drop_set:
+                continue
+            shift = sum(1 for idx in to_drop if idx < col)
+            new_styles[(row, col - shift)] = style
+        self._cell_styles = new_styles
+
+    def drop_style_rows(self, row_indices: list[int]):
+        if not self._cell_styles:
+            return
+        to_drop = sorted(set(row_indices))
+        to_drop_set = set(to_drop)
+        new_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+        for (row, col), style in self._cell_styles.items():
+            if row in to_drop_set:
+                continue
+            shift = sum(1 for idx in to_drop if idx < row)
+            new_styles[(row - shift, col)] = style
+        self._cell_styles = new_styles
+
+    def set_cell_qa_mark(self, row: int, col: int, mark: t.Optional[str]) -> bool:
+        if row < 0 or col < 0 or row >= self.data_row_count() or col >= self.data_column_count():
+            return False
+
+        key = (row, col)
+        style = dict(self._cell_styles.get(key, {}))
+        old_mark = style.get("qa_mark")
+        target_mark = mark if mark in ("pass", "fail") else None
+        if old_mark == target_mark:
+            return True
+
+        if target_mark == "pass":
+            style["qa_mark"] = "pass"
+            style["qa_bg"] = QtGui.QColor(28, 120, 50)
+        elif target_mark == "fail":
+            style["qa_mark"] = "fail"
+            style["qa_bg"] = QtGui.QColor(145, 35, 35)
+        else:
+            style.pop("qa_mark", None)
+            style.pop("qa_bg", None)
+
+        if style:
+            self._cell_styles[key] = style
+        elif key in self._cell_styles:
+            del self._cell_styles[key]
+
+        idx = self.index(row, col)
+        self.dataChanged.emit(idx, idx, [QtCore.Qt.ItemDataRole.BackgroundRole])
+        self.is_dirty = True
+        return True
+
+    def cell_qa_spans(self, row: int, col: int) -> list[dict[str, t.Any]]:
+        spans = self._cell_style(row, col).get("qa_spans", [])
+        if isinstance(spans, list):
+            return spans
+        return []
+
+    def set_cell_qa_spans(
+        self,
+        row: int,
+        col: int,
+        spans: list[dict[str, t.Any]],
+        emit_data_changed: bool = True,
+    ) -> bool:
+        if row < 0 or col < 0 or row >= self.data_row_count() or col >= self.data_column_count():
+            return False
+
+        normalized: list[dict[str, t.Any]] = []
+        for span in spans or []:
+            try:
+                start = int(span.get("start", 0))
+                length = int(span.get("length", 0))
+                kind = str(span.get("kind", ""))
+            except Exception:
+                continue
+            if start < 0 or length <= 0 or kind not in ("big", "small"):
+                continue
+            normalized.append({"start": start, "length": length, "kind": kind})
+
+        key = (row, col)
+        style = dict(self._cell_styles.get(key, {}))
+        old_spans = style.get("qa_spans", [])
+        if old_spans == normalized:
+            return True
+
+        if normalized:
+            style["qa_spans"] = normalized
+        else:
+            style.pop("qa_spans", None)
+
+        if style:
+            self._cell_styles[key] = style
+        elif key in self._cell_styles:
+            del self._cell_styles[key]
+
+        if emit_data_changed:
+            idx = self.index(row, col)
+            self.dataChanged.emit(idx, idx, [QtCore.Qt.ItemDataRole.DisplayRole])
+        self.is_dirty = True
+        return True
 
     def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         r, c = index.row(), index.column()
         
-        # Handle the "+" column
-        if c == len(self._df.columns):
+        # Handle the "+" row/column sentinel cells.
+        if r == self.data_row_count() or c == self.data_column_count():
             if role == QtCore.Qt.ItemDataRole.DisplayRole:
                 return ""
             elif role == QtCore.Qt.ItemDataRole.BackgroundRole:
@@ -103,32 +1041,61 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                 return ""
             return str(val)
 
+        style = self._cell_style(r, c)
+
+        if role == QtCore.Qt.ItemDataRole.ForegroundRole and style.get("fg") is not None:
+            return QtGui.QBrush(style["fg"])
+
+        if role == QtCore.Qt.ItemDataRole.FontRole and style.get("font") is not None:
+            return style["font"]
+
         if role == QtCore.Qt.ItemDataRole.BackgroundRole:
+            qa_bg = style.get("qa_bg")
+            if isinstance(qa_bg, QtGui.QColor):
+                base_color = qa_bg
+            else:
+                has_xlsx_bg = bool(style.get("has_xlsx_bg"))
+                base_color = style.get("bg")
+                if base_color is None:
+                    if has_xlsx_bg:
+                        base_color = QtGui.QColor(0, 0, 0, 0)
+                    else:
+                        base_color = column_shade_color(self._is_dark, c)
+                        if r % 2 == 1:
+                            base_color = base_color.darker(150)
+
             text = "" if pd.isna(val) else str(val).lower()
             if self.search_term and self.search_term.lower() in text:
-                return QtGui.QBrush(QtGui.QColor(255, 255, 150, 80))
+                highlight = QtGui.QColor(255, 255, 150, 120)
+                if base_color.alpha() == 0:
+                    base_color = highlight
+                else:
+                    base_color = QtGui.QColor(
+                        int(base_color.red() * 0.65 + highlight.red() * 0.35),
+                        int(base_color.green() * 0.65 + highlight.green() * 0.35),
+                        int(base_color.blue() * 0.65 + highlight.blue() * 0.35),
+                        base_color.alpha(),
+                    )
 
-            base_color = column_shade_color(self._is_dark, c)
-            if r % 2 == 1:
-                base_color = base_color.darker(150)
-            
             return QtGui.QBrush(base_color)
         return None
     
     def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if role == QtCore.Qt.ItemDataRole.DisplayRole:
             if orientation == QtCore.Qt.Orientation.Horizontal:
-                if section == len(self._df.columns):  # Last column
+                if section == self.data_column_count():
                     return "+"
                 return str(self._df.columns[section])
             else:
+                if section == self.data_row_count():
+                    return "+"
                 return str(self._df.index[section])
         return None
 
     def flags(self, index):
         if not index.isValid():
             return QtCore.Qt.ItemFlag.NoItemFlags
-        if index.column() == len(self._df.columns):
+        if index.column() == self.data_column_count() or index.row() == self.data_row_count():
             return QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled
         return (
             QtCore.Qt.ItemFlag.ItemIsSelectable
@@ -139,6 +1106,16 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     def setData(self, index, value, role=QtCore.Qt.ItemDataRole.EditRole):
         if role == QtCore.Qt.ItemDataRole.EditRole and index.isValid():
             r, c = index.row(), index.column()
+            if r >= self.data_row_count() or c >= self.data_column_count():
+                return False
+            if isinstance(value, str):
+                value = (
+                    value.replace("\r\n", "\n")
+                    .replace("\n\r", "\n")
+                    .replace("\r", "\n")
+                    .replace("\u2028", "\n")
+                    .replace("\u2029", "\n")
+                )
             self._df.iat[r, c] = value
             self.is_dirty = True
             self.dataChanged.emit(index, index, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
@@ -172,7 +1149,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         
         if self.case_sensitive:
             st = self.search_term
-            for r in range(self.rowCount()):
+            for r in range(self.data_row_count()):
                 for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
                     if pd.isna(val):
@@ -181,7 +1158,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                         self._matches.append(self.index(r, c))
         else:
             st = self.search_term.lower()
-            for r in range(self.rowCount()):
+            for r in range(self.data_row_count()):
                 for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
                     if pd.isna(val):
@@ -200,10 +1177,23 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     def add_new_column(self, col_name: str):
         """Add a new column to the DataFrame"""
         if col_name and col_name not in self._df.columns:
-            self.beginInsertColumns(QtCore.QModelIndex(), self.columnCount() - 1, self.columnCount() - 1)
+            self.beginInsertColumns(
+                QtCore.QModelIndex(),
+                self.data_column_count(),
+                self.data_column_count(),
+            )
             self._df[col_name] = ""
             self.is_dirty = True
             self.endInsertColumns()
+
+    def add_new_row(self):
+        """Add a new row to the DataFrame."""
+        insert_at = self.data_row_count()
+        self.beginInsertRows(QtCore.QModelIndex(), insert_at, insert_at)
+        empty_row = pd.DataFrame([[""] * self.data_column_count()], columns=self._df.columns)
+        self._df = pd.concat([self._df, empty_row], ignore_index=True)
+        self.is_dirty = True
+        self.endInsertRows()
 
     # --------------------------------------------------------------------- #
     #  REPLACE LOGIC (unchanged from your original)
@@ -242,8 +1232,8 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             return 0
         count = 0
         st = self.search_term
-        for r in range(self.rowCount()):
-            for c in range(self.columnCount()):
+        for r in range(self.data_row_count()):
+            for c in range(self.columnCount() - 1):
                 val = self._df.iat[r, c]
                 if pd.isna(val):
                     continue
@@ -270,7 +1260,184 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         return re.sub(re.escape(pattern), repl, text, count=count if count else 0, flags=flags)
 
 
-        
+class QAContextTextEdit(QtWidgets.QTextEdit):
+    """Editor with a QA-focused context menu for marking selected text errors."""
+    qaSpansChanged = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._last_selection: t.Optional[tuple[int, int]] = None
+        self._qa_spans: list[dict[str, t.Any]] = []
+        self.selectionChanged.connect(self._remember_selection)
+
+    def _remember_selection(self):
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        start = int(cursor.selectionStart())
+        end = int(cursor.selectionEnd())
+        if end > start:
+            self._last_selection = (start, end)
+
+    @staticmethod
+    def _format_for_kind(kind: str) -> QtGui.QTextCharFormat:
+        fmt = QtGui.QTextCharFormat()
+        fmt.setBackground(QtGui.QBrush(QA_TEXT_BG_COLOR))
+        fmt.setForeground(QtGui.QBrush(QA_TEXT_FG_COLOR))
+        if kind == "big":
+            fmt.setFontWeight(QtGui.QFont.Weight.Bold)
+            fmt.setFontItalic(False)
+        else:
+            fmt.setFontWeight(QtGui.QFont.Weight.Normal)
+            fmt.setFontItalic(True)
+        return fmt
+
+    @staticmethod
+    def _merge_spans(spans: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+        clean: list[dict[str, t.Any]] = []
+        for span in spans:
+            try:
+                start = int(span.get("start", 0))
+                length = int(span.get("length", 0))
+                kind = str(span.get("kind", ""))
+            except Exception:
+                continue
+            if start < 0 or length <= 0 or kind not in ("big", "small"):
+                continue
+            clean.append({"start": start, "length": length, "kind": kind})
+
+        if not clean:
+            return []
+        ordered = sorted(clean, key=lambda s: (int(s["start"]), int(s["length"])))
+        merged: list[dict[str, t.Any]] = [ordered[0]]
+        for span in ordered[1:]:
+            prev = merged[-1]
+            prev_end = int(prev["start"]) + int(prev["length"])
+            cur_start = int(span["start"])
+            cur_end = cur_start + int(span["length"])
+            if span["kind"] == prev["kind"] and cur_start <= prev_end:
+                prev["length"] = max(prev_end, cur_end) - int(prev["start"])
+            else:
+                merged.append(span)
+        return merged
+
+    def _remove_span_range(self, start: int, end: int):
+        updated: list[dict[str, t.Any]] = []
+        for span in self._qa_spans:
+            s = int(span["start"])
+            e = s + int(span["length"])
+            if e <= start or s >= end:
+                updated.append(dict(span))
+                continue
+            if s < start:
+                updated.append({"start": s, "length": start - s, "kind": span["kind"]})
+            if e > end:
+                updated.append({"start": end, "length": e - end, "kind": span["kind"]})
+        self._qa_spans = self._merge_spans(updated)
+
+    def _replace_span_range(self, start: int, end: int, kind: str):
+        self._remove_span_range(start, end)
+        self._qa_spans = self._merge_spans(
+            self._qa_spans + [{"start": start, "length": end - start, "kind": kind}]
+        )
+
+    def contextMenuEvent(self, event: QtGui.QContextMenuEvent):
+        cursor = self.textCursor()
+        has_selection = bool(cursor.hasSelection())
+        if has_selection:
+            sel_start = int(cursor.selectionStart())
+            sel_end = int(cursor.selectionEnd())
+        elif self._last_selection is not None:
+            sel_start, sel_end = self._last_selection
+            has_selection = sel_end > sel_start
+        else:
+            sel_start = -1
+            sel_end = -1
+
+        menu = QtWidgets.QMenu(self)
+
+        mark_big = menu.addAction("◉ Mark Big Issue")
+        mark_small = menu.addAction("● Mark Small Issue")
+        clear_issue = menu.addAction("Clear Issue")
+        mark_big.setEnabled(has_selection)
+        mark_small.setEnabled(has_selection)
+        clear_issue.setEnabled(has_selection)
+
+        chosen = menu.exec(event.globalPos())
+        if chosen == mark_big:
+            self._apply_error_mark(sel_start, sel_end, big=True)
+        elif chosen == mark_small:
+            self._apply_error_mark(sel_start, sel_end, big=False)
+        elif chosen == clear_issue:
+            self._clear_error_mark(sel_start, sel_end)
+
+    def _apply_error_mark(self, start: int, end: int, big: bool):
+        if start < 0 or end <= start:
+            return
+
+        self._last_selection = (start, end)
+        kind = "big" if big else "small"
+        self._replace_span_range(start, end, kind)
+        cursor = QtGui.QTextCursor(self.document())
+        cursor.setPosition(start)
+        cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
+
+        fmt = self._format_for_kind(kind)
+        cursor.mergeCharFormat(fmt)
+        self.qaSpansChanged.emit()
+
+    def _clear_error_mark(self, start: int, end: int):
+        if start < 0 or end <= start:
+            return
+
+        self._last_selection = (start, end)
+        self._remove_span_range(start, end)
+
+        cursor = QtGui.QTextCursor(self.document())
+        cursor.setPosition(start)
+        cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
+
+        clear_fmt = QtGui.QTextCharFormat()
+        clear_fmt.setFontWeight(QtGui.QFont.Weight.Normal)
+        clear_fmt.setFontItalic(False)
+        if hasattr(clear_fmt, "clearBackground"):
+            clear_fmt.clearBackground()
+        else:
+            clear_fmt.setBackground(QtGui.QBrush())
+        if hasattr(clear_fmt, "clearForeground"):
+            clear_fmt.clearForeground()
+        else:
+            clear_fmt.setForeground(QtGui.QBrush())
+        cursor.mergeCharFormat(clear_fmt)
+        self.qaSpansChanged.emit()
+
+    def extract_qa_spans(self) -> list[dict[str, t.Any]]:
+        return [dict(span) for span in self._merge_spans(self._qa_spans)]
+
+    def apply_qa_spans(self, spans: list[dict[str, t.Any]]):
+        self._qa_spans = self._merge_spans(spans or [])
+        if not self._qa_spans:
+            return
+        doc_len = self.document().characterCount()
+        for span in self._qa_spans:
+            try:
+                start = max(0, int(span.get("start", 0)))
+                length = max(0, int(span.get("length", 0)))
+                kind = str(span.get("kind", ""))
+            except Exception:
+                continue
+            if length <= 0 or kind not in ("big", "small"):
+                continue
+            end = min(doc_len - 1, start + length)
+            if end <= start:
+                continue
+
+            cursor = self.textCursor()
+            cursor.setPosition(start)
+            cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
+            cursor.mergeCharFormat(self._format_for_kind(kind))
+
+
 class HighlightDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, model: DataFrameModel):
         super().__init__()
@@ -278,35 +1445,52 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         
         # Cache font metrics
         self._metrics_cache = {}
+
+    def _persist_editor_qa_spans(self, editor: QAContextTextEdit, index):
+        if not isinstance(self.model, DataFrameModel):
+            return
+        if not index.isValid():
+            return
+        self.model.set_cell_qa_spans(
+            index.row(),
+            index.column(),
+            editor.extract_qa_spans(),
+            emit_data_changed=False,
+        )
     
     def sizeHint(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex) -> QtCore.QSize:
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
+        cell_font = index.data(QtCore.Qt.ItemDataRole.FontRole) or option.font
         
         # Fast path: short text without newlines
         if len(text) < 100 and '\n' not in text:
-            font = option.font
-            metrics = QtGui.QFontMetrics(font)
+            metrics = QtGui.QFontMetrics(cell_font)
             width = metrics.horizontalAdvance(text) + 28  # padding
-            height = metrics.lineSpacing() + 8
+            height = metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING
             return QtCore.QSize(width, height)
         
         # Slow path for multiline/long text
         doc = QtGui.QTextDocument()
-        doc.setDefaultFont(option.font)
+        doc.setDefaultFont(cell_font)
         doc.setPlainText(text)
         doc.setTextWidth(option.rect.width())
+        _apply_document_line_spacing(doc)
         
         content_height = doc.size().height()
-        total_height = int(content_height + 6)
+        total_height = int(content_height + TABLE_VERTICAL_TEXT_PADDING)
         
         return QtCore.QSize(int(doc.idealWidth()), total_height)
 
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):
+        option = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(option, index)
         painter.save()
         
         # Get base background color
         bg_brush = index.data(QtCore.Qt.ItemDataRole.BackgroundRole)
+        fg_brush = index.data(QtCore.Qt.ItemDataRole.ForegroundRole)
+        cell_font = index.data(QtCore.Qt.ItemDataRole.FontRole) or option.font
         
         # Check if item is selected
         is_selected = option.state & QtWidgets.QStyle.StateFlag.State_Selected
@@ -342,13 +1526,61 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         
         # Create document for text (rest of your existing logic)
         doc = QtGui.QTextDocument()
-        doc.setDefaultFont(option.font)
+        doc.setDefaultFont(cell_font)
         text_option = QtGui.QTextOption()
         text_option.setWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         text_option.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft)
         doc.setDefaultTextOption(text_option)
         doc.setPlainText(text)
         doc.setTextWidth(rect.width())
+        _apply_document_line_spacing(doc)
+
+        base_text_format = QtGui.QTextCharFormat()
+        if is_selected:
+            base_text_format.setForeground(option.palette.highlightedText())
+        elif fg_brush:
+            fg_color = _invert_black_white_display_color(fg_brush.color())
+            base_text_format.setForeground(QtGui.QBrush(fg_color))
+        else:
+            if self.model._is_dark:
+                base_text_format.setForeground(QtGui.QBrush(QtGui.QColor(235, 235, 235)))
+            else:
+                base_text_format.setForeground(option.palette.text())
+
+        base_cursor = QtGui.QTextCursor(doc)
+        base_cursor.select(QtGui.QTextCursor.SelectionType.Document)
+        base_cursor.mergeCharFormat(base_text_format)
+
+        qa_spans = self.model.cell_qa_spans(index.row(), index.column())
+        if qa_spans:
+            doc_len = doc.characterCount()
+            for span in qa_spans:
+                try:
+                    start = max(0, int(span.get("start", 0)))
+                    length = max(0, int(span.get("length", 0)))
+                    kind = str(span.get("kind", ""))
+                except Exception:
+                    continue
+                if length <= 0 or kind not in ("big", "small"):
+                    continue
+                end = min(doc_len - 1, start + length)
+                if end <= start:
+                    continue
+
+                qa_fmt = QtGui.QTextCharFormat()
+                qa_fmt.setBackground(QtGui.QBrush(QA_TEXT_BG_COLOR))
+                qa_fmt.setForeground(QtGui.QBrush(QA_TEXT_FG_COLOR))
+                if kind == "big":
+                    qa_fmt.setFontWeight(QtGui.QFont.Weight.Bold)
+                    qa_fmt.setFontItalic(False)
+                else:
+                    qa_fmt.setFontWeight(QtGui.QFont.Weight.Normal)
+                    qa_fmt.setFontItalic(True)
+
+                qa_cursor = QtGui.QTextCursor(doc)
+                qa_cursor.setPosition(start)
+                qa_cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
+                qa_cursor.mergeCharFormat(qa_fmt)
         
         # Highlight matching words (existing logic unchanged)
         if has_term:
@@ -391,17 +1623,44 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         
         
     def createEditor(self, parent, option, index):
-        editor = QtWidgets.QPlainTextEdit(parent)
+        editor = QAContextTextEdit(parent)
+        editor.setAcceptRichText(False)
+        cell_font = index.data(QtCore.Qt.ItemDataRole.FontRole) or option.font
+        editor.setFont(cell_font)
+        editor.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.WidgetWidth)
         editor.setWordWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         editor.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        editor.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        editor.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         editor.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        editor.document().setDocumentMargin(1.0)
+        _apply_document_line_spacing(editor.document())
+        editor.setViewportMargins(4, 2, 4, 2)
+        editor.setStyleSheet("QTextEdit { border: none; padding: 0px; }")
+        persistent_index = QtCore.QPersistentModelIndex(index)
+        editor.qaSpansChanged.connect(
+            lambda ed=editor, idx=persistent_index: self._persist_editor_qa_spans(ed, idx)
+        )
         return editor
 
     def setEditorData(self, editor, index):
+        cell_font = index.data(QtCore.Qt.ItemDataRole.FontRole)
+        if cell_font:
+            editor.setFont(cell_font)
         editor.setPlainText(index.data(QtCore.Qt.ItemDataRole.DisplayRole) or "")
+        _apply_document_line_spacing(editor.document())
+        if isinstance(editor, QAContextTextEdit) and isinstance(self.model, DataFrameModel):
+            editor.apply_qa_spans(self.model.cell_qa_spans(index.row(), index.column()))
+        cursor = editor.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.MoveOperation.Start)
+        editor.setTextCursor(cursor)
+
+    def updateEditorGeometry(self, editor, option, index):
+        # Use full cell geometry to avoid extra narrowing/wrapping in edit mode.
+        editor.setGeometry(option.rect)
 
     def setModelData(self, editor, model, index):
+        if isinstance(editor, QAContextTextEdit) and isinstance(model, DataFrameModel):
+            model.set_cell_qa_spans(index.row(), index.column(), editor.extract_qa_spans())
         model.setData(index, editor.toPlainText(), QtCore.Qt.ItemDataRole.EditRole)
 class DragDropWidget(QtWidgets.QFrame):
     def mousePressEvent(self, e: QtGui.QMouseEvent):
@@ -779,14 +2038,29 @@ class DataViewerPage(QtWidgets.QWidget):
         self.current_path: t.Optional[Path] = None
         self.model: t.Optional[DataFrameModel] = None
         self.current_match_pos: int = -1
+        self._xlsx_sheet_names: list[str] = []
+        self._sheet_reload_in_progress = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
         # Window controls bar
-        self.controls = WindowControls("Viewer")
-        self.controls.backRequested.connect(lambda: self.app_ref.back_to_start())
+        self.controls = WindowControls(APP_NAME)
+        self.controls.backRequested.connect(self.backRequested.emit)
+        self.controls.back_btn.setAutoRaise(False)
+        self.controls.back_btn.setStyleSheet(
+            """
+            QToolButton:disabled {
+                color: rgb(120, 120, 120);
+                background-color: rgb(55, 55, 55);
+                border: 1px solid rgb(75, 75, 75);
+                border-radius: 4px;
+                padding: 2px 8px;
+            }
+            """
+        )
+        self.controls.back_btn.setEnabled(False)
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
@@ -797,6 +2071,7 @@ class DataViewerPage(QtWidgets.QWidget):
         toolbar.setIconSize(QtCore.QSize(16, 16))
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
+        self.toolbar = toolbar
 
         # --- Actions ---
         self.btn_open = QtGui.QAction("Open", self)
@@ -812,6 +2087,22 @@ class DataViewerPage(QtWidgets.QWidget):
         self.btn_save_copy = QtGui.QAction("Save Copy", self)
         self.btn_save_copy.triggered.connect(self.save_copy)
         toolbar.addAction(self.btn_save_copy)
+
+        toolbar.addSeparator()
+
+        self.sheet_label = QtWidgets.QLabel("Sheet:")
+        self.sheet_label.setVisible(True)
+        toolbar.addWidget(self.sheet_label)
+
+        self.sheet_combo = QtWidgets.QComboBox()
+        self.sheet_combo.setMinimumWidth(120)
+        self.sheet_combo.setMaximumWidth(240)
+        self.sheet_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.sheet_combo.setVisible(True)
+        self.sheet_combo.addItem("(No sheet)")
+        self.sheet_combo.setEnabled(False)
+        self.sheet_combo.currentTextChanged.connect(self._on_sheet_changed)
+        toolbar.addWidget(self.sheet_combo)
 
         toolbar.addSeparator()
 
@@ -933,6 +2224,10 @@ class DataViewerPage(QtWidgets.QWidget):
 
         # --- Table View ---
         self.table = SmoothScrollTableView()
+        table_font = QtGui.QFont(self.table.font())
+        table_font.setFamily(DEFAULT_DISPLAY_FONT_FAMILY)
+        table_font.setPointSize(DEFAULT_DISPLAY_FONT_SIZE)
+        self.table.setFont(table_font)
         self.table.setAlternatingRowColors(False)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -950,6 +2245,10 @@ class DataViewerPage(QtWidgets.QWidget):
         
         self.table.horizontalHeader().sectionClicked.connect(self._select_column)
         self.table.verticalHeader().sectionClicked.connect(self._select_row)
+        self.table.horizontalHeader().setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.horizontalHeader().customContextMenuRequested.connect(self._show_column_header_menu)
+        self.table.verticalHeader().setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.verticalHeader().customContextMenuRequested.connect(self._show_row_header_menu)
         
         
                 # === NEW: Visual feedback for column dragging ===
@@ -957,6 +2256,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().sectionDoubleClicked.connect(self._rename_column)
         self.table.clicked.connect(self._handle_plus_column_click)
+        self.table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_cell_qa_menu)
         self._apply_scrollbar_style()
         
         # === NEW: Debounced row resizing system ===
@@ -1043,12 +2344,14 @@ class DataViewerPage(QtWidgets.QWidget):
 
         # Add everything to layout
         outer.addWidget(self.controls)
-        outer.addWidget(toolbar)
+        outer.addWidget(self.toolbar)
         outer.addWidget(self.dd, 1)  # Give it stretch factor
         outer.addWidget(self.table, 1)  # Give it stretch factor
         outer.addWidget(self.status)
         
         self.table.hide()
+        self.toolbar.hide()
+        self.status.hide()
         
     def refresh_dims_display(self):
         """Updates the status bar with current row and column counts in bold."""
@@ -1059,6 +2362,61 @@ class DataViewerPage(QtWidgets.QWidget):
             self.size_label.setText(f"| <b>{rows}</b> rows x <b>{cols}</b> columns |")
         else:
             self.size_label.clear()
+
+    def _set_sheet_selector(self, sheet_names: list[str], selected_sheet: t.Optional[str]):
+        self._xlsx_sheet_names = sheet_names
+        has_any = len(sheet_names) > 0
+        self.sheet_label.setVisible(True)
+        self.sheet_combo.setVisible(True)
+        self.sheet_combo.setEnabled(has_any and len(sheet_names) > 1)
+
+        self.sheet_combo.blockSignals(True)
+        self.sheet_combo.clear()
+        if has_any:
+            self.sheet_combo.addItems(sheet_names)
+            if selected_sheet and selected_sheet in sheet_names:
+                self.sheet_combo.setCurrentText(selected_sheet)
+            elif sheet_names:
+                self.sheet_combo.setCurrentIndex(0)
+        else:
+            self.sheet_combo.addItem("(No sheet)")
+            self.sheet_combo.setCurrentIndex(0)
+        self.sheet_combo.blockSignals(False)
+
+    def _on_sheet_changed(self, sheet_name: str):
+        if self._sheet_reload_in_progress:
+            return
+        if not sheet_name or not self.current_path or self.current_path.suffix.lower() not in [".xlsx", ".xls"]:
+            return
+        if self.model and self.model.xlsx_sheet_name == sheet_name:
+            return
+
+        if self.model and self.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Save before switching sheets?",
+                (QtWidgets.QMessageBox.StandardButton.Yes |
+                QtWidgets.QMessageBox.StandardButton.No |
+                QtWidgets.QMessageBox.StandardButton.Cancel),
+            )
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                self.sheet_combo.blockSignals(True)
+                self.sheet_combo.setCurrentText(self.model.xlsx_sheet_name if self.model else "")
+                self.sheet_combo.blockSignals(False)
+                return
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                if not self.save_file():
+                    self.sheet_combo.blockSignals(True)
+                    self.sheet_combo.setCurrentText(self.model.xlsx_sheet_name if self.model else "")
+                    self.sheet_combo.blockSignals(False)
+                    return
+
+        self._sheet_reload_in_progress = True
+        try:
+            self.load_path(self.current_path, xlsx_sheet_name=sheet_name)
+        finally:
+            self._sheet_reload_in_progress = False
             
     def on_case_sensitive_toggled(self, checked: bool):
         """Toggle case sensitivity and refresh search"""
@@ -1087,20 +2445,25 @@ class DataViewerPage(QtWidgets.QWidget):
         self.search_edit.clear()
         self.replace_edit.clear()
         self.replace_container.setVisible(False)
+        self._set_sheet_selector([], None)
         
         # Reset window title
-        self.controls.title_lbl.setText("Viewer")
+        self.controls.title_lbl.setText(APP_NAME)
         self.window().setWindowTitle(APP_NAME)
         
         # Reset indicators
         self.match_label.setText("Matching cells: 0")
         self.status.clearMessage()
+        self.size_label.clear()
         self.dirty_indicator.hide()
         self._hide_background_indicator()
+        self.toolbar.hide()
+        self.status.hide()
         
         # Show drag-and-drop, hide table
         self.table.hide()
         self.dd.show()
+        self.controls.back_btn.setEnabled(False)
         self.dd.icon.setText("🗂️Drop a CSV / XLS / XLSX / JSONL file here")     
         
                
@@ -1141,11 +2504,13 @@ class DataViewerPage(QtWidgets.QWidget):
         """Reorder DataFrame columns when user drags column header"""
         if not self.model or old_visual_index == new_visual_index:
             return
+        if logical_index >= len(self.model.df.columns):
+            return
         
         try:
             # Get current visual order
             header = self.table.horizontalHeader()
-            visual_order = [header.logicalIndex(i) for i in range(header.count())]
+            visual_order = [header.logicalIndex(i) for i in range(len(self.model.df.columns))]
             
             # Use layout change signals for efficient update (no flicker)
             self.model.layoutAboutToBeChanged.emit()
@@ -1153,6 +2518,7 @@ class DataViewerPage(QtWidgets.QWidget):
             # Reorder DataFrame to match visual order
             new_columns = [self.model.df.columns[i] for i in visual_order]
             self.model.df = self.model.df[new_columns]
+            self.model.reorder_cell_styles(visual_order)
             self.model.is_dirty = True
             self.model.layoutChanged.emit()
             
@@ -1279,44 +2645,184 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.viewport().update()
         self.status.showMessage(f"Search updated. Found {self.model.total_matches()} matches.", 2000)
               
-    def _select_column(self, logical_index: int):
-        """Select entire column when header is clicked"""
+    def _prompt_add_column(self):
         if not self.model:
             return
-        
-        # Check if the clicked header is the "+" column
-        if logical_index == len(self.model.df.columns):
-            # Trigger the New Column dialog (same logic as clicking the cells)
-            new_name, ok = QtWidgets.QInputDialog.getText(
-                self, "New Column", "Enter column name:"
-            )
-            if ok and new_name.strip():
-                self.model.add_new_column(new_name.strip())
-                self.autosize_columns(force=True)
-                self._autosize_all_rows()
-                self.status.showMessage(f"Added column: {new_name}")
+        new_name, ok = QtWidgets.QInputDialog.getText(
+            self, "New Column", "Enter column name:"
+        )
+        if ok and new_name.strip():
+            self.model.add_new_column(new_name.strip())
+            self.refresh_dims_display()
+            self.autosize_columns(force=True)
+            self._autosize_all_rows()
+            self.status.showMessage(f"Added column: {new_name}")
+
+    def _add_new_row(self):
+        if not self.model:
             return
-        
+        self.model.add_new_row()
+        self.refresh_dims_display()
+        self._autosize_all_rows()
+        new_row = self.model.data_row_count() - 1
+        if new_row >= 0:
+            self.table.scrollTo(self.model.index(new_row, 0), QtWidgets.QAbstractItemView.ScrollHint.PositionAtBottom)
+        self.status.showMessage("Added row", 2000)
+
+    def _remove_columns(self, col_indices: list[int]) -> bool:
+        if not self.model:
+            return False
+        valid_indices = sorted({i for i in col_indices if 0 <= i < len(self.model._df.columns)})
+        if not valid_indices:
+            return False
+
+        msg = f"Delete {len(valid_indices)} column(s)?"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Delete Columns",
+            msg,
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+            return False
+
+        self.model.layoutAboutToBeChanged.emit()
+        cols_to_drop = [self.model._df.columns[i] for i in valid_indices]
+        self.model._df.drop(columns=cols_to_drop, inplace=True)
+        self.model.drop_style_columns(valid_indices)
+        self.model.is_dirty = True
+        self.model.layoutChanged.emit()
+        self.refresh_dims_display()
+        return True
+
+    def _remove_rows(self, row_indices: list[int]) -> bool:
+        if not self.model:
+            return False
+        valid_indices = sorted({i for i in row_indices if 0 <= i < len(self.model._df.index)})
+        if not valid_indices:
+            return False
+
+        msg = f"Delete {len(valid_indices)} row(s)?"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Delete Rows",
+            msg,
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+            return False
+
+        self.model.layoutAboutToBeChanged.emit()
+        self.model._df.drop(self.model._df.index[valid_indices], inplace=True)
+        self.model._df.reset_index(drop=True, inplace=True)
+        self.model.drop_style_rows(valid_indices)
+        self.model.is_dirty = True
+        self.model.layoutChanged.emit()
+        self.refresh_dims_display()
+        if self.model.search_term:
+            self.model._rebuild_matches()
+        return True
+
+    def _show_column_header_menu(self, pos: QtCore.QPoint):
+        if not self.model:
+            return
+        header = self.table.horizontalHeader()
+        logical_index = header.logicalIndexAt(pos)
+        if logical_index < 0:
+            return
+
+        menu = QtWidgets.QMenu(self)
+        if logical_index == len(self.model.df.columns):
+            add_action = menu.addAction("Add Column")
+            chosen = menu.exec(header.mapToGlobal(pos))
+            if chosen == add_action:
+                self._prompt_add_column()
+            return
+
+        self.table.selectColumn(logical_index)
+        rename_action = menu.addAction("Rename Column")
+        remove_action = menu.addAction("Remove Column")
+        chosen = menu.exec(header.mapToGlobal(pos))
+        if chosen == rename_action:
+            self._rename_column(logical_index)
+        elif chosen == remove_action:
+            self._remove_columns([logical_index])
+
+    def _show_row_header_menu(self, pos: QtCore.QPoint):
+        if not self.model:
+            return
+        header = self.table.verticalHeader()
+        logical_index = header.logicalIndexAt(pos)
+        if logical_index < 0:
+            return
+
+        menu = QtWidgets.QMenu(self)
+        if logical_index == len(self.model.df.index):
+            add_action = menu.addAction("Add Row")
+            chosen = menu.exec(header.mapToGlobal(pos))
+            if chosen == add_action:
+                self._add_new_row()
+            return
+
+        self.table.selectRow(logical_index)
+        remove_action = menu.addAction("Remove Row")
+        chosen = menu.exec(header.mapToGlobal(pos))
+        if chosen == remove_action:
+            self._remove_rows([logical_index])
+
+    def _select_column(self, logical_index: int):
+        """Select entire column when header is clicked."""
+        if not self.model:
+            return
+        if logical_index == len(self.model.df.columns):
+            self._prompt_add_column()
+            return
         self.table.selectColumn(logical_index)
 
     def _select_row(self, logical_index: int):
-        """Select entire row when row header is clicked"""
+        """Select entire row when row header is clicked."""
         if not self.model:
             return
-        
+        if logical_index == len(self.model.df.index):
+            self._add_new_row()
+            return
         self.table.selectRow(logical_index)
     
     
-    def load_path(self, path: Path):
+    def load_path(self, path: Path, xlsx_sheet_name: t.Optional[str] = None):
         self._hide_background_indicator()
-        self.dd.icon.setText("Loading…")
+        self.dd.icon.setText("Loading...")
         QtWidgets.QApplication.processEvents()
+        cell_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+        loaded_sheet_names: list[str] = []
+        selected_sheet_name = xlsx_sheet_name
+        xlsx_base_font = None
         
         try:
             if path.suffix.lower() == ".csv":
                 df = pd.read_csv(path, low_memory=False)
             elif path.suffix.lower() in [".xls", ".xlsx"]:
-                df = pd.read_excel(path)
+                if path.suffix.lower() == ".xlsx":
+                    df, cell_styles, selected_sheet_name, loaded_sheet_names, xlsx_base_font = load_xlsx_dataframe_with_styles(
+                        path,
+                        selected_sheet_name,
+                    )
+                    if not loaded_sheet_names:
+                        loaded_sheet_names = [selected_sheet_name]
+                else:
+                    try:
+                        excel_file = pd.ExcelFile(path)
+                        loaded_sheet_names = list(excel_file.sheet_names)
+                        if loaded_sheet_names:
+                            if selected_sheet_name not in loaded_sheet_names:
+                                selected_sheet_name = loaded_sheet_names[0]
+                        else:
+                            selected_sheet_name = selected_sheet_name or "Sheet1"
+                        df = pd.read_excel(path, sheet_name=selected_sheet_name)
+                    except Exception:
+                        df = pd.read_excel(path)
+                        selected_sheet_name = selected_sheet_name or "Sheet1"
+                        loaded_sheet_names = [selected_sheet_name]
             elif path.suffix.lower() == ".jsonl":
                 df = pd.read_json(path, lines=True)
             else:
@@ -1331,7 +2837,13 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.title_lbl.setText(filename)
         self.window().setWindowTitle(f"{filename}")
         
-        self.model = DataFrameModel(df)
+        self.model = DataFrameModel(
+            df,
+            cell_styles=cell_styles,
+            source_format=path.suffix.lower(),
+            xlsx_sheet_name=selected_sheet_name,
+            xlsx_base_font=xlsx_base_font,
+        )
         self.model._is_dark = self.mode_toggle.isChecked()
         self.model.dataChangedHard.connect(self.table.viewport().update)
         self.model.matchesChanged.connect(self._on_matches_changed)
@@ -1344,6 +2856,10 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.setModel(self.model)
         self.refresh_dims_display()
         self.table.setItemDelegate(HighlightDelegate(self.model))
+        if path.suffix.lower() in [".xlsx", ".xls"]:
+            self._set_sheet_selector(loaded_sheet_names, selected_sheet_name)
+        else:
+            self._set_sheet_selector([], None)
         
         # Style setup
         if self.model._is_dark:
@@ -1356,7 +2872,15 @@ class DataViewerPage(QtWidgets.QWidget):
         # === NEW: Efficient initialization ===
         self.table.show()
         self.dd.hide()
-        self.status.showMessage(f"Loaded: {path}  |  {df.shape[0]} rows × {df.shape[1]} cols")
+        self.toolbar.show()
+        self.status.show()
+        self.controls.back_btn.setEnabled(True)
+        if path.suffix.lower() in [".xlsx", ".xls"]:
+            self.status.showMessage(
+                f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols  |  Sheet: {selected_sheet_name}"
+            )
+        else:
+            self.status.showMessage(f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols")
         
         # Size columns first (fast)
         self.autosize_columns(force=True)
@@ -1423,7 +2947,7 @@ class DataViewerPage(QtWidgets.QWidget):
             QtWidgets.QMessageBox.information(self, "Nothing to save", "Open a file first.")
             return False
         try:
-            self._write_dataframe(self.current_path, self.model.df)
+            self._write_dataframe(self.current_path, self.model)
             self.model.is_dirty = False
             self.status.showMessage(f"Saved to {self.current_path}")
             return True
@@ -1434,24 +2958,48 @@ class DataViewerPage(QtWidgets.QWidget):
     def save_copy(self):
         if not self.model:
             return
+        prefer_xlsx = (
+            self.model.source_format == ".xlsx"
+            or (self.model.source_format in [".csv", ".jsonl"] and self.model.has_cell_styles())
+        )
+        default_path = self.current_path or (Path.home() / "data.csv")
+        if prefer_xlsx:
+            default_path = default_path.with_suffix(".xlsx")
+            file_filter = "Excel (*.xlsx);;CSV (*.csv);;JSON Lines (*.jsonl)"
+            initial_filter = "Excel (*.xlsx)"
+        else:
+            file_filter = "CSV (*.csv);;Excel (*.xlsx);;JSON Lines (*.jsonl)"
+            initial_filter = "CSV (*.csv)"
+
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self, "Save Copy As",
-            str(self.current_path or (Path.home() / "data.csv")),
-            "CSV (*.csv);;Excel (*.xlsx);;JSON Lines (*.jsonl)"
+            str(default_path),
+            file_filter,
+            initial_filter,
         )
         if not path:
             return
         try:
-            self._write_dataframe(Path(path), self.model.df)
+            self._write_dataframe(Path(path), self.model)
             self.status.showMessage(f"Saved copy to {path}")
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to save copy:\n{e}")
 
-    def _write_dataframe(self, path: Path, df: pd.DataFrame):
+    def _write_dataframe(self, path: Path, model: DataFrameModel):
+        df = model.df
         suf = path.suffix.lower()
         if suf == ".csv":
             df.to_csv(path, index=False)
-        elif suf in [".xls", ".xlsx"]:
+        elif suf == ".xlsx":
+            base_font = copy(DEFAULT_EXPORT_XLSX_FONT) if DEFAULT_EXPORT_XLSX_FONT is not None else model.xlsx_base_font
+            write_xlsx_with_styles(
+                path,
+                df,
+                model.cell_styles(),
+                model.xlsx_sheet_name,
+                base_font=base_font,
+            )
+        elif suf == ".xls":
             df.to_excel(path, index=False)
         elif suf == ".jsonl":
             df.to_json(path, orient="records", lines=True, force_ascii=False)
@@ -1588,68 +3136,30 @@ class DataViewerPage(QtWidgets.QWidget):
         super().keyPressEvent(event)
         
     def _handle_delete_key(self):
-            """Handles deletion of Columns, Rows, or Cell Contents based on selection."""
+            """Handles deletion of columns, rows, or cell contents based on selection."""
             if not self.model:
                 return
 
-            # --- Case 1: Delete Selected Columns ---
             sel_cols = self.table.selectionModel().selectedColumns()
             if sel_cols:
-                # Get indices and filter out the "+" column
                 col_indices = [c.column() for c in sel_cols]
-                valid_indices = [i for i in col_indices if i < len(self.model._df.columns)]
-                
-                if not valid_indices:
+                if self._remove_columns(col_indices):
                     return
 
-                msg = f"Delete {len(valid_indices)} column(s)?"
-                reply = QtWidgets.QMessageBox.question(
-                    self, "Delete Columns", msg,
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
-                )
-                
-                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                    self.model.layoutAboutToBeChanged.emit()
-                    # Drop columns by name
-                    cols_to_drop = [self.model._df.columns[i] for i in valid_indices]
-                    self.model._df.drop(columns=cols_to_drop, inplace=True)
-                    self.model.is_dirty = True
-                    self.model.layoutChanged.emit()
-                    self.refresh_dims_display()
-                return
-
-            # --- Case 2: Delete Selected Rows ---
             sel_rows = self.table.selectionModel().selectedRows()
             if sel_rows:
                 row_indices = [r.row() for r in sel_rows]
-                
-                msg = f"Delete {len(row_indices)} row(s)?"
-                reply = QtWidgets.QMessageBox.question(
-                    self, "Delete Rows", msg,
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
-                )
-                
-                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                    self.model.layoutAboutToBeChanged.emit()
-                    # Drop rows by index
-                    self.model._df.drop(self.model._df.index[row_indices], inplace=True)
-                    # Reset index to keep row numbers sequential
-                    self.model._df.reset_index(drop=True, inplace=True)
-                    self.model.is_dirty = True
-                    self.model.layoutChanged.emit()
-                    
-                    # Refresh search matches since row indices have shifted
-                    if self.model.search_term:
-                        self.model._rebuild_matches()
-                return
+                if self._remove_rows(row_indices):
+                    return
 
-            # --- Case 3: Clear Cell Contents (Fallback) ---
-            # If no full row/col is selected, just empty the selected cells
             if self.table.selectionModel().hasSelection():
                 self.model.layoutAboutToBeChanged.emit()
                 for idx in self.table.selectedIndexes():
-                    if idx.isValid() and idx.column() < len(self.model._df.columns):
-                        # Set value to empty string
+                    if (
+                        idx.isValid()
+                        and idx.row() < len(self.model._df.index)
+                        and idx.column() < len(self.model._df.columns)
+                    ):
                         self.model._df.iat[idx.row(), idx.column()] = ""
                 self.model.is_dirty = True
                 self.model.layoutChanged.emit()
@@ -1741,20 +3251,15 @@ class DataViewerPage(QtWidgets.QWidget):
             
     def _resize_row_with_padding(self, row: int):
         """
-        Resize row to fit content and add one extra line of space for better readability.
-        This ensures all text is visible with comfortable padding at the bottom.
+        Resize row to fit content and add a small amount of extra vertical space
+        so wrapped text is easier to scan.
         """
         # Resize to fit content first
         self.table.resizeRowToContents(row)
-        
-        # Calculate height of one text line based on current font
-        font = self.table.font()
-        metrics = QtGui.QFontMetrics(font)
-        line_height = metrics.lineSpacing() * 2
-        
-        # Add one extra line of space
+
+        extra_padding = 3
         current_height = self.table.rowHeight(row)
-        new_height = current_height + line_height
+        new_height = current_height + extra_padding
         self.table.setRowHeight(row, new_height)
         
     # === NEW: Background processing for off-screen rows ===
@@ -1832,14 +3337,16 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Check if rows already have reasonable height
         font_metrics = QtGui.QFontMetrics(self.table.font())
-        min_expected_height = font_metrics.lineSpacing() + 8
+        min_expected_height = font_metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING
         
         # Process only rows that need it
         for row in range(top_row, bottom_row + 1):
+            if row >= len(self.model.df.index):
+                continue
             if self.table.rowHeight(row) < min_expected_height:
                 # Double-check if this row actually needs resizing
                 needs_resize = False
-                for c in range(self.model.columnCount()):
+                for c in range(self.model.columnCount() - 1):
                     val = self.model.df.iat[row, c]
                     if pd.notna(val):
                         s = str(val)
@@ -1868,7 +3375,7 @@ class DataViewerPage(QtWidgets.QWidget):
         # This handles 90-99% of rows without ANY calculation overhead
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
-        default_height = metrics.lineSpacing() + 8
+        default_height = metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING
         self.table.verticalHeader().setDefaultSectionSize(default_height)
         
         # 2. Identify "Complex" rows using Vectorized Pandas (Fast)
@@ -1905,7 +3412,7 @@ class DataViewerPage(QtWidgets.QWidget):
         # If very few complex rows, just do it now and finish
         if total_complex < 50:
             for row in self._pending_resize_rows:
-                self.table.resizeRowToContents(row)
+                self._resize_row_with_padding(row)
             return
 
         # 3. Setup Background Processing for the Complex Rows ONLY
@@ -1917,7 +3424,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self._pending_resize_rows = self._pending_resize_rows[BATCH_SIZE:]
         
         for row in initial_batch:
-            self.table.resizeRowToContents(row)
+            self._resize_row_with_padding(row)
             
         # Schedule the rest
         if self._pending_resize_rows:
@@ -1944,7 +3451,7 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Resize only these specific rows
         for row in current_batch:
-            self.table.resizeRowToContents(row)
+            self._resize_row_with_padding(row)
             
         # Update progress based on how many are LEFT
         if self.bg_total_rows > 0:
@@ -2034,20 +3541,59 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.viewport().update()
                 
     def _handle_plus_column_click(self, index: QtCore.QModelIndex):
-        """Handle clicks on the '+' column to add a new column"""
+        """Handle clicks on '+' row/column sentinels to add row/column."""
         if not self.model:
             return
-        
-        if index.column() == self.model.columnCount() - 1:
-            new_name, ok = QtWidgets.QInputDialog.getText(
-                self, "New Column", "Enter column name:"
-            )
-            if ok and new_name.strip():
-                self.model.add_new_column(new_name.strip())
-                self.refresh_dims_display()
-                self.autosize_columns(force=True)
-                self._autosize_all_rows()
-                self.status.showMessage(f"Added column: {new_name}")
+
+        if index.row() == self.model.data_row_count():
+            self._add_new_row()
+            return
+
+        if index.column() == self.model.data_column_count():
+            self._prompt_add_column()
+
+    def _show_cell_qa_menu(self, pos: QtCore.QPoint):
+        if not self.model:
+            return
+
+        index = self.table.indexAt(pos)
+        if not index.isValid():
+            return
+        if index.row() >= len(self.model.df.index):
+            return
+        if index.column() >= len(self.model.df.columns):
+            return
+
+        self.table.setCurrentIndex(index)
+        menu = QtWidgets.QMenu(self)
+        mark_pass = menu.addAction("✔️ All Good")
+        mark_fail = menu.addAction("❌ Issue")
+        menu.addSeparator()
+        clear_mark = menu.addAction("Clear mark")
+
+        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if chosen == mark_pass:
+            self._set_cell_qa_mark(index, "pass")
+        elif chosen == mark_fail:
+            self._set_cell_qa_mark(index, "fail")
+        elif chosen == clear_mark:
+            self._set_cell_qa_mark(index, None)
+
+    def _set_cell_qa_mark(self, index: QtCore.QModelIndex, mark: t.Optional[str]):
+        if not self.model or not index.isValid():
+            return
+        if index.column() >= len(self.model.df.columns):
+            return
+
+        if self.model.set_cell_qa_mark(index.row(), index.column(), mark):
+            row = index.row() + 1
+            col = index.column() + 1
+            if mark == "pass":
+                self.status.showMessage(f"Marked R{row}C{col} as ✓", 2000)
+            elif mark == "fail":
+                self.status.showMessage(f"Marked R{row}C{col} as ✗", 2000)
+            else:
+                self.status.showMessage(f"Cleared mark on R{row}C{col}", 2000)
 
     def _rename_column(self, logical_index: int):
         """Rename a column via double-click on header"""
@@ -2489,11 +4035,10 @@ class MainWindow(QtWidgets.QMainWindow):
         central.addWidget(self.start)
         central.addWidget(self.viewer)
         central.addWidget(self.diff)
+        central.setCurrentWidget(self.viewer)
 
-        self.start.viewRequested.connect(self.enter_viewer)
-        self.start.compareRequested.connect(self.enter_diff)
-        self.viewer.backRequested.connect(self.back_to_start)
-        self.diff.backRequested.connect(self.back_to_start)
+        # Start directly in viewer mode and keep other modes unreachable.
+        self.viewer.backRequested.connect(self.back_to_viewer_dropzone)
 
         self.resize(520, 320)
         self.center_on_screen()
@@ -2545,10 +4090,33 @@ class MainWindow(QtWidgets.QMainWindow):
     def _escape_behavior(self):
         if self.isFullScreen():
             self.showNormal()
-        else:
-            cur = self.centralWidget().currentWidget()
-            if cur is self.viewer or cur is self.diff:
-                self.back_to_start()
+
+    def back_to_viewer_dropzone(self):
+        """Return to the viewer drag-and-drop screen."""
+        if self.centralWidget().currentWidget() != self.viewer:
+            return
+
+        if self.viewer.model and self.viewer.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before leaving?",
+                (QtWidgets.QMessageBox.StandardButton.Yes |
+                QtWidgets.QMessageBox.StandardButton.No |
+                QtWidgets.QMessageBox.StandardButton.Cancel)
+            )
+
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                return
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                if not self.viewer.save_file():
+                    return
+
+        self.viewer.reset_viewer()
+        self.centralWidget().setCurrentWidget(self.viewer)
+        self.showNormal()
+        self.resize(520, 320)
+        self.center_on_screen()
 
     def center_on_screen(self):
         # Get the screen that contains the mouse cursor
@@ -2627,6 +4195,10 @@ def main():
     )
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    app_font = QtGui.QFont(app.font())
+    app_font.setFamily(DEFAULT_DISPLAY_FONT_FAMILY)
+    app_font.setPointSize(DEFAULT_DISPLAY_FONT_SIZE)
+    app.setFont(app_font)
     win = MainWindow()
     win.show()
     
