@@ -1,9 +1,18 @@
+# pyinstaller command:
+# pyinstaller --noconsole --onefile --clean --strip --icon=BetterExcel.ico --optimize=2 BetterExcel.py
 from pathlib import Path
 import sys
 import typing as t
 import re
 from copy import copy
+from datetime import datetime
 from xml.etree import ElementTree as ET
+import json
+import math
+import secrets
+import socket
+import threading
+import getpass
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
@@ -34,14 +43,648 @@ except Exception:
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.3"
+APP_NAME = "Better Excel v1.4"
+COMPACT_WINDOW_WIDTH = 470
+COMPACT_WINDOW_HEIGHT = 320
 TABLE_LINE_HEIGHT_PERCENT = 112
 TABLE_VERTICAL_TEXT_PADDING = 10
 QA_TEXT_BG_COLOR = QtGui.QColor(255, 235, 90)
 QA_TEXT_FG_COLOR = QtGui.QColor(200, 0, 0)
 QA_METADATA_SHEET_NAME = "__betterexcel_qa_spans__"
+EDIT_METADATA_SHEET_NAME = "__betterexcel_edit_meta__"
 DEFAULT_DISPLAY_FONT_FAMILY = "Inter"
 DEFAULT_DISPLAY_FONT_SIZE = 10
+COLLAB_LINK_SCHEME = "betterexcel"
+COLLAB_PROTOCOL_VERSION = 1
+COLLAB_BROADCAST_DEBOUNCE_MS = 120
+COLLAB_SOCKET_TIMEOUT_SECONDS = 1.0
+DROP_HINT_TEXT = "Drop a CSV / XLS / XLSX / JSONL file here\n(open file if WSL)"
+
+
+def _guess_local_ipv4() -> str:
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(("8.8.8.8", 80))
+            ip = probe.getsockname()[0]
+            if ip:
+                return ip
+        finally:
+            probe.close()
+    except Exception:
+        pass
+    return "127.0.0.1"
+
+
+def _build_collab_link(host: str, port: int, token: str) -> str:
+    return f"{COLLAB_LINK_SCHEME}://{host}:{port}/{token}"
+
+
+def _parse_collab_link(raw: str) -> t.Optional[tuple[str, int, str]]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    pattern = re.compile(
+        rf"^(?:{COLLAB_LINK_SCHEME}://)?(?P<host>[^:/\s]+):(?P<port>\d{{1,5}})/(?P<token>[A-Za-z0-9_-]+)$"
+    )
+    match = pattern.match(text)
+    if match is None:
+        return None
+
+    host = match.group("host").strip()
+    token = match.group("token").strip()
+    try:
+        port = int(match.group("port"))
+    except Exception:
+        return None
+
+    if not host or not token or port < 1 or port > 65535:
+        return None
+    return host, port, token
+
+
+def _normalize_username(raw: t.Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return "Guest"
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > 64:
+        text = text[:64].rstrip()
+    return text or "Guest"
+
+
+def _read_local_os_username() -> str:
+    try:
+        return _normalize_username(getpass.getuser())
+    except Exception:
+        return "Guest"
+
+
+def _normalize_edit_timestamp(raw: t.Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > 48:
+        text = text[:48].rstrip()
+    return text
+
+
+def _now_edit_timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _presence_color_for_username(username: str) -> QtGui.QColor:
+    normalized = _normalize_username(username)
+    hue_seed = 0
+    for idx, ch in enumerate(normalized):
+        hue_seed = (hue_seed + ((idx + 1) * ord(ch))) % 30
+    # Keep collaborator highlights in the blue family for consistency.
+    hue = 195 + int(hue_seed)
+    color = QtGui.QColor.fromHsv(hue, 170, 250, 255)
+    if color.isValid():
+        return color
+    return QtGui.QColor(65, 145, 255, 255)
+
+
+def _edited_cell_color_for_username(username: str) -> QtGui.QColor:
+    normalized = _normalize_username(username)
+    # Stable FNV-1a hash to avoid Python's per-process randomized hash().
+    seed = 2166136261
+    for ch in normalized:
+        seed ^= ord(ch)
+        seed = (seed * 16777619) & 0xFFFFFFFF
+
+    hue = int(seed % 360)
+    sat = int(150 + ((seed >> 8) % 70))
+    val = int(195 + ((seed >> 16) % 55))
+    color = QtGui.QColor.fromHsv(hue, sat, val, 255)
+    if color.isValid():
+        return color
+    return QtGui.QColor(255, 120, 0, 255)
+
+
+def _json_safe_value(value: t.Any) -> t.Any:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return float(value)
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _serialize_qcolor(color: t.Any) -> t.Optional[list[int]]:
+    if not isinstance(color, QtGui.QColor):
+        return None
+    if not color.isValid():
+        return None
+    return [int(color.red()), int(color.green()), int(color.blue()), int(color.alpha())]
+
+
+def _deserialize_qcolor(payload: t.Any) -> t.Optional[QtGui.QColor]:
+    if not isinstance(payload, (list, tuple)) or len(payload) != 4:
+        return None
+    try:
+        r, g, b, a = [max(0, min(255, int(v))) for v in payload]
+    except Exception:
+        return None
+    color = QtGui.QColor(r, g, b, a)
+    return color if color.isValid() else None
+
+
+def _normalize_serialized_qa_spans(spans: t.Any) -> list[dict[str, t.Any]]:
+    normalized: list[dict[str, t.Any]] = []
+    for span in spans or []:
+        if not isinstance(span, dict):
+            continue
+        try:
+            start = int(span.get("start", 0))
+            length = int(span.get("length", 0))
+            kind = str(span.get("kind", ""))
+        except Exception:
+            continue
+        if start < 0 or length <= 0 or kind not in ("big", "small"):
+            continue
+        normalized.append({"start": start, "length": length, "kind": kind})
+    return normalized
+
+
+def _serialize_cell_style(style: dict[str, t.Any]) -> dict[str, t.Any]:
+    data: dict[str, t.Any] = {}
+
+    qa_mark = style.get("qa_mark")
+    if qa_mark in ("pass", "fail"):
+        data["qa_mark"] = qa_mark
+
+    qa_spans = _normalize_serialized_qa_spans(style.get("qa_spans", []))
+    if qa_spans:
+        data["qa_spans"] = qa_spans
+
+    for color_key in ("qa_bg", "bg", "fg"):
+        serialized = _serialize_qcolor(style.get(color_key))
+        if serialized is not None:
+            data[color_key] = serialized
+
+    font = style.get("font")
+    if isinstance(font, QtGui.QFont):
+        data["font"] = font.toString()
+
+    has_xlsx_bg = style.get("has_xlsx_bg")
+    if isinstance(has_xlsx_bg, bool):
+        data["has_xlsx_bg"] = has_xlsx_bg
+
+    edited_by_raw = str(style.get("edited_by", "")).strip()
+    if edited_by_raw:
+        data["edited_by"] = _normalize_username(edited_by_raw)
+
+    edited_at = _normalize_edit_timestamp(style.get("edited_at"))
+    if edited_at:
+        data["edited_at"] = edited_at
+
+    return data
+
+
+def _deserialize_cell_style(payload: t.Any) -> dict[str, t.Any]:
+    if not isinstance(payload, dict):
+        return {}
+
+    style: dict[str, t.Any] = {}
+    qa_mark = payload.get("qa_mark")
+    if qa_mark in ("pass", "fail"):
+        style["qa_mark"] = qa_mark
+
+    qa_spans = _normalize_serialized_qa_spans(payload.get("qa_spans", []))
+    if qa_spans:
+        style["qa_spans"] = qa_spans
+
+    for color_key in ("qa_bg", "bg", "fg"):
+        restored = _deserialize_qcolor(payload.get(color_key))
+        if restored is not None:
+            style[color_key] = restored
+
+    font_data = payload.get("font")
+    if isinstance(font_data, str) and font_data.strip():
+        font = QtGui.QFont()
+        if font.fromString(font_data):
+            style["font"] = font
+
+    has_xlsx_bg = payload.get("has_xlsx_bg")
+    if isinstance(has_xlsx_bg, bool):
+        style["has_xlsx_bg"] = has_xlsx_bg
+
+    edited_by_raw = str(payload.get("edited_by", "")).strip()
+    if edited_by_raw:
+        style["edited_by"] = _normalize_username(edited_by_raw)
+
+    edited_at = _normalize_edit_timestamp(payload.get("edited_at"))
+    if edited_at:
+        style["edited_at"] = edited_at
+
+    return style
+
+
+def _serialize_cell_styles(cell_styles: dict[tuple[int, int], dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+    payload: list[dict[str, t.Any]] = []
+    for (row, col), style in cell_styles.items():
+        if not isinstance(style, dict):
+            continue
+        serialized_style = _serialize_cell_style(style)
+        if not serialized_style:
+            continue
+        payload.append({"row": int(row), "col": int(col), "style": serialized_style})
+    return payload
+
+
+def _deserialize_cell_styles(payload: t.Any) -> dict[tuple[int, int], dict[str, t.Any]]:
+    styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+    if not isinstance(payload, list):
+        return styles
+
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            row = int(entry.get("row"))
+            col = int(entry.get("col"))
+        except Exception:
+            continue
+        if row < 0 or col < 0:
+            continue
+        style = _deserialize_cell_style(entry.get("style", {}))
+        if style:
+            styles[(row, col)] = style
+    return styles
+
+
+class CollaborationServer(QtCore.QObject):
+    snapshotReceived = QtCore.pyqtSignal(object)
+    presenceReceived = QtCore.pyqtSignal(object)
+    errorOccurred = QtCore.pyqtSignal(str)
+    clientCountChanged = QtCore.pyqtSignal(int)
+    guestConnected = QtCore.pyqtSignal(str, int)
+    guestDisconnected = QtCore.pyqtSignal(str, int)
+
+    def __init__(self, session_token: str, bind_host: str = "0.0.0.0", parent=None):
+        super().__init__(parent)
+        self.session_token = session_token
+        self.bind_host = bind_host
+        self.port: t.Optional[int] = None
+        self._server_socket: t.Optional[socket.socket] = None
+        self._stop_event = threading.Event()
+        self._accept_thread: t.Optional[threading.Thread] = None
+        self._clients: dict[socket.socket, tuple[threading.Lock, str]] = {}
+        self._clients_lock = threading.Lock()
+
+    @staticmethod
+    def _send_json(sock: socket.socket, payload: dict[str, t.Any]):
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        sock.sendall(raw.encode("utf-8"))
+
+    def start(self, port: int = 0) -> bool:
+        if self._server_socket is not None:
+            return True
+        try:
+            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server.bind((self.bind_host, int(port)))
+            server.listen(8)
+            server.settimeout(COLLAB_SOCKET_TIMEOUT_SECONDS)
+        except Exception as exc:
+            self.errorOccurred.emit(f"Failed to start host server: {exc}")
+            return False
+
+        self._server_socket = server
+        self.port = int(server.getsockname()[1])
+        self._stop_event.clear()
+        self._accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._accept_thread.start()
+        return True
+
+    def stop(self):
+        self._stop_event.set()
+        server = self._server_socket
+        self._server_socket = None
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
+
+        with self._clients_lock:
+            clients = list(self._clients.keys())
+            self._clients.clear()
+
+        for conn in clients:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        self.clientCountChanged.emit(0)
+        if self._accept_thread is not None and self._accept_thread.is_alive():
+            self._accept_thread.join(timeout=0.25)
+        self._accept_thread = None
+
+    def _accept_loop(self):
+        while not self._stop_event.is_set():
+            if self._server_socket is None:
+                break
+            try:
+                conn, _ = self._server_socket.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                if not self._stop_event.is_set():
+                    self.errorOccurred.emit("Host listener stopped unexpectedly.")
+                break
+            handler = threading.Thread(target=self._client_loop, args=(conn,), daemon=True)
+            handler.start()
+
+    def _add_client(self, conn: socket.socket, username: str):
+        normalized_username = _normalize_username(username)
+        with self._clients_lock:
+            self._clients[conn] = (threading.Lock(), normalized_username)
+            client_count = len(self._clients)
+        self.guestConnected.emit(normalized_username, client_count)
+        self.clientCountChanged.emit(client_count)
+
+    def _remove_client(self, conn: socket.socket):
+        removed_username = "Guest"
+        with self._clients_lock:
+            removed = self._clients.pop(conn, None)
+            existed = removed is not None
+            if removed is not None:
+                _, removed_username = removed
+            client_count = len(self._clients)
+        try:
+            conn.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        if existed:
+            self.guestDisconnected.emit(_normalize_username(removed_username), client_count)
+            self.clientCountChanged.emit(client_count)
+
+    def _client_loop(self, conn: socket.socket):
+        reader = None
+        authorized = False
+        try:
+            conn.settimeout(8.0)
+            reader = conn.makefile("r", encoding="utf-8", newline="\n")
+            hello_line = reader.readline()
+            if not hello_line:
+                return
+            try:
+                hello = json.loads(hello_line)
+            except Exception:
+                return
+
+            if not isinstance(hello, dict):
+                return
+            if hello.get("type") != "hello":
+                return
+            if str(hello.get("token", "")) != self.session_token:
+                return
+
+            remote_username = _normalize_username(hello.get("username"))
+            self._send_json(conn, {"type": "welcome", "protocol": COLLAB_PROTOCOL_VERSION})
+            conn.settimeout(None)
+            authorized = True
+            self._add_client(conn, remote_username)
+
+            while not self._stop_event.is_set():
+                line = reader.readline()
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                msg_type = msg.get("type")
+                payload = msg.get("payload")
+                if msg_type == "snapshot":
+                    if isinstance(payload, dict):
+                        self.snapshotReceived.emit(payload)
+                    continue
+                if msg_type == "presence":
+                    if isinstance(payload, dict):
+                        normalized_payload = dict(payload)
+                        normalized_payload["username"] = remote_username
+                        self.presenceReceived.emit(normalized_payload)
+                    continue
+        except Exception:
+            pass
+        finally:
+            if reader is not None:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+            if authorized:
+                self._remove_client(conn)
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def broadcast_snapshot(self, snapshot: dict[str, t.Any]):
+        message = {"type": "snapshot", "payload": snapshot}
+        with self._clients_lock:
+            clients = [(conn, lock_and_name[0]) for conn, lock_and_name in self._clients.items()]
+
+        for conn, send_lock in clients:
+            try:
+                with send_lock:
+                    self._send_json(conn, message)
+            except Exception:
+                self._remove_client(conn)
+
+    def broadcast_presence(self, payload: dict[str, t.Any]):
+        message = {"type": "presence", "payload": payload}
+        with self._clients_lock:
+            clients = [(conn, lock_and_name[0]) for conn, lock_and_name in self._clients.items()]
+
+        for conn, send_lock in clients:
+            try:
+                with send_lock:
+                    self._send_json(conn, message)
+            except Exception:
+                self._remove_client(conn)
+
+
+class CollaborationClient(QtCore.QObject):
+    snapshotReceived = QtCore.pyqtSignal(object)
+    presenceReceived = QtCore.pyqtSignal(object)
+    connectedChanged = QtCore.pyqtSignal(bool)
+    errorOccurred = QtCore.pyqtSignal(str)
+
+    def __init__(self, host: str, port: int, token: str, username: str = "Guest", parent=None):
+        super().__init__(parent)
+        self.host = host
+        self.port = int(port)
+        self.token = token
+        self.username = _normalize_username(username)
+        self._stop_event = threading.Event()
+        self._thread: t.Optional[threading.Thread] = None
+        self._socket: t.Optional[socket.socket] = None
+        self._send_lock = threading.Lock()
+        self._is_connected = False
+
+    @staticmethod
+    def _send_json(sock: socket.socket, payload: dict[str, t.Any]):
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        sock.sendall(raw.encode("utf-8"))
+
+    def is_connected(self) -> bool:
+        return self._is_connected
+
+    def _set_connected(self, value: bool):
+        if self._is_connected != value:
+            self._is_connected = value
+            self.connectedChanged.emit(value)
+
+    def start(self):
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        sock = self._socket
+        self._socket = None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=0.25)
+        self._thread = None
+        self._set_connected(False)
+
+    def _run(self):
+        reader = None
+        sock = None
+        try:
+            sock = socket.create_connection((self.host, self.port), timeout=8.0)
+            sock.settimeout(None)
+            self._socket = sock
+            self._send_json(
+                sock,
+                {
+                    "type": "hello",
+                    "token": self.token,
+                    "username": self.username,
+                    "protocol": COLLAB_PROTOCOL_VERSION,
+                },
+            )
+
+            reader = sock.makefile("r", encoding="utf-8", newline="\n")
+            welcome_line = reader.readline()
+            if not welcome_line:
+                self.errorOccurred.emit("Failed to connect: no handshake response from host.")
+                return
+            try:
+                welcome = json.loads(welcome_line)
+            except Exception:
+                self.errorOccurred.emit("Failed to connect: invalid handshake response from host.")
+                return
+            if not isinstance(welcome, dict) or welcome.get("type") != "welcome":
+                self.errorOccurred.emit("Failed to connect: host rejected this session.")
+                return
+
+            self._set_connected(True)
+
+            while not self._stop_event.is_set():
+                line = reader.readline()
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                msg_type = msg.get("type")
+                payload = msg.get("payload")
+                if msg_type == "snapshot":
+                    if isinstance(payload, dict):
+                        self.snapshotReceived.emit(payload)
+                    continue
+                if msg_type == "presence":
+                    if isinstance(payload, dict):
+                        self.presenceReceived.emit(payload)
+                    continue
+
+            if not self._stop_event.is_set():
+                self.errorOccurred.emit("Disconnected from host.")
+        except Exception as exc:
+            if not self._stop_event.is_set():
+                self.errorOccurred.emit(f"Failed to connect to host: {exc}")
+        finally:
+            if reader is not None:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            self._socket = None
+            self._set_connected(False)
+
+    def send_snapshot(self, snapshot: dict[str, t.Any]) -> bool:
+        sock = self._socket
+        if sock is None or not self._is_connected:
+            return False
+        try:
+            with self._send_lock:
+                self._send_json(sock, {"type": "snapshot", "payload": snapshot})
+            return True
+        except Exception:
+            return False
+
+    def send_presence(self, payload: dict[str, t.Any]) -> bool:
+        sock = self._socket
+        if sock is None or not self._is_connected:
+            return False
+        try:
+            with self._send_lock:
+                self._send_json(sock, {"type": "presence", "payload": payload})
+            return True
+        except Exception:
+            return False
 
 # -------------------- Utility: Dark/Light palettes & styles --------------------
 def apply_dark_palette(app: QtWidgets.QApplication):
@@ -643,6 +1286,84 @@ def _read_qa_spans_metadata_sheet(wb, target_sheet_name: str) -> dict[tuple[int,
     return result
 
 
+def _collect_edit_metadata_rows(
+    sheet_name: str,
+    df: pd.DataFrame,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> list[tuple[str, int, int, str, str]]:
+    rows: list[tuple[str, int, int, str, str]] = []
+    for (row_idx, col_idx), style in cell_styles.items():
+        if row_idx < 0 or col_idx < 0 or row_idx >= df.shape[0] or col_idx >= df.shape[1]:
+            continue
+        edited_by_raw = str(style.get("edited_by", "")).strip()
+        edited_at = _normalize_edit_timestamp(style.get("edited_at"))
+        if not edited_by_raw or not edited_at:
+            continue
+        rows.append(
+            (
+                str(sheet_name),
+                int(row_idx),
+                int(col_idx),
+                _normalize_username(edited_by_raw),
+                edited_at,
+            )
+        )
+    return rows
+
+
+def _write_edit_metadata_sheet(
+    wb,
+    sheet_name: str,
+    df: pd.DataFrame,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+):
+    if EDIT_METADATA_SHEET_NAME in wb.sheetnames:
+        stale = wb[EDIT_METADATA_SHEET_NAME]
+        wb.remove(stale)
+
+    rows = _collect_edit_metadata_rows(sheet_name, df, cell_styles)
+    if not rows:
+        return
+
+    meta_ws = wb.create_sheet(EDIT_METADATA_SHEET_NAME)
+    meta_ws.sheet_state = "veryHidden"
+    meta_ws.append(["sheet", "row", "col", "edited_by", "edited_at"])
+    for row in rows:
+        meta_ws.append(list(row))
+
+
+def _read_edit_metadata_sheet(wb, target_sheet_name: str) -> dict[tuple[int, int], dict[str, str]]:
+    result: dict[tuple[int, int], dict[str, str]] = {}
+    if EDIT_METADATA_SHEET_NAME not in wb.sheetnames:
+        return result
+
+    meta_ws = wb[EDIT_METADATA_SHEET_NAME]
+    for values in meta_ws.iter_rows(min_row=2, values_only=True):
+        if not values or len(values) < 5:
+            continue
+        sheet_name, row_idx, col_idx, edited_by, edited_at = values[:5]
+        if str(sheet_name) != str(target_sheet_name):
+            continue
+        try:
+            r = int(row_idx)
+            c = int(col_idx)
+        except Exception:
+            continue
+        if r < 0 or c < 0:
+            continue
+
+        edited_by_raw = str(edited_by or "").strip()
+        edited_at_text = _normalize_edit_timestamp(edited_at)
+        if not edited_by_raw or not edited_at_text:
+            continue
+
+        result[(r, c)] = {
+            "edited_by": _normalize_username(edited_by_raw),
+            "edited_at": edited_at_text,
+        }
+    return result
+
+
 def _is_effectively_white(color: t.Optional[QtGui.QColor], threshold: int = 242) -> bool:
     if color is None or not color.isValid() or color.alpha() == 0:
         return True
@@ -697,7 +1418,8 @@ def load_xlsx_dataframe_with_styles(
         return df, {}, resolved_name, [resolved_name], None
 
     wb = _load_workbook_with_rich_text(path)
-    sheet_names = [name for name in wb.sheetnames if name != QA_METADATA_SHEET_NAME]
+    hidden_meta_sheets = {QA_METADATA_SHEET_NAME, EDIT_METADATA_SHEET_NAME}
+    sheet_names = [name for name in wb.sheetnames if name not in hidden_meta_sheets]
     if not sheet_names:
         return pd.DataFrame(), {}, "Sheet1", [], None
 
@@ -716,6 +1438,7 @@ def load_xlsx_dataframe_with_styles(
     df = pd.read_excel(path, engine="openpyxl", sheet_name=target_sheet)
     theme_palette = _extract_excel_theme_palette(wb)
     qa_spans_metadata = _read_qa_spans_metadata_sheet(wb, target_sheet)
+    edit_metadata = _read_edit_metadata_sheet(wb, target_sheet)
 
     cell_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
     for r in range(df.shape[0]):
@@ -765,6 +1488,15 @@ def load_xlsx_dataframe_with_styles(
                 qa_spans = _extract_qa_spans_from_rich_text(cell.value, theme_palette)
             if qa_spans:
                 style["qa_spans"] = qa_spans
+
+            edit_meta = edit_metadata.get((r, c))
+            if edit_meta:
+                edited_by_raw = str(edit_meta.get("edited_by", "")).strip()
+                edited_at = _normalize_edit_timestamp(edit_meta.get("edited_at"))
+                if edited_by_raw:
+                    style["edited_by"] = _normalize_username(edited_by_raw)
+                if edited_at:
+                    style["edited_at"] = edited_at
 
             if style:
                 cell_styles[(r, c)] = style
@@ -834,6 +1566,7 @@ def write_xlsx_with_styles(
                     cell.value = _build_rich_text_value_for_cell(text_value, qa_spans, cell.font)
 
     _write_qa_spans_metadata_sheet(wb, ws.title, df, cell_styles)
+    _write_edit_metadata_sheet(wb, ws.title, df, cell_styles)
 
     wb.save(path)
 
@@ -860,6 +1593,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self.case_sensitive: bool = False
         self._is_dirty = False
         self._cell_styles: dict[tuple[int, int], dict[str, t.Any]] = cell_styles or {}
+        self._edit_actor = "Guest"
         self.source_format = source_format
         self.xlsx_sheet_name = xlsx_sheet_name
         self.xlsx_base_font = xlsx_base_font
@@ -904,6 +1638,38 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     def _cell_style(self, row: int, col: int) -> dict[str, t.Any]:
         return self._cell_styles.get((row, col), {})
 
+    def set_edit_actor(self, username: str):
+        self._edit_actor = _normalize_username(username)
+
+    def _stamp_cell_edit_metadata(
+        self,
+        row: int,
+        col: int,
+        *,
+        edited_by: t.Optional[str] = None,
+        edited_at: t.Optional[str] = None,
+    ):
+        key = (row, col)
+        style = dict(self._cell_styles.get(key, {}))
+        actor_raw = str(edited_by or "").strip()
+        actor = _normalize_username(actor_raw) if actor_raw else _normalize_username(self._edit_actor)
+        when = _normalize_edit_timestamp(edited_at)
+        if not when:
+            when = _now_edit_timestamp()
+        style["edited_by"] = actor
+        style["edited_at"] = when
+        self._cell_styles[key] = style
+
+    def cell_edit_metadata(self, row: int, col: int) -> t.Optional[tuple[str, str]]:
+        if row < 0 or col < 0:
+            return None
+        style = self._cell_style(row, col)
+        edited_by_raw = str(style.get("edited_by", "")).strip()
+        edited_at = _normalize_edit_timestamp(style.get("edited_at"))
+        if not edited_by_raw or not edited_at:
+            return None
+        return _normalize_username(edited_by_raw), edited_at
+
     def reorder_cell_styles(self, visual_order: list[int]):
         if not self._cell_styles:
             return
@@ -940,7 +1706,15 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             new_styles[(row - shift, col)] = style
         self._cell_styles = new_styles
 
-    def set_cell_qa_mark(self, row: int, col: int, mark: t.Optional[str]) -> bool:
+    def set_cell_qa_mark(
+        self,
+        row: int,
+        col: int,
+        mark: t.Optional[str],
+        *,
+        edited_by: t.Optional[str] = None,
+        edited_at: t.Optional[str] = None,
+    ) -> bool:
         if row < 0 or col < 0 or row >= self.data_row_count() or col >= self.data_column_count():
             return False
 
@@ -960,6 +1734,14 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         else:
             style.pop("qa_mark", None)
             style.pop("qa_bg", None)
+
+        actor_raw = str(edited_by or "").strip()
+        actor = _normalize_username(actor_raw) if actor_raw else _normalize_username(self._edit_actor)
+        when = _normalize_edit_timestamp(edited_at)
+        if not when:
+            when = _now_edit_timestamp()
+        style["edited_by"] = actor
+        style["edited_at"] = when
 
         if style:
             self._cell_styles[key] = style
@@ -983,6 +1765,9 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         col: int,
         spans: list[dict[str, t.Any]],
         emit_data_changed: bool = True,
+        *,
+        edited_by: t.Optional[str] = None,
+        edited_at: t.Optional[str] = None,
     ) -> bool:
         if row < 0 or col < 0 or row >= self.data_row_count() or col >= self.data_column_count():
             return False
@@ -1009,6 +1794,14 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             style["qa_spans"] = normalized
         else:
             style.pop("qa_spans", None)
+
+        actor_raw = str(edited_by or "").strip()
+        actor = _normalize_username(actor_raw) if actor_raw else _normalize_username(self._edit_actor)
+        when = _normalize_edit_timestamp(edited_at)
+        if not when:
+            when = _now_edit_timestamp()
+        style["edited_by"] = actor
+        style["edited_at"] = when
 
         if style:
             self._cell_styles[key] = style
@@ -1117,6 +1910,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                     .replace("\u2029", "\n")
                 )
             self._df.iat[r, c] = value
+            self._stamp_cell_edit_metadata(r, c)
             self.is_dirty = True
             self.dataChanged.emit(index, index, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
             self._rebuild_matches()  # update matches after edit
@@ -1220,6 +2014,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         val = str(self._df.iat[r, c])
         new_val = self._replace_case_insensitive(val, self.search_term, self.replace_term, count=1)
         self._df.iat[r, c] = new_val
+        self._stamp_cell_edit_metadata(r, c)
         self.is_dirty = True
         self.dataChanged.emit(m, m, [QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole])
         self._rebuild_matches()
@@ -1242,6 +2037,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                     new_val = self._replace_case_insensitive(s, st, self.replace_term, count=0)
                     if new_val != s:
                         self._df.iat[r, c] = new_val
+                        self._stamp_cell_edit_metadata(r, c)
                         count += 1
         if count:
             self.is_dirty = True
@@ -1620,6 +2416,28 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         doc.drawContents(painter, clip)
         
         painter.restore()
+
+        # Draw editor marker (small colored dot) in the lower-right corner.
+        if (
+            index.row() < self.model.data_row_count()
+            and index.column() < self.model.data_column_count()
+        ):
+            edit_meta = self.model.cell_edit_metadata(index.row(), index.column())
+            if edit_meta is not None:
+                edited_by, _ = edit_meta
+                marker_color = _edited_cell_color_for_username(edited_by)
+                if option.rect.width() >= 10 and option.rect.height() >= 10:
+                    dot_radius = 3.6
+                    center = QtCore.QPointF(
+                        float(option.rect.right() - 5),
+                        float(option.rect.bottom() - 5),
+                    )
+                    painter.save()
+                    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+                    painter.setPen(QtGui.QPen(marker_color.darker(175), 1))
+                    painter.setBrush(QtGui.QBrush(marker_color))
+                    painter.drawEllipse(center, dot_radius, dot_radius)
+                    painter.restore()
         
         
     def createEditor(self, parent, option, index):
@@ -1663,27 +2481,39 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
             model.set_cell_qa_spans(index.row(), index.column(), editor.extract_qa_spans())
         model.setData(index, editor.toPlainText(), QtCore.Qt.ItemDataRole.EditRole)
 class DragDropWidget(QtWidgets.QFrame):
-    def mousePressEvent(self, e: QtGui.QMouseEvent):
-        # Try to call parent's open dialog when clicked
-        parent = self.parent()
-        if parent and hasattr(parent, 'open_file_dialog'):
-            parent.open_file_dialog()
-        super().mousePressEvent(e)
-
     fileDropped = QtCore.pyqtSignal(Path)
+
+    def mousePressEvent(self, e: QtGui.QMouseEvent):
+        if getattr(self, "_drop_enabled", True) and e.button() == QtCore.Qt.MouseButton.LeftButton:
+            if self.icon.geometry().contains(e.position().toPoint()):
+                parent = self.parentWidget()
+                while parent is not None and not hasattr(parent, "open_file_dialog"):
+                    parent = parent.parentWidget()
+                if parent is not None:
+                    parent.open_file_dialog()
+        super().mousePressEvent(e)
 
     def __init__(self):
         super().__init__()
+        self._drop_enabled = True
         self.setAcceptDrops(True)
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.icon = QtWidgets.QLabel("🗂️Drop a CSV / XLS / XLSX / JSONL file here (open file if WSL)")
+        self.icon = QtWidgets.QLabel(DROP_HINT_TEXT)
         self.icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.icon.setStyleSheet("font-size: 22px;")
+        self.icon.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.icon)
 
+
+    def set_drop_enabled(self, enabled: bool):
+        self._drop_enabled = bool(enabled)
+        self.setAcceptDrops(self._drop_enabled)
+
     def dragEnterEvent(self, event: QtGui.QDragEnterEvent):
+        if not self._drop_enabled:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 if url.isLocalFile():
@@ -1694,6 +2524,9 @@ class DragDropWidget(QtWidgets.QFrame):
         event.ignore()
 
     def dropEvent(self, event: QtGui.QDropEvent):
+        if not self._drop_enabled:
+            event.ignore()
+            return
         for url in event.mimeData().urls():
             if url.isLocalFile():
                 path = Path(url.toLocalFile())
@@ -1707,6 +2540,7 @@ class WindowControls(QtWidgets.QWidget):
     maximizeRestoreRequested = QtCore.pyqtSignal()
     closeRequested = QtCore.pyqtSignal()
     backRequested = QtCore.pyqtSignal()
+    shareRequested = QtCore.pyqtSignal()
 
     def __init__(self, title: str = ""):
         super().__init__()
@@ -1721,6 +2555,18 @@ class WindowControls(QtWidgets.QWidget):
         self.title_lbl = QtWidgets.QLabel(title)
         self.title_lbl.setStyleSheet("font-weight: 600;")
         self.title_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        self.share_btn = QtWidgets.QToolButton()
+        self.share_btn.setText("\u2197 Share")
+        self.share_btn.setToolTip("Share")
+        self.share_btn.clicked.connect(self.shareRequested.emit)
+
+        self.share_count_lbl = QtWidgets.QLabel("0")
+        self.share_count_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.share_count_lbl.setMinimumWidth(20)
+        self.share_count_lbl.setStyleSheet(
+            "font-weight: 600; color: rgb(190, 190, 190); padding: 0px 4px;"
+        )
 
         self.min_btn = QtWidgets.QToolButton()
         self.min_btn.setText("—")
@@ -1737,17 +2583,56 @@ class WindowControls(QtWidgets.QWidget):
         self.close_btn.setToolTip("Close")
         self.close_btn.clicked.connect(self.closeRequested.emit)
 
+        self._left_balance = QtWidgets.QWidget()
+        self._left_balance.setFixedWidth(0)
+        self._left_balance.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        self._right_balance = QtWidgets.QWidget()
+        self._right_balance.setFixedWidth(0)
+        self._right_balance.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+
         # Left side: back button
         layout.addWidget(self.back_btn)
+        layout.addWidget(self._left_balance)
         layout.addStretch(1)
         
         # Center: title
         layout.addWidget(self.title_lbl)
         layout.addStretch(1)
+        layout.addWidget(self._right_balance)
         
-        # Right side: window controls
+        # Right side: share + live count + window controls
+        layout.addWidget(self.share_btn)
+        layout.addWidget(self.share_count_lbl)
         for b in (self.min_btn, self.max_btn, self.close_btn):
             layout.addWidget(b)
+
+    @staticmethod
+    def _visible_widget_width(widget: QtWidgets.QWidget) -> int:
+        if widget is None or not widget.isVisible():
+            return 0
+        return int(widget.sizeHint().width())
+
+    def sync_title_balance(self):
+        left_width = self._visible_widget_width(self.back_btn)
+        right_width = (
+            self._visible_widget_width(self.share_btn)
+            + self._visible_widget_width(self.share_count_lbl)
+            + self._visible_widget_width(self.min_btn)
+            + self._visible_widget_width(self.max_btn)
+            + self._visible_widget_width(self.close_btn)
+        )
+        self._left_balance.setFixedWidth(max(0, right_width - left_width))
+        self._right_balance.setFixedWidth(max(0, left_width - right_width))
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        self.sync_title_balance()
             
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -1845,6 +2730,31 @@ class SmoothScrollTableView(QtWidgets.QTableView):
         self._autoscroll_timer = QtCore.QTimer()
         self._autoscroll_timer.setInterval(16)  # ~60fps
         self._autoscroll_timer.timeout.connect(self._update_autoscroll)
+        self._remote_selections: dict[str, tuple[int, int]] = {}
+
+    def set_remote_selections(self, selections: dict[str, tuple[int, int]]):
+        normalized: dict[str, tuple[int, int]] = {}
+        for raw_name, raw_pos in (selections or {}).items():
+            name = _normalize_username(raw_name)
+            if not name:
+                continue
+            if not isinstance(raw_pos, (tuple, list)) or len(raw_pos) != 2:
+                continue
+            try:
+                row = int(raw_pos[0])
+                col = int(raw_pos[1])
+            except Exception:
+                continue
+            normalized[name] = (row, col)
+
+        if normalized != self._remote_selections:
+            self._remote_selections = normalized
+            self.viewport().update()
+
+    def clear_remote_selections(self):
+        if self._remote_selections:
+            self._remote_selections.clear()
+            self.viewport().update()
         
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         # Any button press while autoscrolling should stop it
@@ -1949,10 +2859,100 @@ class SmoothScrollTableView(QtWidgets.QTableView):
         self._autoscroll_timer.stop()
         self.viewport().unsetCursor()
         self.viewport().update()  # Clear any marker
-        
+
+    def _paint_remote_selections(self):
+        if not self._remote_selections:
+            return
+
+        model = self.model()
+        if model is None:
+            return
+
+        max_row = model.rowCount() - 1
+        max_col = model.columnCount() - 1
+        if max_row <= 0 or max_col <= 0:
+            return
+
+        grouped: dict[tuple[int, int], list[str]] = {}
+        for username, (row, col) in self._remote_selections.items():
+            if row < 0 or col < 0 or row >= max_row or col >= max_col:
+                continue
+            grouped.setdefault((row, col), []).append(username)
+
+        if not grouped:
+            return
+
+        painter = QtGui.QPainter(self.viewport())
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+
+        label_font = QtGui.QFont(self.font())
+        label_font.setBold(True)
+        label_font.setPointSize(max(7, label_font.pointSize() - 2))
+        painter.setFont(label_font)
+        metrics = QtGui.QFontMetrics(label_font)
+
+        for (row, col), users in grouped.items():
+            idx = model.index(row, col)
+            rect = self.visualRect(idx)
+            if not rect.isValid() or rect.isEmpty():
+                continue
+            if not self.viewport().rect().intersects(rect):
+                continue
+
+            users_sorted = sorted(users, key=lambda s: s.lower())
+            anchor_user = users_sorted[0]
+            color = _presence_color_for_username(anchor_user)
+
+            fill_color = QtGui.QColor(color)
+            fill_color.setAlpha(54)
+            border_color = QtGui.QColor(color)
+            border_color.setAlpha(220)
+
+            inner = rect.adjusted(1, 1, -1, -1)
+            painter.fillRect(inner, fill_color)
+            painter.setPen(QtGui.QPen(border_color, 2))
+            painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+            painter.drawRect(inner)
+
+            if len(users_sorted) == 1:
+                label_text = users_sorted[0]
+            else:
+                label_text = f"{users_sorted[0]} +{len(users_sorted) - 1}"
+
+            if rect.width() < 26 or rect.height() < 14:
+                continue
+
+            badge_height = max(13, metrics.height() + 2)
+            max_badge_width = max(24, rect.width() - 4)
+            text = metrics.elidedText(
+                label_text,
+                QtCore.Qt.TextElideMode.ElideRight,
+                max_badge_width - 8,
+            )
+            badge_width = min(max_badge_width, metrics.horizontalAdvance(text) + 8)
+            badge_x = rect.right() - badge_width - 2
+            badge_y = rect.top() + 2
+            if badge_y + badge_height > rect.bottom():
+                badge_y = rect.bottom() - badge_height - 1
+
+            badge_rect = QtCore.QRect(badge_x, badge_y, badge_width, badge_height)
+            badge_fill = QtGui.QColor(color)
+            badge_fill.setAlpha(235)
+            painter.setPen(QtGui.QPen(badge_fill.darker(150), 1))
+            painter.setBrush(badge_fill)
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            painter.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.white))
+            painter.drawText(
+                badge_rect.adjusted(4, 0, -4, 0),
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+                text,
+            )
+
     def paintEvent(self, event: QtGui.QPaintEvent):
         """Custom paint to draw 2D autoscroll marker when active"""
         super().paintEvent(event)
+        self._paint_remote_selections()
         
         if self._autoscroll_active and self._autoscroll_origin:
             painter = QtGui.QPainter(self.viewport())
@@ -2040,6 +3040,25 @@ class DataViewerPage(QtWidgets.QWidget):
         self.current_match_pos: int = -1
         self._xlsx_sheet_names: list[str] = []
         self._sheet_reload_in_progress = False
+        self._session_role = "local"
+        self._local_username = _read_local_os_username()
+        self._collab_server: t.Optional[CollaborationServer] = None
+        self._collab_client: t.Optional[CollaborationClient] = None
+        self._collab_session_token = ""
+        self._collab_share_link = ""
+        self._collab_client_connected = False
+        self._collab_connecting = False
+        self._collab_connected_guest_count = 0
+        self._collab_remote_selections: dict[str, tuple[int, int]] = {}
+        self._collab_last_sent_selection: t.Optional[tuple[int, int]] = None
+        self._table_selection_model: t.Optional[QtCore.QItemSelectionModel] = None
+        self._collab_last_notice_ts = 0.0
+        self._collab_is_applying_remote_snapshot = False
+        self._collab_revision = 0
+        self._collab_broadcast_timer = QtCore.QTimer(self)
+        self._collab_broadcast_timer.setSingleShot(True)
+        self._collab_broadcast_timer.setInterval(COLLAB_BROADCAST_DEBOUNCE_MS)
+        self._collab_broadcast_timer.timeout.connect(self._broadcast_current_snapshot)
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -2064,6 +3083,11 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
+        self.controls.share_btn.setToolTip("Start hosting and copy share link")
+        self.controls.share_btn.setVisible(False)
+        self.controls.share_btn.setEnabled(False)
+        self.controls.share_count_lbl.setVisible(False)
+        self.controls.shareRequested.connect(self._on_share_requested)
         self.controls.setFixedHeight(40)
 
         # Toolbar
@@ -2297,6 +3321,40 @@ class DataViewerPage(QtWidgets.QWidget):
             }
         """)
 
+        self.dd_outer_container = QtWidgets.QWidget()
+        dd_outer_layout = QtWidgets.QVBoxLayout(self.dd_outer_container)
+        dd_outer_layout.setContentsMargins(8, 0, 8, 0)
+        dd_outer_layout.setSpacing(0)
+        dd_outer_layout.addWidget(self.dd)
+
+        self.connect_container = QtWidgets.QWidget()
+        connect_outer = QtWidgets.QVBoxLayout(self.connect_container)
+        connect_outer.setContentsMargins(12, 8, 12, 10)
+        connect_outer.setSpacing(8)
+        connect_outer.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        self.connect_label = QtWidgets.QLabel("Connect to Host")
+        self.connect_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.connect_label.setStyleSheet("font-size: 14px; color: rgb(190, 190, 190);")
+        connect_outer.addWidget(self.connect_label)
+
+        connect_row = QtWidgets.QWidget()
+        connect_layout = QtWidgets.QHBoxLayout(connect_row)
+        connect_layout.setContentsMargins(0, 0, 0, 0)
+        connect_layout.setSpacing(6)
+
+        self.connect_input = QtWidgets.QLineEdit()
+        self.connect_input.setPlaceholderText(f"{COLLAB_LINK_SCHEME}://host:port/token")
+        self.connect_input.setMinimumWidth(320)
+        self.connect_input.returnPressed.connect(self._on_connect_submit)
+
+        self.connect_btn = QtWidgets.QPushButton("Connect")
+        self.connect_btn.clicked.connect(self._on_connect_submit)
+
+        connect_layout.addWidget(self.connect_input, 1)
+        connect_layout.addWidget(self.connect_btn)
+        connect_outer.addWidget(connect_row)
+
         # Status bar
         self.status = QtWidgets.QStatusBar()
         self.status.setFixedHeight(24)
@@ -2331,6 +3389,19 @@ class DataViewerPage(QtWidgets.QWidget):
         self.dirty_indicator.hide()
         self.status.addPermanentWidget(self.dirty_indicator)  # Right side of status bar
 
+        self.edit_meta_indicator = QtWidgets.QLabel("")
+        self.edit_meta_indicator.setStyleSheet(
+            """
+            QLabel {
+                color: rgb(180, 180, 180);
+                padding: 2px 8px;
+            }
+            """
+        )
+        self.edit_meta_indicator.setMinimumWidth(260)
+        self.edit_meta_indicator.hide()
+        self.status.addPermanentWidget(self.edit_meta_indicator)  # Lower-right style metadata
+
         # Timer for updating elapsed time & progress
         self.bg_timer = QtCore.QTimer()
         self.bg_timer.setInterval(500)  # Update every 500ms for smoother progress
@@ -2345,13 +3416,15 @@ class DataViewerPage(QtWidgets.QWidget):
         # Add everything to layout
         outer.addWidget(self.controls)
         outer.addWidget(self.toolbar)
-        outer.addWidget(self.dd, 1)  # Give it stretch factor
+        outer.addWidget(self.dd_outer_container, 1)  # Keep small horizontal margin
+        outer.addWidget(self.connect_container)
         outer.addWidget(self.table, 1)  # Give it stretch factor
         outer.addWidget(self.status)
         
         self.table.hide()
         self.toolbar.hide()
         self.status.hide()
+        self._apply_session_mode_ui()
         
     def refresh_dims_display(self):
         """Updates the status bar with current row and column counts in bold."""
@@ -2363,12 +3436,704 @@ class DataViewerPage(QtWidgets.QWidget):
         else:
             self.size_label.clear()
 
+    def _is_guest_mode(self) -> bool:
+        return self._session_role == "guest"
+
+    def _on_connect_submit(self):
+        self._on_connect_requested(self.connect_input.text().strip())
+
+    def _set_connect_controls_enabled(self, enabled: bool):
+        self.connect_input.setEnabled(enabled)
+        self.connect_btn.setEnabled(enabled)
+
+    def _show_collab_notice(self, text: str, timeout_ms: int = 3800):
+        if not text:
+            return
+        self._collab_last_notice_ts = time.time()
+        self.status.showMessage(text, timeout_ms)
+        try:
+            local_pos = QtCore.QPoint(max(8, self.controls.width() - 240), self.controls.height() - 2)
+            global_pos = self.controls.mapToGlobal(local_pos)
+            QtWidgets.QToolTip.showText(global_pos, text, self.controls, self.controls.rect(), timeout_ms)
+        except Exception:
+            pass
+
+    def _bind_table_selection_model(self):
+        if self._table_selection_model is not None:
+            try:
+                self._table_selection_model.currentChanged.disconnect(self._on_table_current_changed)
+            except Exception:
+                pass
+            try:
+                self._table_selection_model.selectionChanged.disconnect(self._on_table_selection_changed)
+            except Exception:
+                pass
+
+        self._table_selection_model = self.table.selectionModel()
+        if self._table_selection_model is None:
+            self._update_edit_meta_indicator()
+            return
+
+        self._table_selection_model.currentChanged.connect(self._on_table_current_changed)
+        self._table_selection_model.selectionChanged.connect(self._on_table_selection_changed)
+        self._update_edit_meta_indicator()
+
+    def _on_table_current_changed(self, _current: QtCore.QModelIndex, _previous: QtCore.QModelIndex):
+        self._update_edit_meta_indicator()
+        self._queue_collab_presence_broadcast()
+
+    def _on_table_selection_changed(self, _selected: QtCore.QItemSelection, _deselected: QtCore.QItemSelection):
+        self._update_edit_meta_indicator()
+        self._queue_collab_presence_broadcast()
+
+    def _local_selected_cell(self) -> t.Optional[tuple[int, int]]:
+        if not self.model:
+            return None
+
+        idx = self.table.currentIndex()
+        if not idx.isValid():
+            sel_model = self.table.selectionModel()
+            if sel_model is not None:
+                selected = sel_model.selectedIndexes()
+                if selected:
+                    idx = selected[0]
+
+        if not idx.isValid():
+            return None
+
+        row = int(idx.row())
+        col = int(idx.column())
+        if row < 0 or col < 0:
+            return None
+        if row >= self.model.data_row_count() or col >= self.model.data_column_count():
+            return None
+        return row, col
+
+    def _selected_edit_metadata_text(self) -> str:
+        if not self.model:
+            return ""
+        pos = self._local_selected_cell()
+        if pos is None:
+            return ""
+        metadata = self.model.cell_edit_metadata(pos[0], pos[1])
+        if metadata is None:
+            return ""
+        edited_by, edited_at = metadata
+        return f"Edited by {edited_by} at {edited_at}"
+
+    def _update_edit_meta_indicator(self):
+        text = self._selected_edit_metadata_text()
+        if text:
+            self.edit_meta_indicator.setText(text)
+            self.edit_meta_indicator.show()
+        else:
+            self.edit_meta_indicator.hide()
+
+    def _sync_remote_selection_overlay(self):
+        self.table.set_remote_selections(dict(self._collab_remote_selections))
+
+    def _clear_remote_selections(self):
+        self._collab_remote_selections.clear()
+        self.table.clear_remote_selections()
+
+    def _queue_collab_presence_broadcast(self, force: bool = False):
+        if self._collab_is_applying_remote_snapshot:
+            return
+        if not self.model:
+            return
+
+        selected_cell = self._local_selected_cell()
+        if (not force) and selected_cell == self._collab_last_sent_selection:
+            return
+        self._collab_last_sent_selection = selected_cell
+
+        payload = {
+            "username": self._local_username,
+            "row": -1,
+            "col": -1,
+        }
+        if selected_cell is not None:
+            payload["row"] = int(selected_cell[0])
+            payload["col"] = int(selected_cell[1])
+
+        if self._session_role == "host" and self._collab_server is not None:
+            self._collab_server.broadcast_presence(payload)
+            return
+
+        if (
+            self._session_role == "guest"
+            and self._collab_client is not None
+            and self._collab_client_connected
+        ):
+            self._collab_client.send_presence(payload)
+
+    def _apply_collab_presence_payload(self, payload: dict[str, t.Any]) -> bool:
+        if not isinstance(payload, dict):
+            return False
+
+        username = _normalize_username(payload.get("username"))
+        if not username or username == self._local_username:
+            return False
+
+        try:
+            row = int(payload.get("row", -1))
+            col = int(payload.get("col", -1))
+        except Exception:
+            row, col = -1, -1
+
+        if row < 0 or col < 0:
+            if username in self._collab_remote_selections:
+                self._collab_remote_selections.pop(username, None)
+                self._sync_remote_selection_overlay()
+            return True
+
+        self._collab_remote_selections[username] = (row, col)
+        self._sync_remote_selection_overlay()
+        return True
+
+    def _apply_session_mode_ui(self):
+        has_model = self.model is not None
+        is_guest = self._is_guest_mode()
+
+        self.controls.back_btn.setVisible(has_model)
+        self.controls.back_btn.setEnabled(has_model)
+
+        show_share = has_model and not is_guest
+        guest_count = max(0, int(self._collab_connected_guest_count))
+        total_people = 1 + guest_count
+
+        if self._session_role == "host" and guest_count > 0:
+            self.controls.share_btn.setText(f"\u2197 Share \u2022 {total_people}")
+        else:
+            self.controls.share_btn.setText("\u2197 Share")
+
+        self.controls.share_btn.setVisible(show_share)
+        self.controls.share_btn.setEnabled(show_share)
+        self.controls.share_count_lbl.setVisible(show_share)
+        self.controls.share_count_lbl.setText(str(guest_count))
+        self.controls.share_count_lbl.setToolTip("Connected guests")
+        if self._session_role == "host":
+            self.controls.share_btn.setToolTip("Copy the current share link")
+        elif is_guest:
+            self.controls.share_btn.setToolTip("Guests cannot host")
+        else:
+            self.controls.share_btn.setToolTip("Start hosting and copy share link")
+
+        self.btn_open.setEnabled(not is_guest)
+        self.dd.set_drop_enabled(not is_guest)
+        self.connect_container.setVisible(not has_model)
+        self._set_connect_controls_enabled((not self._collab_connecting) and (not self._collab_client_connected))
+        self.sheet_combo.setEnabled((not is_guest) and len(self._xlsx_sheet_names) > 1)
+        if not has_model:
+            self.edit_meta_indicator.hide()
+        self.controls.sync_title_balance()
+
+    def _attach_collab_model_signals(self, model: DataFrameModel):
+        model.dataChanged.connect(self._on_collab_model_mutation)
+        model.rowsInserted.connect(self._on_collab_model_mutation)
+        model.rowsRemoved.connect(self._on_collab_model_mutation)
+        model.columnsInserted.connect(self._on_collab_model_mutation)
+        model.columnsRemoved.connect(self._on_collab_model_mutation)
+        model.layoutChanged.connect(self._on_collab_model_mutation)
+        model.headerDataChanged.connect(self._on_collab_model_mutation)
+
+    def _on_collab_model_mutation(self, *args):
+        if self._collab_is_applying_remote_snapshot:
+            return
+        self._queue_collab_snapshot_broadcast(immediate=False)
+
+    def _queue_collab_snapshot_broadcast(self, immediate: bool = False):
+        if self._collab_is_applying_remote_snapshot:
+            return
+        if not self.model:
+            return
+        if self._session_role == "host":
+            if self._collab_server is None:
+                return
+        elif self._session_role == "guest":
+            if self._collab_client is None or not self._collab_client_connected:
+                return
+        else:
+            return
+
+        if immediate:
+            self._collab_broadcast_timer.stop()
+            self._broadcast_current_snapshot()
+        else:
+            self._collab_broadcast_timer.start()
+
+    def _build_collab_snapshot(self) -> t.Optional[dict[str, t.Any]]:
+        if not self.model:
+            return None
+
+        columns = [str(col) for col in list(self.model.df.columns)]
+        rows: list[list[t.Any]] = []
+        for raw_row in self.model.df.values.tolist():
+            rows.append([_json_safe_value(value) for value in raw_row])
+
+        sheet_names = list(self._xlsx_sheet_names)
+        if not sheet_names and self.model.xlsx_sheet_name:
+            sheet_names = [str(self.model.xlsx_sheet_name)]
+
+        display_name = self.current_path.name if self.current_path else self.controls.title_lbl.text().strip()
+        if not display_name:
+            display_name = "Shared data"
+
+        snapshot = {
+            "protocol": COLLAB_PROTOCOL_VERSION,
+            "revision": int(self._collab_revision),
+            "display_name": display_name,
+            "source_format": self.model.source_format or ".csv",
+            "sheet_name": self.model.xlsx_sheet_name or "Sheet1",
+            "sheet_names": sheet_names,
+            "columns": columns,
+            "rows": rows,
+            "cell_styles": _serialize_cell_styles(self.model.cell_styles()),
+            "is_dirty": bool(self.model.is_dirty),
+        }
+        return snapshot
+
+    def _broadcast_current_snapshot(self):
+        if self._collab_is_applying_remote_snapshot:
+            return
+
+        snapshot = self._build_collab_snapshot()
+        if not snapshot:
+            return
+
+        if self._session_role == "host" and self._collab_server is not None:
+            self._collab_revision += 1
+            snapshot["revision"] = int(self._collab_revision)
+            self._collab_server.broadcast_snapshot(snapshot)
+            return
+
+        if (
+            self._session_role == "guest"
+            and self._collab_client is not None
+            and self._collab_client_connected
+        ):
+            snapshot["revision"] = int(self._collab_revision)
+            self._collab_client.send_snapshot(snapshot)
+
+    def _install_dataframe_model(
+        self,
+        df: pd.DataFrame,
+        *,
+        cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+        source_format: str,
+        xlsx_sheet_name: t.Optional[str],
+        xlsx_base_font,
+        loaded_sheet_names: list[str],
+        title: str,
+        status_message: str,
+        current_path: t.Optional[Path],
+        mark_dirty: bool = False,
+    ):
+        self.current_path = current_path
+        self.controls.title_lbl.setText(title)
+        self.window().setWindowTitle(title)
+
+        model = DataFrameModel(
+            df,
+            cell_styles=cell_styles,
+            source_format=source_format,
+            xlsx_sheet_name=xlsx_sheet_name or "Sheet1",
+            xlsx_base_font=xlsx_base_font,
+        )
+        model.set_edit_actor(self._local_username)
+        model._is_dark = self.mode_toggle.isChecked()
+        model.dataChangedHard.connect(self.table.viewport().update)
+        model.matchesChanged.connect(self._on_matches_changed)
+        model.dirtyStateChanged.connect(self.update_dirty_indicator)
+        model.dataChanged.connect(self._on_cell_data_changed)
+        self._attach_collab_model_signals(model)
+        self.model = model
+
+        self.table.setModel(self.model)
+        self._bind_table_selection_model()
+        self._sync_remote_selection_overlay()
+        self.refresh_dims_display()
+        self.table.setItemDelegate(HighlightDelegate(self.model))
+
+        if source_format in [".xlsx", ".xls"]:
+            self._set_sheet_selector(loaded_sheet_names, xlsx_sheet_name)
+        else:
+            self._set_sheet_selector([], None)
+
+        if self.model._is_dark:
+            self.table.setStyleSheet("QTableView { gridline-color: rgb(80, 80, 80); }")
+            self._apply_scrollbar_style()
+        else:
+            self.table.setStyleSheet("QTableView { gridline-color: rgb(0, 0, 0); }")
+            self._apply_scrollbar_style()
+
+        self.table.show()
+        self.dd_outer_container.hide()
+        self.connect_container.hide()
+        self.toolbar.show()
+        self.status.show()
+        self.controls.back_btn.setEnabled(True)
+        self.status.showMessage(status_message)
+
+        self.autosize_columns(force=True)
+        QtCore.QTimer.singleShot(50, self._autosize_all_rows)
+
+        self.current_match_pos = -1
+        self.base_font_size = 10
+        self.font_scale = 1.0
+        self.model.set_search_term("")
+        self._on_matches_changed(0)
+
+        self.model.is_dirty = bool(mark_dirty)
+        self.update_dirty_indicator()
+        self._update_edit_meta_indicator()
+        self._apply_session_mode_ui()
+        self.window().showMaximized()
+        QtCore.QTimer.singleShot(0, lambda: self._queue_collab_presence_broadcast(force=True))
+
+    def _apply_collab_snapshot(self, snapshot: dict[str, t.Any], source_label: str) -> bool:
+        if not isinstance(snapshot, dict):
+            return False
+
+        raw_columns = snapshot.get("columns")
+        raw_rows = snapshot.get("rows")
+        if not isinstance(raw_columns, list) or not isinstance(raw_rows, list):
+            return False
+
+        columns = [str(col) for col in raw_columns]
+        normalized_rows: list[list[t.Any]] = []
+        for row in raw_rows:
+            values = list(row) if isinstance(row, list) else []
+            if len(values) < len(columns):
+                values.extend([None] * (len(columns) - len(values)))
+            elif len(values) > len(columns):
+                values = values[: len(columns)]
+            normalized_rows.append(values)
+
+        df = pd.DataFrame(normalized_rows, columns=columns)
+        cell_styles = _deserialize_cell_styles(snapshot.get("cell_styles"))
+        source_format = str(snapshot.get("source_format") or ".csv").lower()
+        sheet_name = str(snapshot.get("sheet_name") or "Sheet1")
+
+        raw_sheet_names = snapshot.get("sheet_names")
+        if isinstance(raw_sheet_names, list):
+            loaded_sheet_names = [str(name) for name in raw_sheet_names if str(name).strip()]
+        else:
+            loaded_sheet_names = []
+        if not loaded_sheet_names:
+            loaded_sheet_names = [sheet_name]
+
+        if self._session_role == "host" and self.current_path is not None:
+            display_name = self.current_path.name
+        else:
+            display_name = str(snapshot.get("display_name") or "Shared data")
+        revision = snapshot.get("revision")
+        if isinstance(revision, int):
+            self._collab_revision = max(self._collab_revision, revision)
+
+        self._collab_is_applying_remote_snapshot = True
+        try:
+            self._install_dataframe_model(
+                df,
+                cell_styles=cell_styles,
+                source_format=source_format,
+                xlsx_sheet_name=sheet_name,
+                xlsx_base_font=None,
+                loaded_sheet_names=loaded_sheet_names,
+                title=display_name,
+                status_message=f"Synced from {source_label}",
+                current_path=self.current_path,
+                mark_dirty=bool(snapshot.get("is_dirty", False)),
+            )
+        finally:
+            self._collab_is_applying_remote_snapshot = False
+        return True
+
+    def _start_host_session(self) -> bool:
+        if self._is_guest_mode():
+            return False
+        if not self.model:
+            return False
+
+        if self._collab_server is None:
+            token = secrets.token_urlsafe(12)
+            server = CollaborationServer(token, parent=self)
+            server.snapshotReceived.connect(self._on_collab_server_snapshot_received)
+            server.presenceReceived.connect(self._on_collab_server_presence_received)
+            server.errorOccurred.connect(self._on_collab_server_error)
+            server.clientCountChanged.connect(self._on_collab_server_client_count_changed)
+            server.guestConnected.connect(self._on_collab_guest_connected)
+            server.guestDisconnected.connect(self._on_collab_guest_disconnected)
+            if not server.start(0):
+                return False
+            self._collab_server = server
+            self._collab_session_token = token
+            host_ip = _guess_local_ipv4()
+            self._collab_share_link = _build_collab_link(host_ip, int(server.port or 0), token)
+
+        self._session_role = "host"
+        self._apply_session_mode_ui()
+        self._queue_collab_snapshot_broadcast(immediate=True)
+        self._queue_collab_presence_broadcast(force=True)
+        return True
+
+    def _on_share_requested(self):
+        if self._is_guest_mode():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Guest Session",
+                "Guests cannot host sessions. Disconnect first to host a file.",
+            )
+            return
+        if not self.model:
+            QtWidgets.QMessageBox.information(self, "Nothing to Share", "Open a file before sharing.")
+            return
+        if not self._start_host_session():
+            QtWidgets.QMessageBox.warning(self, "Share Error", "Could not start host session.")
+            return
+
+        clipboard = QtWidgets.QApplication.clipboard()
+        clipboard.setText(self._collab_share_link)
+        self.status.showMessage("Share link copied to clipboard.", 3500)
+
+    def _on_connect_requested(self, raw_link: str):
+        parsed = _parse_collab_link(raw_link)
+        if parsed is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Link",
+                f"Paste a valid link: {COLLAB_LINK_SCHEME}://host:port/token",
+            )
+            return
+
+        if self._session_role == "host":
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Switch to Guest",
+                "You are hosting right now. Stop hosting and connect as a guest?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+
+        if self.model and self._session_role != "guest":
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Replace Current Data",
+                "Connecting to a host will replace your current local data. Continue?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+
+        self._stop_collaboration()
+        if self.model is not None:
+            self.table.setModel(None)
+            self._bind_table_selection_model()
+            self.model = None
+            self.current_match_pos = -1
+            self.refresh_dims_display()
+            self._set_sheet_selector([], None)
+            self.dirty_indicator.hide()
+        self.current_path = None
+        self.toolbar.hide()
+        self.status.hide()
+        self.table.hide()
+        self.dd_outer_container.show()
+        self.connect_container.show()
+        self.controls.back_btn.setEnabled(False)
+
+        host, port, token = parsed
+        client = CollaborationClient(host, port, token, username=self._local_username, parent=self)
+        client.connectedChanged.connect(self._on_collab_client_connected_changed)
+        client.errorOccurred.connect(self._on_collab_client_error)
+        client.snapshotReceived.connect(self._on_collab_client_snapshot_received)
+        client.presenceReceived.connect(self._on_collab_client_presence_received)
+        self._collab_client = client
+        self._session_role = "guest"
+        self._collab_client_connected = False
+        self._collab_connecting = True
+        self.dd.icon.setText("Connecting to host...")
+        self._apply_session_mode_ui()
+        client.start()
+
+    def _on_collab_client_connected_changed(self, connected: bool):
+        self._collab_client_connected = bool(connected)
+        self._collab_connecting = False
+        if connected:
+            self._session_role = "guest"
+            self._show_collab_notice(f"Connected as {self._local_username}. Waiting for shared file...", 4200)
+            self._queue_collab_presence_broadcast(force=True)
+        else:
+            if self._session_role == "guest" and self._collab_client is not None:
+                self._session_role = "local"
+                self._set_connect_controls_enabled(True)
+                if self.model is None:
+                    self.dd.icon.setText("Drop a file or connect to a host")
+            if self._collab_client is not None and not self._collab_client.is_connected():
+                self._collab_client = None
+            self._collab_last_sent_selection = None
+            self._clear_remote_selections()
+        self._apply_session_mode_ui()
+
+    def _on_collab_client_error(self, message: str):
+        self._collab_connecting = False
+        if message:
+            self.status.showMessage(message, 5000)
+        if self._session_role == "guest" and self.model is None:
+            self.dd.icon.setText("Connection failed. Paste a host link and retry.")
+            self._set_connect_controls_enabled(True)
+        self._apply_session_mode_ui()
+
+    def _on_collab_server_error(self, message: str):
+        if message:
+            self.status.showMessage(message, 5000)
+
+    def _on_collab_guest_connected(self, username: str, count: int):
+        self._collab_connected_guest_count = max(0, int(count))
+        self._apply_session_mode_ui()
+        if self._session_role == "host":
+            safe_username = _normalize_username(username)
+            self._show_collab_notice(f"{safe_username} has connected!", 4200)
+            self._queue_collab_snapshot_broadcast(immediate=True)
+            self._queue_collab_presence_broadcast(force=True)
+
+    def _on_collab_guest_disconnected(self, username: str, count: int):
+        self._collab_connected_guest_count = max(0, int(count))
+        safe_username = _normalize_username(username)
+        self._collab_remote_selections.pop(safe_username, None)
+        self._sync_remote_selection_overlay()
+        self._apply_session_mode_ui()
+        if self._session_role == "host":
+            self._show_collab_notice(f"{safe_username} has disconnected.", 3600)
+            if self._collab_server is not None:
+                self._collab_server.broadcast_presence(
+                    {
+                        "username": safe_username,
+                        "row": -1,
+                        "col": -1,
+                    }
+                )
+
+    def _on_collab_server_client_count_changed(self, count: int):
+        previous_count = int(self._collab_connected_guest_count)
+        self._collab_connected_guest_count = max(0, int(count))
+        self._apply_session_mode_ui()
+        if self._session_role == "host":
+            # Fallback in case guest name signal was not received.
+            now = time.time()
+            if count > previous_count and (now - self._collab_last_notice_ts) > 0.8:
+                self._show_collab_notice(f"A guest has connected. {count} online.", 3200)
+            elif count < previous_count and (now - self._collab_last_notice_ts) > 0.8:
+                self._show_collab_notice(f"A guest disconnected. {count} online.", 3200)
+
+    def _on_collab_server_presence_received(self, payload: dict[str, t.Any]):
+        if self._session_role != "host":
+            return
+        if not isinstance(payload, dict):
+            return
+        if self._apply_collab_presence_payload(payload):
+            if self._collab_server is not None:
+                self._collab_server.broadcast_presence(payload)
+
+    def _on_collab_client_presence_received(self, payload: dict[str, t.Any]):
+        if self._session_role != "guest":
+            return
+        self._apply_collab_presence_payload(payload)
+
+    def _on_collab_server_snapshot_received(self, payload: dict[str, t.Any]):
+        if self._session_role != "host":
+            return
+        if self._apply_collab_snapshot(payload, "guest"):
+            self._queue_collab_snapshot_broadcast(immediate=True)
+
+    def _on_collab_client_snapshot_received(self, payload: dict[str, t.Any]):
+        if self._session_role != "guest":
+            return
+        self._apply_collab_snapshot(payload, "host")
+
+    def _stop_collaboration(self):
+        self._collab_broadcast_timer.stop()
+
+        if self._collab_server is not None:
+            try:
+                self._collab_server.snapshotReceived.disconnect(self._on_collab_server_snapshot_received)
+            except Exception:
+                pass
+            try:
+                self._collab_server.presenceReceived.disconnect(self._on_collab_server_presence_received)
+            except Exception:
+                pass
+            try:
+                self._collab_server.errorOccurred.disconnect(self._on_collab_server_error)
+            except Exception:
+                pass
+            try:
+                self._collab_server.clientCountChanged.disconnect(self._on_collab_server_client_count_changed)
+            except Exception:
+                pass
+            try:
+                self._collab_server.guestConnected.disconnect(self._on_collab_guest_connected)
+            except Exception:
+                pass
+            try:
+                self._collab_server.guestDisconnected.disconnect(self._on_collab_guest_disconnected)
+            except Exception:
+                pass
+            self._collab_server.stop()
+            self._collab_server = None
+
+        if self._collab_client is not None:
+            if self._session_role == "guest" and self._collab_client_connected:
+                try:
+                    self._collab_client.send_presence(
+                        {
+                            "username": self._local_username,
+                            "row": -1,
+                            "col": -1,
+                        }
+                    )
+                except Exception:
+                    pass
+            try:
+                self._collab_client.connectedChanged.disconnect(self._on_collab_client_connected_changed)
+            except Exception:
+                pass
+            try:
+                self._collab_client.errorOccurred.disconnect(self._on_collab_client_error)
+            except Exception:
+                pass
+            try:
+                self._collab_client.snapshotReceived.disconnect(self._on_collab_client_snapshot_received)
+            except Exception:
+                pass
+            try:
+                self._collab_client.presenceReceived.disconnect(self._on_collab_client_presence_received)
+            except Exception:
+                pass
+            self._collab_client.stop()
+            self._collab_client = None
+
+        self._collab_client_connected = False
+        self._collab_connecting = False
+        self._collab_last_sent_selection = None
+        self._collab_connected_guest_count = 0
+        self._clear_remote_selections()
+        self._collab_session_token = ""
+        self._collab_share_link = ""
+        self._collab_revision = 0
+        self._session_role = "local"
+        self._apply_session_mode_ui()
+
+    def shutdown(self):
+        self._stop_collaboration()
+
     def _set_sheet_selector(self, sheet_names: list[str], selected_sheet: t.Optional[str]):
         self._xlsx_sheet_names = sheet_names
         has_any = len(sheet_names) > 0
         self.sheet_label.setVisible(True)
         self.sheet_combo.setVisible(True)
-        self.sheet_combo.setEnabled(has_any and len(sheet_names) > 1)
+        self.sheet_combo.setEnabled((not self._is_guest_mode()) and has_any and len(sheet_names) > 1)
 
         self.sheet_combo.blockSignals(True)
         self.sheet_combo.clear()
@@ -2384,6 +4149,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self.sheet_combo.blockSignals(False)
 
     def _on_sheet_changed(self, sheet_name: str):
+        if self._is_guest_mode():
+            return
         if self._sheet_reload_in_progress:
             return
         if not sheet_name or not self.current_path or self.current_path.suffix.lower() not in [".xlsx", ".xls"]:
@@ -2434,9 +4201,11 @@ class DataViewerPage(QtWidgets.QWidget):
                 
     def reset_viewer(self):
         """Clear all loaded data and return to drag-and-drop screen"""
+        self._stop_collaboration()
         # Clear the model
         if self.model:
             self.table.setModel(None)
+            self._bind_table_selection_model()
             self.model = None
         
         # Reset UI state
@@ -2462,9 +4231,12 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Show drag-and-drop, hide table
         self.table.hide()
-        self.dd.show()
+        self.dd_outer_container.show()
+        self.connect_container.show()
         self.controls.back_btn.setEnabled(False)
-        self.dd.icon.setText("🗂️Drop a CSV / XLS / XLSX / JSONL file here")     
+        self._set_connect_controls_enabled(True)
+        self._apply_session_mode_ui()
+        self.dd.icon.setText(DROP_HINT_TEXT)
         
                
     def _show_background_indicator(self, task_name: str, total_rows: int, current_row: int = 0):
@@ -2790,6 +4562,14 @@ class DataViewerPage(QtWidgets.QWidget):
     
     
     def load_path(self, path: Path, xlsx_sheet_name: t.Optional[str] = None):
+        if self._is_guest_mode():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Guest Session",
+                "Guests cannot open local files while connected to a host.",
+            )
+            return
+
         self._hide_background_indicator()
         self.dd.icon.setText("Loading...")
         QtWidgets.QApplication.processEvents()
@@ -2831,75 +4611,41 @@ class DataViewerPage(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
             return
-    
-        self.current_path = path
+
         filename = path.name
-        self.controls.title_lbl.setText(filename)
-        self.window().setWindowTitle(f"{filename}")
-        
-        self.model = DataFrameModel(
+        if path.suffix.lower() in [".xlsx", ".xls"]:
+            status_message = (
+                f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols  |  Sheet: {selected_sheet_name}"
+            )
+        else:
+            status_message = f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols"
+
+        self._install_dataframe_model(
             df,
             cell_styles=cell_styles,
             source_format=path.suffix.lower(),
             xlsx_sheet_name=selected_sheet_name,
             xlsx_base_font=xlsx_base_font,
+            loaded_sheet_names=loaded_sheet_names,
+            title=filename,
+            status_message=status_message,
+            current_path=path,
+            mark_dirty=False,
         )
-        self.model._is_dark = self.mode_toggle.isChecked()
-        self.model.dataChangedHard.connect(self.table.viewport().update)
-        self.model.matchesChanged.connect(self._on_matches_changed)
-        self.model.dirtyStateChanged.connect(self.update_dirty_indicator)
-        self.update_dirty_indicator()
-        
-        # === NEW: Connect dataChanged for cell edit handling ===
-        self.model.dataChanged.connect(self._on_cell_data_changed)
-        
-        self.table.setModel(self.model)
-        self.refresh_dims_display()
-        self.table.setItemDelegate(HighlightDelegate(self.model))
-        if path.suffix.lower() in [".xlsx", ".xls"]:
-            self._set_sheet_selector(loaded_sheet_names, selected_sheet_name)
-        else:
-            self._set_sheet_selector([], None)
-        
-        # Style setup
-        if self.model._is_dark:
-            self.table.setStyleSheet("QTableView { gridline-color: rgb(80, 80, 80); }")
-            self._apply_scrollbar_style()
-        else:
-            self.table.setStyleSheet("QTableView { gridline-color: rgb(0, 0, 0); }")
-            self._apply_scrollbar_style()
-        
-        # === NEW: Efficient initialization ===
-        self.table.show()
-        self.dd.hide()
-        self.toolbar.show()
-        self.status.show()
-        self.controls.back_btn.setEnabled(True)
-        if path.suffix.lower() in [".xlsx", ".xls"]:
-            self.status.showMessage(
-                f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols  |  Sheet: {selected_sheet_name}"
-            )
-        else:
-            self.status.showMessage(f"Loaded: {path}  |  {df.shape[0]} rows x {df.shape[1]} cols")
-        
-        # Size columns first (fast)
-        self.autosize_columns(force=True)
-        
-        # Defer row sizing - let UI paint first
-        QtCore.QTimer.singleShot(50, self._autosize_all_rows)
-        
-        # Reset search state
-        self.current_match_pos = -1
-        self.base_font_size = 10
-        self.font_scale = 1.0
-        self.model.set_search_term("")
-        self._on_matches_changed(0)
-        
-        # Enter full screen AFTER file is loaded
-        self.window().showMaximized()
+
+        if self._session_role == "host":
+            self._queue_collab_snapshot_broadcast(immediate=True)
 
     def open_file_dialog(self):
         """Open new file with unsaved changes check"""
+        if self._is_guest_mode():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Guest Session",
+                "Guests cannot open local files while connected to a host.",
+            )
+            return
+
         # Check dirty state BEFORE closing
         if self.model and self.model.is_dirty:
             reply = QtWidgets.QMessageBox.question(
@@ -2943,13 +4689,31 @@ class DataViewerPage(QtWidgets.QWidget):
         self._autosize_all_rows()  # Recalculate all rows after font change
         
     def save_file(self):
-        if not self.model or not self.current_path:
+        if not self.model:
             QtWidgets.QMessageBox.information(self, "Nothing to save", "Open a file first.")
             return False
+
+        target_path = self.current_path
+        if target_path is None:
+            base_name = self.controls.title_lbl.text().strip() or "shared_data"
+            default_name = f"{Path(base_name).stem or 'shared_data'}.csv"
+            picked, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self,
+                "Save File",
+                str(Path.home() / default_name),
+                "Data Files (*.csv *.xls *.xlsx *.jsonl)",
+            )
+            if not picked:
+                return False
+            target_path = Path(picked)
+            if target_path.suffix.lower() not in [".csv", ".xls", ".xlsx", ".jsonl"]:
+                target_path = target_path.with_suffix(".csv")
+            self.current_path = target_path
+
         try:
-            self._write_dataframe(self.current_path, self.model)
+            self._write_dataframe(target_path, self.model)
             self.model.is_dirty = False
-            self.status.showMessage(f"Saved to {self.current_path}")
+            self.status.showMessage(f"Saved to {target_path}")
             return True
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
@@ -3303,6 +5067,7 @@ class DataViewerPage(QtWidgets.QWidget):
             # Recalculate just the changed rows
             for row in range(top_left.row(), bottom_right.row() + 1):
                 self._resize_row_with_padding(row)
+        self._update_edit_meta_indicator()
 
     # === NEW: Handle scrolling for on-demand row sizing ===
     def _on_scroll(self, value):
@@ -3594,6 +5359,7 @@ class DataViewerPage(QtWidgets.QWidget):
                 self.status.showMessage(f"Marked R{row}C{col} as ✗", 2000)
             else:
                 self.status.showMessage(f"Cleared mark on R{row}C{col}", 2000)
+            self._update_edit_meta_indicator()
 
     def _rename_column(self, logical_index: int):
         """Rename a column via double-click on header"""
@@ -3616,6 +5382,7 @@ class DataViewerPage(QtWidgets.QWidget):
         """Update the unsaved changes indicator based on model state"""
         if not self.model:
             self.dirty_indicator.hide()
+            self.edit_meta_indicator.hide()
             return
         
         if is_dirty is None:
@@ -3671,6 +5438,9 @@ class DiffPage(QtWidgets.QWidget):
 
         # Top bar
         self.controls = WindowControls("Compare Texts")
+        self.controls.share_btn.hide()
+        self.controls.share_count_lbl.hide()
+        self.controls.sync_title_balance()
         self.controls.backRequested.connect(self.backRequested.emit)
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
@@ -3957,6 +5727,9 @@ class StartPage(QtWidgets.QWidget):
         # Add window controls bar - hide back button on start page
         self.controls = WindowControls(APP_NAME)
         self.controls.back_btn.hide()
+        self.controls.share_btn.hide()
+        self.controls.share_count_lbl.hide()
+        self.controls.sync_title_balance()
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
@@ -4040,7 +5813,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Start directly in viewer mode and keep other modes unreachable.
         self.viewer.backRequested.connect(self.back_to_viewer_dropzone)
 
-        self.resize(520, 320)
+        self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
         self.center_on_screen()
 
         apply_dark_palette(QtWidgets.QApplication.instance())
@@ -4074,7 +5847,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 if not self.viewer.save_file():
                     event.ignore()
                     return
-        
+
+        self.viewer.shutdown()
         event.accept()
         
     def _create_shortcuts(self):
@@ -4115,7 +5889,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewer.reset_viewer()
         self.centralWidget().setCurrentWidget(self.viewer)
         self.showNormal()
-        self.resize(520, 320)
+        self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
         self.center_on_screen()
 
     def center_on_screen(self):
@@ -4162,7 +5936,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Only proceed if user didn't cancel
         self.centralWidget().setCurrentWidget(self.start)
         self.showNormal()
-        self.resize(520, 320)
+        self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
         self.center_on_screen()
         
 
@@ -4180,7 +5954,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.showMaximized()  # Better than fullScreen for multi-screen
         else:
             self.showNormal()
-            self.resize(520, 320)
+            self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
             self.center_on_screen()
 
     def enter_diff(self):

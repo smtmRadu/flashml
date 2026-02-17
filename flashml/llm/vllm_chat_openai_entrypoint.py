@@ -51,8 +51,8 @@ def vllm_chat_openai_entrypoint(
     
     
     vllm_config = deepcopy(vllm_config)
-    if not os.path.exists(vllm_config["model"]):
-        raise Exception("The model path does not exist. Please provide the correct path to the model.")
+    #if not os.path.exists(vllm_config["model"]):
+    #    raise Exception("The model path does not exist. Please provide the correct path to the model.")
     if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
         messages = [messages]
         
