@@ -12,6 +12,7 @@ import math
 import secrets
 import socket
 import threading
+import html
 import getpass
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -43,7 +44,7 @@ except Exception:
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.4"
+APP_NAME = "Better Excel v1.5"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 320
 TABLE_LINE_HEIGHT_PERCENT = 112
@@ -59,6 +60,21 @@ COLLAB_PROTOCOL_VERSION = 1
 COLLAB_BROADCAST_DEBOUNCE_MS = 120
 COLLAB_SOCKET_TIMEOUT_SECONDS = 1.0
 DROP_HINT_TEXT = "Drop a CSV / XLS / XLSX / JSONL file here\n(open file if WSL)"
+SUMMARIZE_SYSTEM_PROMPT = """You are an expert QA assistant for spreadsheet reviews.
+You will receive a list of highlighted errors (within ** ** for big errors and within * * for small errors), eventually with some feedback on them.
+
+Your task is to make a summary of the problems using this structure:
+1) Frequent problems
+2) Big issues: grouped by theme, with short impact notes.
+3) Small issues: grouped by theme.
+
+Rules:
+- Keep the summary concise and actionable.
+- Do not invent mistakes that are not highlighted.
+- If there are no highlighted mistakes, state that clearly.
+
+Here are the problems:
+"""
 
 
 def _guess_local_ipv4() -> str:
@@ -167,11 +183,8 @@ def _edited_cell_color_for_username(username: str) -> QtGui.QColor:
 def _json_safe_value(value: t.Any) -> t.Any:
     if value is None:
         return None
-    try:
-        if pd.isna(value):
-            return None
-    except Exception:
-        pass
+    if _is_missing_value(value):
+        return None
 
     if isinstance(value, bool):
         return value
@@ -184,6 +197,17 @@ def _json_safe_value(value: t.Any) -> t.Any:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _is_missing_value(value: t.Any) -> bool:
+    # pd.isna(list/array/dict) returns array-like output, which cannot be used
+    # directly in boolean checks. Only scalar values should be treated as NA.
+    if not pd.api.types.is_scalar(value):
+        return False
+    try:
+        return bool(pd.isna(value))
+    except Exception:
+        return False
 
 
 def _serialize_qcolor(color: t.Any) -> t.Optional[list[int]]:
@@ -1222,7 +1246,7 @@ def _collect_qa_spans_metadata_rows(
         if row_idx < 0 or col_idx < 0 or row_idx >= df.shape[0] or col_idx >= df.shape[1]:
             continue
         value = df.iat[row_idx, col_idx]
-        text_value = "" if pd.isna(value) else str(value)
+        text_value = "" if _is_missing_value(value) else str(value)
         _, normalized_spans = _normalize_text_and_qa_spans_for_rich_text(text_value, qa_spans)
         for span in normalized_spans:
             rows.append(
@@ -1482,7 +1506,7 @@ def load_xlsx_dataframe_with_styles(
             qa_spans = qa_spans_metadata.get((r, c), [])
             if qa_spans:
                 cell_value = df.iat[r, c]
-                text_value = "" if pd.isna(cell_value) else str(cell_value)
+                text_value = "" if _is_missing_value(cell_value) else str(cell_value)
                 _, qa_spans = _normalize_text_and_qa_spans_for_rich_text(text_value, qa_spans)
             else:
                 qa_spans = _extract_qa_spans_from_rich_text(cell.value, theme_palette)
@@ -1528,7 +1552,7 @@ def write_xlsx_with_styles(
     for r in range(df.shape[0]):
         for c in range(df.shape[1]):
             value = df.iat[r, c]
-            if pd.isna(value):
+            if _is_missing_value(value):
                 value = None
             elif isinstance(value, str):
                 value = (
@@ -1830,7 +1854,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         # Existing logic for regular columns
         val = self._df.iat[r, c]
         if role in (QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole):
-            if pd.isna(val):
+            if _is_missing_value(val):
                 return ""
             return str(val)
 
@@ -1857,7 +1881,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                         if r % 2 == 1:
                             base_color = base_color.darker(150)
 
-            text = "" if pd.isna(val) else str(val).lower()
+            text = "" if _is_missing_value(val) else str(val).lower()
             if self.search_term and self.search_term.lower() in text:
                 highlight = QtGui.QColor(255, 255, 150, 120)
                 if base_color.alpha() == 0:
@@ -1946,7 +1970,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             for r in range(self.data_row_count()):
                 for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
-                    if pd.isna(val):
+                    if _is_missing_value(val):
                         continue
                     if st in str(val):
                         self._matches.append(self.index(r, c))
@@ -1955,7 +1979,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             for r in range(self.data_row_count()):
                 for c in range(self.columnCount() - 1):  # Exclude "+" column
                     val = self._df.iat[r, c]
-                    if pd.isna(val):
+                    if _is_missing_value(val):
                         continue
                     if st in str(val).lower():
                         self._matches.append(self.index(r, c))
@@ -2030,7 +2054,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         for r in range(self.data_row_count()):
             for c in range(self.columnCount() - 1):
                 val = self._df.iat[r, c]
-                if pd.isna(val):
+                if _is_missing_value(val):
                     continue
                 s = str(val)
                 if st.lower() in s.lower():
@@ -2310,13 +2334,6 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
         st = self.model.search_term
-        if st:
-            if self.model.case_sensitive:
-                has_term = st in text
-            else:
-                has_term = st.lower() in text.lower()
-        else:
-            has_term = False
         
         rect = option.rect.adjusted(4, 2, -4, -2)
         
@@ -2378,37 +2395,24 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
                 qa_cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
                 qa_cursor.mergeCharFormat(qa_fmt)
         
-        # Highlight matching words (existing logic unchanged)
-        if has_term:
-            start = 0
-            highlights = []
-            
-            if self.model.case_sensitive:
-                search_text = st
-                search_in = text
-            else:
-                search_text = st.lower()
-                search_in = text.lower()
-            
-            text_len = len(st)
-            
-            while True:
-                i = search_in.find(search_text, start)
-                if i == -1:
-                    break
-                highlights.append((i, text_len))
-                start = i + text_len
-            
-            if highlights:
-                highlight_format = QtGui.QTextCharFormat()
-                highlight_format.setBackground(QtGui.QBrush(QtGui.QColor(0, 200, 0, 140)))
-                highlight_format.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.white)) # Optional: ensure text is readable
+        # Highlight search matches using QTextDocument positions to avoid offset drift.
+        if st:
+            search_in = doc.toPlainText()
+            flags = 0 if self.model.case_sensitive else re.IGNORECASE
+            try:
+                matches = list(re.finditer(re.escape(st), search_in, flags))
+            except Exception:
+                matches = []
 
-                # APPLY FORMAT TO EACH MATCH
-                for pos, length in highlights:
+            if matches:
+                highlight_format = QtGui.QTextCharFormat()
+                highlight_format.setBackground(QtGui.QBrush(QtGui.QColor(255, 140, 0, 140)))
+                highlight_format.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.white))  # Keep readable contrast.
+
+                for match in matches:
                     cursor = QtGui.QTextCursor(doc)
-                    cursor.setPosition(pos)
-                    cursor.setPosition(pos + length, QtGui.QTextCursor.MoveMode.KeepAnchor)
+                    cursor.setPosition(int(match.start()))
+                    cursor.setPosition(int(match.end()), QtGui.QTextCursor.MoveMode.KeepAnchor)
                     cursor.mergeCharFormat(highlight_format)
 
         painter.translate(rect.topLeft())
@@ -2540,6 +2544,7 @@ class WindowControls(QtWidgets.QWidget):
     maximizeRestoreRequested = QtCore.pyqtSignal()
     closeRequested = QtCore.pyqtSignal()
     backRequested = QtCore.pyqtSignal()
+    summarizeRequested = QtCore.pyqtSignal()
     shareRequested = QtCore.pyqtSignal()
 
     def __init__(self, title: str = ""):
@@ -2556,17 +2561,23 @@ class WindowControls(QtWidgets.QWidget):
         self.title_lbl.setStyleSheet("font-weight: 600;")
         self.title_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
+        self.summarize_btn = QtWidgets.QToolButton()
+        self.summarize_btn.setText("Summarize")
+        self.summarize_btn.setToolTip("Copy summarize system prompt")
+        self.summarize_btn.clicked.connect(self.summarizeRequested.emit)
+
         self.share_btn = QtWidgets.QToolButton()
         self.share_btn.setText("\u2197 Share")
         self.share_btn.setToolTip("Share")
         self.share_btn.clicked.connect(self.shareRequested.emit)
 
-        self.share_count_lbl = QtWidgets.QLabel("0")
+        self.share_count_lbl = QtWidgets.QLabel("")
         self.share_count_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.share_count_lbl.setMinimumWidth(20)
         self.share_count_lbl.setStyleSheet(
             "font-weight: 600; color: rgb(190, 190, 190); padding: 0px 4px;"
         )
+        self.share_count_lbl.hide()
 
         self.min_btn = QtWidgets.QToolButton()
         self.min_btn.setText("—")
@@ -2607,6 +2618,7 @@ class WindowControls(QtWidgets.QWidget):
         layout.addWidget(self._right_balance)
         
         # Right side: share + live count + window controls
+        layout.addWidget(self.summarize_btn)
         layout.addWidget(self.share_btn)
         layout.addWidget(self.share_count_lbl)
         for b in (self.min_btn, self.max_btn, self.close_btn):
@@ -2621,7 +2633,8 @@ class WindowControls(QtWidgets.QWidget):
     def sync_title_balance(self):
         left_width = self._visible_widget_width(self.back_btn)
         right_width = (
-            self._visible_widget_width(self.share_btn)
+            self._visible_widget_width(self.summarize_btn)
+            + self._visible_widget_width(self.share_btn)
             + self._visible_widget_width(self.share_count_lbl)
             + self._visible_widget_width(self.min_btn)
             + self._visible_widget_width(self.max_btn)
@@ -3027,6 +3040,19 @@ class SmoothScrollTableView(QtWidgets.QTableView):
             # Handle horizontal scrolling or Ctrl+wheel (zoom) normally
             super().wheelEvent(event)
 
+    def scrollTo(
+        self,
+        index: QtCore.QModelIndex,
+        hint: QtWidgets.QAbstractItemView.ScrollHint = QtWidgets.QAbstractItemView.ScrollHint.EnsureVisible,
+    ):
+        # Avoid jumpy auto-scroll on plain selection changes when the index is already visible.
+        if index.isValid() and hint == QtWidgets.QAbstractItemView.ScrollHint.EnsureVisible:
+            rect = self.visualRect(index)
+            viewport_rect = self.viewport().rect()
+            if rect.isValid() and not rect.isEmpty() and viewport_rect.intersects(rect):
+                return
+        super().scrollTo(index, hint)
+
 
 class DataViewerPage(QtWidgets.QWidget):
     backRequested = QtCore.pyqtSignal()
@@ -3049,6 +3075,9 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_client_connected = False
         self._collab_connecting = False
         self._collab_connected_guest_count = 0
+        self._collab_connected_guest_names: list[str] = []
+        self._collab_host_username = ""
+        self._collab_guest_online_total = 0
         self._collab_remote_selections: dict[str, tuple[int, int]] = {}
         self._collab_last_sent_selection: t.Optional[tuple[int, int]] = None
         self._table_selection_model: t.Optional[QtCore.QItemSelectionModel] = None
@@ -3083,7 +3112,10 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
+        self.controls.summarize_btn.setToolTip("Copy summarize system prompt")
+        self.controls.summarizeRequested.connect(self._on_summarize_requested)
         self.controls.share_btn.setToolTip("Start hosting and copy share link")
+        self.controls.share_btn.installEventFilter(self)
         self.controls.share_btn.setVisible(False)
         self.controls.share_btn.setEnabled(False)
         self.controls.share_count_lbl.setVisible(False)
@@ -3424,6 +3456,14 @@ class DataViewerPage(QtWidgets.QWidget):
         self.table.hide()
         self.toolbar.hide()
         self.status.hide()
+
+        # Spreadsheet-style clipboard shortcuts for table selections.
+        self._copy_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Copy, self.table)
+        self._copy_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._copy_shortcut.activated.connect(self._copy_table_selection_to_clipboard)
+        self._select_all_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.SelectAll, self.table)
+        self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._select_all_shortcut.activated.connect(self._select_all_data_cells)
         self._apply_session_mode_ui()
         
     def refresh_dims_display(self):
@@ -3446,6 +3486,368 @@ class DataViewerPage(QtWidgets.QWidget):
         self.connect_input.setEnabled(enabled)
         self.connect_btn.setEnabled(enabled)
 
+    @staticmethod
+    def _tsv_escape_cell(text: str) -> str:
+        raw = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+        if any(ch in raw for ch in ("\t", "\n", "\"")):
+            return "\"" + raw.replace("\"", "\"\"") + "\""
+        return raw
+
+    @staticmethod
+    def _prompt_quote(text: t.Any) -> str:
+        collapsed = re.sub(r"\s+", " ", str(text or "")).strip()
+        return collapsed.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    @staticmethod
+    def _style_has_issue_mark(style: dict[str, t.Any]) -> bool:
+        if not isinstance(style, dict):
+            return False
+        if str(style.get("qa_mark", "")).strip().lower() == "fail":
+            return True
+        qa_bg = style.get("qa_bg")
+        if isinstance(qa_bg, QtGui.QColor) and qa_bg.isValid():
+            return _colors_close(qa_bg, QtGui.QColor(145, 35, 35), tol=20)
+        return False
+
+    @staticmethod
+    def _style_has_issue_spans(style: dict[str, t.Any]) -> bool:
+        if not isinstance(style, dict):
+            return False
+        spans = _normalize_serialized_qa_spans(style.get("qa_spans", []))
+        return bool(spans)
+
+    def _feedback_column_indices(self) -> list[int]:
+        if not self.model:
+            return []
+        indices: list[int] = []
+        for col_idx, col_name in enumerate(list(self.model.df.columns)):
+            if "feedback" in str(col_name).casefold():
+                indices.append(int(col_idx))
+        return indices
+
+    def _feedback_text_for_row(self, row_idx: int, feedback_cols: list[int]) -> str:
+        if not self.model or not feedback_cols:
+            return ""
+        if row_idx < 0 or row_idx >= self.model.data_row_count():
+            return ""
+
+        for col_idx in feedback_cols:
+            if col_idx < 0 or col_idx >= self.model.data_column_count():
+                continue
+            value = self.model.df.iat[row_idx, col_idx]
+            if _is_missing_value(value):
+                continue
+            text = self._prompt_quote(value)
+            if text:
+                return text
+        return ""
+
+    def _feedback_data_found(self, feedback_cols: list[int]) -> bool:
+        if not self.model or not feedback_cols:
+            return False
+        row_count = self.model.data_row_count()
+        col_count = self.model.data_column_count()
+        for row_idx in range(row_count):
+            for col_idx in feedback_cols:
+                if col_idx < 0 or col_idx >= col_count:
+                    continue
+                value = self.model.df.iat[row_idx, col_idx]
+                if _is_missing_value(value):
+                    continue
+                if str(value).strip():
+                    return True
+        return False
+
+    def _row_label(self, row_idx: int) -> str:
+        if not self.model:
+            return str(row_idx)
+        try:
+            label = self.model.df.index[row_idx]
+        except Exception:
+            return str(row_idx)
+        try:
+            if _is_missing_value(label):
+                return str(row_idx)
+        except Exception:
+            pass
+        text = str(label).strip()
+        return text if text else str(row_idx)
+
+    @staticmethod
+    def _build_span_context_snippet(
+        text: str,
+        span: dict[str, t.Any],
+        words_left: int = 5,
+        words_right: int = 5,
+    ) -> str:
+        raw_text = str(text or "")
+        if not raw_text:
+            return ""
+
+        try:
+            start = int(span.get("start", 0))
+            length = int(span.get("length", 0))
+            kind = str(span.get("kind", "")).strip().lower()
+        except Exception:
+            return ""
+
+        if kind not in ("big", "small") or length <= 0:
+            return ""
+
+        start = max(0, min(len(raw_text), start))
+        end = max(start, min(len(raw_text), start + length))
+        if end <= start:
+            return ""
+
+        word_matches = list(re.finditer(r"\S+", raw_text))
+        if not word_matches:
+            marker = "**" if kind == "big" else "*"
+            bare = f"{marker}{raw_text[start:end]}{marker}"
+            return re.sub(r"\s+", " ", bare).strip()
+
+        first_word_idx: t.Optional[int] = None
+        last_word_idx: t.Optional[int] = None
+        for idx, match in enumerate(word_matches):
+            if first_word_idx is None and match.end() > start:
+                first_word_idx = idx
+            if match.start() < end:
+                last_word_idx = idx
+            if match.start() >= end and first_word_idx is not None:
+                break
+
+        if first_word_idx is None:
+            first_word_idx = len(word_matches) - 1
+            for idx, match in enumerate(word_matches):
+                if match.start() >= start:
+                    first_word_idx = idx
+                    break
+        if last_word_idx is None:
+            last_word_idx = first_word_idx
+
+        ctx_first = max(0, first_word_idx - max(0, int(words_left)))
+        ctx_last = min(len(word_matches) - 1, last_word_idx + max(0, int(words_right)))
+        context_start = int(word_matches[ctx_first].start())
+        context_end = int(word_matches[ctx_last].end())
+
+        prefix = raw_text[context_start:start]
+        core = raw_text[start:end]
+        suffix = raw_text[end:context_end]
+        marker = "**" if kind == "big" else "*"
+        snippet = f"{prefix}{marker}{core}{marker}{suffix}"
+        return re.sub(r"\s+", " ", snippet).strip()
+
+    def _build_summarize_prompt_payload(self) -> tuple[str, int, int, bool, bool]:
+        base_prompt = (SUMMARIZE_SYSTEM_PROMPT or "").rstrip()
+        if not self.model:
+            return base_prompt, 0, 0, False, False
+        if self.model.data_row_count() <= 0 or self.model.data_column_count() <= 0:
+            return base_prompt, 0, 0, False, False
+
+        styles = self.model.cell_styles()
+        issue_rows: set[int] = set()
+        span_cells_by_row: dict[int, list[int]] = {}
+        for (row_idx, col_idx), style in styles.items():
+            if (
+                row_idx < 0
+                or col_idx < 0
+                or row_idx >= self.model.data_row_count()
+                or col_idx >= self.model.data_column_count()
+            ):
+                continue
+            has_issue_mark = self._style_has_issue_mark(style)
+            has_issue_spans = self._style_has_issue_spans(style)
+            if has_issue_mark or has_issue_spans:
+                issue_rows.add(int(row_idx))
+            if has_issue_spans:
+                span_cells_by_row.setdefault(int(row_idx), []).append(int(col_idx))
+
+        feedback_cols = self._feedback_column_indices()
+        feedback_col_found = bool(feedback_cols)
+        feedback_data_found = self._feedback_data_found(feedback_cols)
+        if not issue_rows:
+            return base_prompt, 0, 0, feedback_col_found, feedback_data_found
+        sections: list[str] = []
+        span_count = 0
+
+        for row_idx in sorted(issue_rows):
+            problem_lines: list[str] = []
+            seen_spans: set[tuple[int, int, int, str]] = set()
+
+            for col_idx in sorted(set(span_cells_by_row.get(row_idx, []))):
+                style = styles.get((row_idx, col_idx), {})
+                if not isinstance(style, dict):
+                    continue
+                value = self.model.df.iat[row_idx, col_idx]
+                text_value = "" if _is_missing_value(value) else str(value)
+                spans = _normalize_qa_spans(style.get("qa_spans", []), len(text_value))
+                for span in spans:
+                    kind = str(span.get("kind", "")).strip().lower()
+                    if kind not in ("big", "small"):
+                        continue
+                    try:
+                        start = int(span.get("start", 0))
+                        length = int(span.get("length", 0))
+                    except Exception:
+                        continue
+                    signature = (col_idx, start, length, kind)
+                    if signature in seen_spans:
+                        continue
+                    seen_spans.add(signature)
+
+                    snippet = self._build_span_context_snippet(text_value, span, 5, 5)
+                    if not snippet:
+                        continue
+                    problem_lines.append(f'• "{self._prompt_quote(snippet)}"')
+                    span_count += 1
+
+            if not problem_lines:
+                continue
+
+            row_label = self._prompt_quote(self._row_label(row_idx))
+            section_lines = [f"Problem at row {row_label}:"]
+            section_lines.extend(problem_lines)
+
+            feedback_text = self._feedback_text_for_row(row_idx, feedback_cols)
+            if feedback_text:
+                section_lines.append(f'Feedback: "{feedback_text}"')
+
+            sections.append("\n".join(section_lines))
+
+        if not sections:
+            return base_prompt, 0, 0, feedback_col_found, feedback_data_found
+
+        final_prompt = base_prompt + "\n\n" + "\n\n".join(sections)
+        return final_prompt, len(sections), span_count, feedback_col_found, feedback_data_found
+
+    def _select_all_data_cells(self):
+        # Preserve native text-edit select-all behavior while editing text.
+        focus = QtWidgets.QApplication.focusWidget()
+        if isinstance(focus, QtWidgets.QLineEdit):
+            focus.selectAll()
+            return
+        if isinstance(focus, QtWidgets.QTextEdit):
+            focus.selectAll()
+            return
+        if isinstance(focus, QtWidgets.QPlainTextEdit):
+            focus.selectAll()
+            return
+
+        if not self.model:
+            return
+        if self.model.data_row_count() <= 0 or self.model.data_column_count() <= 0:
+            return
+
+        # Let Qt create the canonical full selection.
+        self.table.selectAll()
+
+    def _copy_table_selection_to_clipboard(self):
+        if not self.model:
+            return
+
+        # Preserve normal copy behavior while a text editor widget is active.
+        focus = QtWidgets.QApplication.focusWidget()
+        if isinstance(focus, QtWidgets.QLineEdit) and focus.hasSelectedText():
+            focus.copy()
+            return
+        if isinstance(focus, QtWidgets.QTextEdit):
+            cursor = focus.textCursor()
+            if cursor.hasSelection():
+                focus.copy()
+                return
+        if isinstance(focus, QtWidgets.QPlainTextEdit):
+            cursor = focus.textCursor()
+            if cursor.hasSelection():
+                focus.copy()
+                return
+
+        sel_model = self.table.selectionModel()
+        if sel_model is None:
+            return
+
+        data_rows = self.model.data_row_count()
+        data_cols = self.model.data_column_count()
+        selected_positions: set[tuple[int, int]] = set()
+
+        for selection_range in sel_model.selection():
+            top = max(0, int(selection_range.top()))
+            bottom = min(data_rows - 1, int(selection_range.bottom()))
+            left = max(0, int(selection_range.left()))
+            right = min(data_cols - 1, int(selection_range.right()))
+            if bottom < top or right < left:
+                continue
+            for row in range(top, bottom + 1):
+                for col in range(left, right + 1):
+                    selected_positions.add((row, col))
+
+        if not selected_positions:
+            selected_positions = {
+                (idx.row(), idx.column())
+                for idx in sel_model.selectedIndexes()
+                if idx.isValid() and idx.row() < data_rows and idx.column() < data_cols
+            }
+
+        if not selected_positions:
+            current = self.table.currentIndex()
+            if (
+                current.isValid()
+                and current.row() < data_rows
+                and current.column() < data_cols
+            ):
+                selected_positions = {(current.row(), current.column())}
+            else:
+                return
+
+        row_min = min(row for row, _ in selected_positions)
+        row_max = max(row for row, _ in selected_positions)
+        col_min = min(col for _, col in selected_positions)
+        col_max = max(col for _, col in selected_positions)
+
+        # For a single selected cell, copy raw text (no TSV quoting/escaping).
+        if (
+            len(selected_positions) == 1
+            and row_min == row_max
+            and col_min == col_max
+            and (row_min, col_min) in selected_positions
+        ):
+            value = self.model.data(self.model.index(row_min, col_min), QtCore.Qt.ItemDataRole.DisplayRole)
+            cell_text = "" if value is None else str(value)
+            QtWidgets.QApplication.clipboard().setText(cell_text)
+            self.status.showMessage("Copied 1 cell to clipboard.", 1800)
+            return
+
+        # Defensive fix for rare Ctrl+A endpoint bug where only (0,0) drops out.
+        expected_total = data_rows * data_cols
+        if (
+            data_rows > 0
+            and data_cols > 0
+            and row_min == 0
+            and col_min == 0
+            and row_max == data_rows - 1
+            and col_max == data_cols - 1
+            and len(selected_positions) == expected_total - 1
+            and (0, 0) not in selected_positions
+        ):
+            selected_positions.add((0, 0))
+
+        lines: list[str] = []
+        for row in range(row_min, row_max + 1):
+            values: list[str] = []
+            for col in range(col_min, col_max + 1):
+                if (row, col) in selected_positions:
+                    value = self.model.data(self.model.index(row, col), QtCore.Qt.ItemDataRole.DisplayRole)
+                    cell_text = "" if value is None else str(value)
+                else:
+                    cell_text = ""
+                values.append(self._tsv_escape_cell(cell_text))
+            lines.append("\t".join(values))
+
+        clipboard_text = "\n".join(lines)
+        QtWidgets.QApplication.clipboard().setText(clipboard_text)
+        self.status.showMessage(
+            f"Copied {row_max - row_min + 1}x{col_max - col_min + 1} cells to clipboard.",
+            1800,
+        )
+
     def _show_collab_notice(self, text: str, timeout_ms: int = 3800):
         if not text:
             return
@@ -3457,6 +3859,185 @@ class DataViewerPage(QtWidgets.QWidget):
             QtWidgets.QToolTip.showText(global_pos, text, self.controls, self.controls.rect(), timeout_ms)
         except Exception:
             pass
+
+    def _show_bottom_right_notice(self, text: str, timeout_ms: int = 3000):
+        if not text:
+            return
+        if self.status.isVisible():
+            self.status.showMessage(text, timeout_ms)
+        try:
+            margin = 12
+            anchor = self.rect().bottomRight() - QtCore.QPoint(margin, margin)
+            global_pos = self.mapToGlobal(anchor)
+            QtWidgets.QToolTip.showText(global_pos, text, self, self.rect(), timeout_ms)
+        except Exception:
+            pass
+
+    def _update_share_button_visual_state(self):
+        if self.controls is None or self.controls.share_btn is None:
+            return
+
+        border_color = ""
+        if self._session_role == "host" and self._collab_server is not None:
+            # Host is running: blue when waiting, green when guests are connected.
+            if max(0, int(self._collab_connected_guest_count)) > 0:
+                border_color = "rgb(68, 176, 86)"
+            else:
+                border_color = "rgb(70, 145, 255)"
+        elif self._session_role == "guest" and self._collab_client_connected:
+            # Guest connected: green status outline.
+            border_color = "rgb(68, 176, 86)"
+
+        if not border_color:
+            self.controls.share_btn.setStyleSheet("")
+            return
+
+        self.controls.share_btn.setStyleSheet(
+            f"""
+            QToolButton {{
+                border: 2px solid {border_color};
+                border-radius: 6px;
+                padding: 2px 8px;
+            }}
+            QToolButton:hover {{
+                border: 2px solid {border_color};
+            }}
+            QToolButton:pressed {{
+                border: 2px solid {border_color};
+            }}
+            QToolButton:disabled {{
+                border: 2px solid {border_color};
+                color: rgb(145, 145, 145);
+            }}
+            """
+        )
+
+    def _record_connected_guest_name(self, username: str):
+        safe_username = _normalize_username(username)
+        if not safe_username:
+            return
+        key = safe_username.casefold()
+        if all(existing.casefold() != key for existing in self._collab_connected_guest_names):
+            self._collab_connected_guest_names.append(safe_username)
+
+    def _drop_connected_guest_name(self, username: str):
+        safe_username = _normalize_username(username)
+        if not safe_username:
+            return
+        key = safe_username.casefold()
+        self._collab_connected_guest_names = [
+            name for name in self._collab_connected_guest_names if name.casefold() != key
+        ]
+
+    def _sync_connected_guest_names_with_count(self):
+        guest_count = max(0, int(self._collab_connected_guest_count))
+        if guest_count <= 0:
+            self._collab_connected_guest_names.clear()
+            return
+        if len(self._collab_connected_guest_names) > guest_count:
+            self._collab_connected_guest_names = self._collab_connected_guest_names[:guest_count]
+
+    def _sync_connected_guest_names_with_online_total(self):
+        total_people = max(0, int(self._collab_guest_online_total))
+        if total_people <= 0:
+            return
+        expected_guest_count = max(0, total_people - 1)
+        if len(self._collab_connected_guest_names) > expected_guest_count:
+            self._collab_connected_guest_names = self._collab_connected_guest_names[:expected_guest_count]
+
+    def _resolved_host_username(self) -> str:
+        if self._session_role == "host":
+            return _normalize_username(self._local_username)
+        host_username = _normalize_username(self._collab_host_username)
+        return host_username if host_username else "Host"
+
+    def _collab_guest_names_for_ui(self, include_local_guest: bool = False) -> list[str]:
+        host_username = _normalize_username(self._collab_host_username)
+        host_key = host_username.casefold() if host_username else ""
+        local_guest_name = _normalize_username(self._local_username)
+        local_guest_key = local_guest_name.casefold()
+
+        names: list[str] = []
+        seen: set[str] = set()
+
+        for raw_name in self._collab_connected_guest_names:
+            normalized = _normalize_username(raw_name)
+            key = normalized.casefold()
+            if not normalized or key in seen:
+                continue
+            if host_key and key == host_key and not (
+                include_local_guest and self._session_role == "guest" and key == local_guest_key
+            ):
+                continue
+            seen.add(key)
+            names.append(normalized)
+
+        for raw_name in sorted(self._collab_remote_selections.keys()):
+            normalized = _normalize_username(raw_name)
+            key = normalized.casefold()
+            if not normalized or key in seen:
+                continue
+            if host_key and key == host_key:
+                continue
+            seen.add(key)
+            names.append(normalized)
+
+        if include_local_guest and self._session_role == "guest" and self._collab_client_connected:
+            key = local_guest_key
+            if key not in seen:
+                names.append(local_guest_name)
+        return names
+
+    def _collab_online_total_for_ui(self) -> int:
+        if self._session_role == "host":
+            return 1 + max(0, int(self._collab_connected_guest_count))
+
+        if self._session_role == "guest" and self._collab_client_connected:
+            known_total = max(0, int(self._collab_guest_online_total))
+            if known_total > 0:
+                return known_total
+            known_guest_count = len(self._collab_guest_names_for_ui(include_local_guest=True))
+            return max(2, 1 + known_guest_count)
+
+        return 0
+
+    def _username_tooltip_html(self, username: str) -> str:
+        safe_username = _normalize_username(username)
+        text = html.escape(safe_username)
+        color = _edited_cell_color_for_username(safe_username)
+        color_hex = color.name(QtGui.QColor.NameFormat.HexRgb) if color.isValid() else "#FFFFFF"
+        return f'<span style="color: {color_hex}; font-weight: 600;">{text}</span>'
+
+    def _build_share_people_tooltip_html(self) -> str:
+        if self._session_role not in ("host", "guest"):
+            return ""
+        if self._session_role == "guest" and not self._collab_client_connected:
+            return ""
+        if self._session_role == "host" and max(0, int(self._collab_connected_guest_count)) <= 0:
+            return ""
+
+        host_name = self._resolved_host_username()
+        guest_names = self._collab_guest_names_for_ui(include_local_guest=(self._session_role == "guest"))
+        total_people = self._collab_online_total_for_ui()
+        if total_people <= 0:
+            return ""
+
+        expected_guest_count = max(0, total_people - 1)
+        unknown_count = max(0, expected_guest_count - len(guest_names))
+        guest_segments = [self._username_tooltip_html(name) for name in guest_names]
+        if unknown_count > 0:
+            suffix = "guest" if unknown_count == 1 else "guests"
+            guest_segments.append(html.escape(f"+{unknown_count} unknown {suffix}"))
+
+        guests_html = ", ".join(guest_segments) if guest_segments else "None"
+        host_html = self._username_tooltip_html(host_name)
+        return (
+            "<div style='white-space: nowrap;'>"
+            f"<b>{total_people} online</b><br/>"
+            f"Host: {host_html}<br/>"
+            f"Guests: {guests_html}"
+            "</div>"
+        )
 
     def _bind_table_selection_model(self):
         if self._table_selection_model is not None:
@@ -3551,7 +4132,10 @@ class DataViewerPage(QtWidgets.QWidget):
             "username": self._local_username,
             "row": -1,
             "col": -1,
+            "role": self._session_role,
         }
+        if self._session_role == "host":
+            payload["online_total"] = 1 + max(0, int(self._collab_connected_guest_count))
         if selected_cell is not None:
             payload["row"] = int(selected_cell[0])
             payload["col"] = int(selected_cell[1])
@@ -3571,9 +4155,38 @@ class DataViewerPage(QtWidgets.QWidget):
         if not isinstance(payload, dict):
             return False
 
+        role = str(payload.get("role") or "").strip().lower()
+        if role not in ("host", "guest"):
+            role = ""
+
         username = _normalize_username(payload.get("username"))
-        if not username or username == self._local_username:
+        if not username:
             return False
+
+        # Host receives presence only from connected guests via server callbacks, so do not
+        # filter by username there (host/guest may share same OS username on one machine).
+        if self._session_role == "guest":
+            # Guests should ignore their own rebroadcast guest presence but still accept host presence.
+            if username == self._local_username and role != "host":
+                return False
+
+        if self._session_role == "host":
+            self._record_connected_guest_name(username)
+        elif self._session_role == "guest":
+            if role == "host":
+                self._collab_host_username = username
+                try:
+                    online_total = int(payload.get("online_total"))
+                except Exception:
+                    online_total = 0
+                if online_total > 0:
+                    self._collab_guest_online_total = online_total
+                    self._sync_connected_guest_names_with_online_total()
+            else:
+                host_key = _normalize_username(self._collab_host_username).casefold()
+                if not host_key or username.casefold() != host_key:
+                    self._record_connected_guest_name(username)
+                    self._sync_connected_guest_names_with_online_total()
 
         try:
             row = int(payload.get("row", -1))
@@ -3598,26 +4211,38 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.back_btn.setVisible(has_model)
         self.controls.back_btn.setEnabled(has_model)
 
-        show_share = has_model and not is_guest
+        show_summarize = has_model
+        show_share = has_model and ((not is_guest) or self._collab_client_connected)
         guest_count = max(0, int(self._collab_connected_guest_count))
-        total_people = 1 + guest_count
 
         if self._session_role == "host" and guest_count > 0:
-            self.controls.share_btn.setText(f"\u2197 Share \u2022 {total_people}")
+            total_people = self._collab_online_total_for_ui()
+            self.controls.share_btn.setText(f"\u2197 Hosting \u2022 {total_people} online")
+        elif is_guest and self._collab_client_connected:
+            host_name = self._resolved_host_username()
+            total_people = self._collab_online_total_for_ui()
+            if total_people > 0:
+                self.controls.share_btn.setText(f"Connected to {host_name} \u2022 {total_people} online")
+            else:
+                self.controls.share_btn.setText(f"Connected to {host_name}")
         else:
             self.controls.share_btn.setText("\u2197 Share")
 
+        self.controls.summarize_btn.setVisible(show_summarize)
+        self.controls.summarize_btn.setEnabled(show_summarize)
         self.controls.share_btn.setVisible(show_share)
         self.controls.share_btn.setEnabled(show_share)
-        self.controls.share_count_lbl.setVisible(show_share)
-        self.controls.share_count_lbl.setText(str(guest_count))
-        self.controls.share_count_lbl.setToolTip("Connected guests")
+        self.controls.share_count_lbl.setVisible(False)
+        self.controls.share_count_lbl.setText("")
         if self._session_role == "host":
             self.controls.share_btn.setToolTip("Copy the current share link")
+        elif is_guest and self._collab_client_connected:
+            self.controls.share_btn.setToolTip("Connected session participants")
         elif is_guest:
-            self.controls.share_btn.setToolTip("Guests cannot host")
+            self.controls.share_btn.setToolTip("Connecting to host")
         else:
             self.controls.share_btn.setToolTip("Start hosting and copy share link")
+        self._update_share_button_visual_state()
 
         self.btn_open.setEnabled(not is_guest)
         self.dd.set_drop_enabled(not is_guest)
@@ -3691,6 +4316,19 @@ class DataViewerPage(QtWidgets.QWidget):
             "cell_styles": _serialize_cell_styles(self.model.cell_styles()),
             "is_dirty": bool(self.model.is_dirty),
         }
+        if self._session_role == "host":
+            seen: set[str] = set()
+            guest_usernames: list[str] = []
+            for raw_name in self._collab_connected_guest_names:
+                normalized = _normalize_username(raw_name)
+                key = normalized.casefold()
+                if not normalized or key in seen:
+                    continue
+                seen.add(key)
+                guest_usernames.append(normalized)
+            snapshot["host_username"] = _normalize_username(self._local_username)
+            snapshot["guest_usernames"] = guest_usernames
+            snapshot["online_total"] = 1 + max(0, int(self._collab_connected_guest_count))
         return snapshot
 
     def _broadcast_current_snapshot(self):
@@ -3788,6 +4426,11 @@ class DataViewerPage(QtWidgets.QWidget):
         self.update_dirty_indicator()
         self._update_edit_meta_indicator()
         self._apply_session_mode_ui()
+        if hasattr(self.app_ref, "_set_compact_window_lock"):
+            try:
+                self.app_ref._set_compact_window_lock(False)
+            except Exception:
+                pass
         self.window().showMaximized()
         QtCore.QTimer.singleShot(0, lambda: self._queue_collab_presence_broadcast(force=True))
 
@@ -3830,6 +4473,35 @@ class DataViewerPage(QtWidgets.QWidget):
         revision = snapshot.get("revision")
         if isinstance(revision, int):
             self._collab_revision = max(self._collab_revision, revision)
+
+        if self._session_role == "guest":
+            host_username = _normalize_username(snapshot.get("host_username"))
+            if host_username:
+                self._collab_host_username = host_username
+
+            raw_guest_names = snapshot.get("guest_usernames")
+            if isinstance(raw_guest_names, list):
+                seen: set[str] = set()
+                guest_names: list[str] = []
+                for raw_name in raw_guest_names:
+                    normalized = _normalize_username(raw_name)
+                    key = normalized.casefold()
+                    if not normalized or key in seen:
+                        continue
+                    seen.add(key)
+                    guest_names.append(normalized)
+                self._collab_connected_guest_names = guest_names
+
+            try:
+                online_total = int(snapshot.get("online_total"))
+            except Exception:
+                online_total = 0
+            if online_total > 0:
+                self._collab_guest_online_total = online_total
+
+            if self._collab_client_connected:
+                self._record_connected_guest_name(self._local_username)
+            self._sync_connected_guest_names_with_online_total()
 
         self._collab_is_applying_remote_snapshot = True
         try:
@@ -3879,11 +4551,7 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def _on_share_requested(self):
         if self._is_guest_mode():
-            QtWidgets.QMessageBox.information(
-                self,
-                "Guest Session",
-                "Guests cannot host sessions. Disconnect first to host a file.",
-            )
+            # Guest mode uses this control as a passive session status button.
             return
         if not self.model:
             QtWidgets.QMessageBox.information(self, "Nothing to Share", "Open a file before sharing.")
@@ -3895,6 +4563,41 @@ class DataViewerPage(QtWidgets.QWidget):
         clipboard = QtWidgets.QApplication.clipboard()
         clipboard.setText(self._collab_share_link)
         self.status.showMessage("Share link copied to clipboard.", 3500)
+
+    def _on_summarize_requested(self):
+        (
+            prompt,
+            row_count,
+            span_count,
+            feedback_col_found,
+            feedback_data_found,
+        ) = self._build_summarize_prompt_payload()
+        clipboard = QtWidgets.QApplication.clipboard()
+        if span_count <= 0 and (not feedback_col_found) and (not feedback_data_found):
+            clipboard.setText("[NO ISSUES FOUND]")
+            self._show_bottom_right_notice(
+                "[NO ISSUES FOUND] copied to clipboard.",
+                3000,
+            )
+            return
+
+        clipboard.setText(prompt)
+        feedback_status = "found" if feedback_col_found else "not found"
+        if row_count > 0:
+            self._show_bottom_right_notice(
+                f"Summarize prompt copied ({span_count} span(s) from {row_count} row(s)). Feedback column: {feedback_status}.",
+                3400,
+            )
+        elif self.model is not None:
+            self._show_bottom_right_notice(
+                f"Summarize prompt copied (no highlighted issue spans found). Feedback column: {feedback_status}.",
+                3400,
+            )
+        else:
+            self._show_bottom_right_notice(
+                f"Summarize prompt copied to clipboard. Feedback column: {feedback_status}.",
+                3200,
+            )
 
     def _on_connect_requested(self, raw_link: str):
         parsed = _parse_collab_link(raw_link)
@@ -3962,6 +4665,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_connecting = False
         if connected:
             self._session_role = "guest"
+            self._record_connected_guest_name(self._local_username)
+            self._collab_guest_online_total = max(2, int(self._collab_guest_online_total))
             self._show_collab_notice(f"Connected as {self._local_username}. Waiting for shared file...", 4200)
             self._queue_collab_presence_broadcast(force=True)
         else:
@@ -3973,6 +4678,9 @@ class DataViewerPage(QtWidgets.QWidget):
             if self._collab_client is not None and not self._collab_client.is_connected():
                 self._collab_client = None
             self._collab_last_sent_selection = None
+            self._collab_host_username = ""
+            self._collab_guest_online_total = 0
+            self._collab_connected_guest_names.clear()
             self._clear_remote_selections()
         self._apply_session_mode_ui()
 
@@ -3991,6 +4699,8 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def _on_collab_guest_connected(self, username: str, count: int):
         self._collab_connected_guest_count = max(0, int(count))
+        self._record_connected_guest_name(username)
+        self._sync_connected_guest_names_with_count()
         self._apply_session_mode_ui()
         if self._session_role == "host":
             safe_username = _normalize_username(username)
@@ -4001,6 +4711,8 @@ class DataViewerPage(QtWidgets.QWidget):
     def _on_collab_guest_disconnected(self, username: str, count: int):
         self._collab_connected_guest_count = max(0, int(count))
         safe_username = _normalize_username(username)
+        self._drop_connected_guest_name(safe_username)
+        self._sync_connected_guest_names_with_count()
         self._collab_remote_selections.pop(safe_username, None)
         self._sync_remote_selection_overlay()
         self._apply_session_mode_ui()
@@ -4012,14 +4724,18 @@ class DataViewerPage(QtWidgets.QWidget):
                         "username": safe_username,
                         "row": -1,
                         "col": -1,
+                        "role": "guest",
                     }
                 )
+            self._queue_collab_presence_broadcast(force=True)
 
     def _on_collab_server_client_count_changed(self, count: int):
         previous_count = int(self._collab_connected_guest_count)
         self._collab_connected_guest_count = max(0, int(count))
+        self._sync_connected_guest_names_with_count()
         self._apply_session_mode_ui()
         if self._session_role == "host":
+            self._queue_collab_presence_broadcast(force=True)
             # Fallback in case guest name signal was not received.
             now = time.time()
             if count > previous_count and (now - self._collab_last_notice_ts) > 0.8:
@@ -4039,7 +4755,8 @@ class DataViewerPage(QtWidgets.QWidget):
     def _on_collab_client_presence_received(self, payload: dict[str, t.Any]):
         if self._session_role != "guest":
             return
-        self._apply_collab_presence_payload(payload)
+        if self._apply_collab_presence_payload(payload):
+            self._apply_session_mode_ui()
 
     def _on_collab_server_snapshot_received(self, payload: dict[str, t.Any]):
         if self._session_role != "host":
@@ -4118,6 +4835,9 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_connecting = False
         self._collab_last_sent_selection = None
         self._collab_connected_guest_count = 0
+        self._collab_connected_guest_names.clear()
+        self._collab_host_username = ""
+        self._collab_guest_online_total = 0
         self._clear_remote_selections()
         self._collab_session_token = ""
         self._collab_share_link = ""
@@ -4840,7 +5560,16 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def eventFilter(self, obj, event):
         """Capture Shift+Enter in search box for backwards navigation"""
-        if obj == self.search_edit and event.type() == QtCore.QEvent.Type.KeyPress:
+        if obj == self.controls.share_btn and event.type() == QtCore.QEvent.Type.ToolTip:
+            tooltip_html = self._build_share_people_tooltip_html()
+            if tooltip_html:
+                btn = self.controls.share_btn
+                pos = btn.mapToGlobal(QtCore.QPoint(0, btn.height() + 6))
+                QtWidgets.QToolTip.showText(pos, tooltip_html, btn, btn.rect(), 8000)
+                return True
+
+        search_edit = getattr(self, "search_edit", None)
+        if obj == search_edit and event.type() == QtCore.QEvent.Type.KeyPress:
             if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                 if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
                     # Shift+Enter: go to previous match
@@ -5438,6 +6167,7 @@ class DiffPage(QtWidgets.QWidget):
 
         # Top bar
         self.controls = WindowControls("Compare Texts")
+        self.controls.summarize_btn.hide()
         self.controls.share_btn.hide()
         self.controls.share_count_lbl.hide()
         self.controls.sync_title_balance()
@@ -5727,6 +6457,7 @@ class StartPage(QtWidgets.QWidget):
         # Add window controls bar - hide back button on start page
         self.controls = WindowControls(APP_NAME)
         self.controls.back_btn.hide()
+        self.controls.summarize_btn.hide()
         self.controls.share_btn.hide()
         self.controls.share_count_lbl.hide()
         self.controls.sync_title_balance()
@@ -5825,6 +6556,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._screen_change_timer.setSingleShot(True)
         self._screen_change_timer.setInterval(100)
         self._is_initial_move = True
+        self._set_compact_window_lock(True)
+
+    def _set_compact_window_lock(self, lock: bool):
+        if lock:
+            self.setFixedSize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
+            return
+        max_size = int(getattr(QtWidgets, "QWIDGETSIZE_MAX", 16777215))
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(max_size, max_size)
 
     def closeEvent(self, event):
         """Intercept close to check for unsaved changes"""
@@ -5888,6 +6628,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewer.reset_viewer()
         self.centralWidget().setCurrentWidget(self.viewer)
+        self._set_compact_window_lock(True)
         self.showNormal()
         self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
         self.center_on_screen()
@@ -5935,6 +6676,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Only proceed if user didn't cancel
         self.centralWidget().setCurrentWidget(self.start)
+        self._set_compact_window_lock(True)
         self.showNormal()
         self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
         self.center_on_screen()
@@ -5951,14 +6693,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.centralWidget().setCurrentWidget(self.viewer)
         # --- CHANGE: Use maximized instead of full-screen to avoid DPI issues ---
         if self.viewer.model is not None:
+            self._set_compact_window_lock(False)
             self.showMaximized()  # Better than fullScreen for multi-screen
         else:
+            self._set_compact_window_lock(True)
             self.showNormal()
             self.resize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
             self.center_on_screen()
 
     def enter_diff(self):
         self.centralWidget().setCurrentWidget(self.diff)
+        self._set_compact_window_lock(False)
         self.showMaximized()  # Better than fullScreen for multi-screen
 
 def main():
