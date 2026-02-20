@@ -1,5 +1,6 @@
 # pyinstaller command:
 # pyinstaller --noconsole --onefile --clean --strip --icon=BetterExcel.ico --optimize=2 BetterExcel.py
+
 from pathlib import Path
 import sys
 import typing as t
@@ -44,7 +45,7 @@ except Exception:
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.5"
+APP_NAME = "Better Excel v1.7"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 320
 TABLE_LINE_HEIGHT_PERCENT = 112
@@ -208,6 +209,150 @@ def _is_missing_value(value: t.Any) -> bool:
         return bool(pd.isna(value))
     except Exception:
         return False
+
+
+class _RowHeightBatchSignals(QtCore.QObject):
+    completed = QtCore.pyqtSignal(int, object)
+    failed = QtCore.pyqtSignal(int, str)
+
+
+def _row_height_font_cache_key(font: QtGui.QFont) -> tuple[t.Any, ...]:
+    return (
+        str(font.family()),
+        round(float(font.pointSizeF()), 2),
+        int(font.weight()),
+        bool(font.italic()),
+        bool(font.bold()),
+        int(font.stretch()),
+    )
+
+
+def _wrapped_cell_height_cached(
+    text: str,
+    font: QtGui.QFont,
+    usable_width: int,
+    *,
+    metrics_cache: dict[tuple[t.Any, ...], QtGui.QFontMetrics],
+    wrap_cache: dict[tuple[t.Any, ...], int],
+    wrap_cache_limit: int,
+) -> int:
+    key = _row_height_font_cache_key(font)
+    metrics = metrics_cache.get(key)
+    if metrics is None:
+        metrics = QtGui.QFontMetrics(font)
+        metrics_cache[key] = metrics
+
+    line_height = int(metrics.lineSpacing())
+    if usable_width <= 8 or not text:
+        return line_height + TABLE_VERTICAL_TEXT_PADDING
+
+    if "\n" not in text:
+        avg_char_width = max(1, int(metrics.averageCharWidth()))
+        quick_fit_chars = max(8, int((usable_width / avg_char_width) * 0.85))
+        if len(text) <= quick_fit_chars:
+            return line_height + TABLE_VERTICAL_TEXT_PADDING
+        if len(text) <= quick_fit_chars * 3 and int(metrics.horizontalAdvance(text)) <= usable_width:
+            return line_height + TABLE_VERTICAL_TEXT_PADDING
+
+    cache_key = None
+    if len(text) <= 256:
+        cache_key = (key, int(usable_width), text)
+        cached = wrap_cache.get(cache_key)
+        if cached is not None:
+            return int(cached)
+
+    flags = int(QtCore.Qt.TextFlag.TextWordWrap | QtCore.Qt.TextFlag.TextExpandTabs)
+    rect = metrics.boundingRect(QtCore.QRect(0, 0, int(usable_width), 10000000), flags, text)
+    content_height = max(line_height, int(rect.height()))
+    if content_height > line_height:
+        content_height = int(math.ceil(content_height * (TABLE_LINE_HEIGHT_PERCENT / 100.0)))
+
+    total_height = int(content_height + TABLE_VERTICAL_TEXT_PADDING)
+    if cache_key is not None:
+        if len(wrap_cache) >= int(max(1, wrap_cache_limit)):
+            wrap_cache.clear()
+        wrap_cache[cache_key] = int(total_height)
+    return int(total_height)
+
+
+class _RowHeightBatchTask(QtCore.QRunnable):
+    def __init__(
+        self,
+        *,
+        generation: int,
+        df: pd.DataFrame,
+        styles: dict[tuple[int, int], dict[str, t.Any]],
+        rows: list[int],
+        column_widths: list[int],
+        default_height: int,
+        base_font: QtGui.QFont,
+        wrap_cache_limit: int,
+    ):
+        super().__init__()
+        self.signals = _RowHeightBatchSignals()
+        self.generation = int(generation)
+        self.df = df
+        self.styles = styles
+        self.rows = [int(r) for r in rows]
+        self.column_widths = [int(w) for w in column_widths]
+        self.default_height = int(default_height)
+        self.base_font = QtGui.QFont(base_font)
+        self.wrap_cache_limit = int(max(128, wrap_cache_limit))
+
+    def run(self):
+        try:
+            data_rows = int(len(self.df.index))
+            data_cols = int(len(self.df.columns))
+            if data_rows <= 0 or data_cols <= 0 or not self.rows:
+                self.signals.completed.emit(int(self.generation), [])
+                return
+
+            widths = self.column_widths
+            width_count = len(widths)
+            metrics_cache: dict[tuple[t.Any, ...], QtGui.QFontMetrics] = {}
+            wrap_cache: dict[tuple[t.Any, ...], int] = {}
+            results: list[tuple[int, int]] = []
+
+            for row in self.rows:
+                row_int = int(row)
+                if row_int < 0 or row_int >= data_rows:
+                    continue
+
+                max_cell_height = int(self.default_height)
+                for col in range(data_cols):
+                    if col >= width_count:
+                        break
+
+                    try:
+                        value = self.df.iat[row_int, col]
+                    except Exception:
+                        continue
+                    if _is_missing_value(value):
+                        continue
+
+                    text = str(value)
+                    if not text:
+                        continue
+
+                    style = self.styles.get((row_int, col), {})
+                    style_font = style.get("font") if isinstance(style, dict) else None
+                    cell_font = style_font if isinstance(style_font, QtGui.QFont) else self.base_font
+                    cell_height = _wrapped_cell_height_cached(
+                        text,
+                        cell_font,
+                        widths[col],
+                        metrics_cache=metrics_cache,
+                        wrap_cache=wrap_cache,
+                        wrap_cache_limit=self.wrap_cache_limit,
+                    )
+                    if cell_height > max_cell_height:
+                        max_cell_height = int(cell_height)
+
+                results.append((row_int, int(max_cell_height + 3)))
+
+            self.signals.completed.emit(int(self.generation), results)
+        except Exception as exc:
+            self.signals.failed.emit(int(self.generation), str(exc))
 
 
 def _serialize_qcolor(color: t.Any) -> t.Optional[list[int]]:
@@ -2088,7 +2233,73 @@ class QAContextTextEdit(QtWidgets.QTextEdit):
         super().__init__(parent)
         self._last_selection: t.Optional[tuple[int, int]] = None
         self._qa_spans: list[dict[str, t.Any]] = []
+        self._search_term: str = ""
+        self._search_case_sensitive: bool = False
+        self._search_model: t.Any = None
         self.selectionChanged.connect(self._remember_selection)
+        self.textChanged.connect(self._refresh_search_highlights)
+
+    def bind_search_model(self, model: t.Any):
+        self._search_model = model
+        if isinstance(model, QtCore.QObject):
+            model.dataChangedHard.connect(self._sync_search_from_model)
+            model.matchesChanged.connect(self._sync_search_from_model)
+        self._sync_search_from_model()
+
+    def _sync_search_from_model(self, *_args):
+        model = self._search_model
+        if model is None:
+            return
+        self.set_search_highlight(
+            getattr(model, "search_term", ""),
+            bool(getattr(model, "case_sensitive", False)),
+        )
+
+    def set_search_highlight(self, term: str, case_sensitive: bool):
+        self._search_term = str(term or "")
+        self._search_case_sensitive = bool(case_sensitive)
+        self._refresh_search_highlights()
+
+    def _refresh_search_highlights(self):
+        term = self._search_term
+        if not term:
+            self.setExtraSelections([])
+            return
+
+        text = self.toPlainText()
+        if not text:
+            self.setExtraSelections([])
+            return
+
+        flags = 0 if self._search_case_sensitive else re.IGNORECASE
+        try:
+            matches = list(re.finditer(re.escape(term), text, flags))
+        except Exception:
+            matches = []
+
+        if not matches:
+            self.setExtraSelections([])
+            return
+
+        highlight_format = QtGui.QTextCharFormat()
+        highlight_format.setBackground(QtGui.QBrush(QtGui.QColor(255, 140, 0, 140)))
+        highlight_format.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.white))
+
+        selections: list[QtWidgets.QTextEdit.ExtraSelection] = []
+        for match in matches:
+            start = int(match.start())
+            end = int(match.end())
+            if end <= start:
+                continue
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            cursor = QtGui.QTextCursor(self.document())
+            cursor.setPosition(start)
+            cursor.setPosition(end, QtGui.QTextCursor.MoveMode.KeepAnchor)
+            selection.cursor = cursor
+            selection.format = highlight_format
+            selections.append(selection)
+
+        self.setExtraSelections(selections)
 
     def _remember_selection(self):
         cursor = self.textCursor()
@@ -2462,6 +2673,7 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         editor.qaSpansChanged.connect(
             lambda ed=editor, idx=persistent_index: self._persist_editor_qa_spans(ed, idx)
         )
+        editor.bind_search_model(self.model)
         return editor
 
     def setEditorData(self, editor, index):
@@ -2562,8 +2774,8 @@ class WindowControls(QtWidgets.QWidget):
         self.title_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
         self.summarize_btn = QtWidgets.QToolButton()
-        self.summarize_btn.setText("Summarize")
-        self.summarize_btn.setToolTip("Copy summarize system prompt")
+        self.summarize_btn.setText("QA Summarize")
+        self.summarize_btn.setToolTip("Copy summarize system prompt. Consider having a column named 'feedback' to enhance the prompt.")
         self.summarize_btn.clicked.connect(self.summarizeRequested.emit)
 
         self.share_btn = QtWidgets.QToolButton()
@@ -3088,6 +3300,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_broadcast_timer.setSingleShot(True)
         self._collab_broadcast_timer.setInterval(COLLAB_BROADCAST_DEBOUNCE_MS)
         self._collab_broadcast_timer.timeout.connect(self._broadcast_current_snapshot)
+        self._search_width_ratio = 0.85
+        self._search_width_adjusted_once = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -3112,7 +3326,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.minimizeRequested.connect(lambda: self.window().showMinimized())
         self.controls.maximizeRestoreRequested.connect(self._toggle_max_restore)
         self.controls.closeRequested.connect(QtWidgets.QApplication.instance().quit)
-        self.controls.summarize_btn.setToolTip("Copy summarize system prompt")
+        self.controls.summarize_btn.setToolTip("Copy summarize system prompt. Consider having a column named 'feedback' to enhance the prompt.")
         self.controls.summarizeRequested.connect(self._on_summarize_requested)
         self.controls.share_btn.setToolTip("Start hosting and copy share link")
         self.controls.share_btn.installEventFilter(self)
@@ -3174,7 +3388,7 @@ class DataViewerPage(QtWidgets.QWidget):
         # --- Search Field ---
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText("Search keyword…")
-        self.search_edit.setMinimumWidth(150)
+        self.search_edit.setMinimumWidth(160)
         self.search_edit.returnPressed.connect(self.on_search_return_pressed)
         self.search_edit.installEventFilter(self)
         toolbar.addWidget(self.search_edit)
@@ -3218,11 +3432,12 @@ class DataViewerPage(QtWidgets.QWidget):
         self.match_label = QtWidgets.QLabel("Matching cells: 0")
         self.match_label.setMinimumWidth(100)
 
-        toolbar.addWidget(self.btn_prev)
-        toolbar.addWidget(self.btn_next)
-        toolbar.addWidget(self.match_label)
+        self.btn_prev_action = toolbar.addWidget(self.btn_prev)
+        self.btn_next_action = toolbar.addWidget(self.btn_next)
+        self.match_label_action = toolbar.addWidget(self.match_label)
 
-        toolbar.addSeparator()
+        self.match_nav_separator = toolbar.addSeparator()
+        self._set_match_navigation_visible(False)
 
         # --- Replace Section ---
         self.replace_container = QtWidgets.QWidget()
@@ -3245,6 +3460,13 @@ class DataViewerPage(QtWidgets.QWidget):
         toolbar.addWidget(self.replace_container)
 
         toolbar.addSeparator()
+
+        self.toolbar_flex_spacer = QtWidgets.QWidget()
+        self.toolbar_flex_spacer.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        toolbar.addWidget(self.toolbar_flex_spacer)
 
         # --- Font Size Scaler ---
         font_container = QtWidgets.QWidget()
@@ -3271,12 +3493,6 @@ class DataViewerPage(QtWidgets.QWidget):
         font_layout.addWidget(self.font_increase_btn)
 
         toolbar.addWidget(font_container)
-        toolbar.addSeparator()
-
-        # --- Other Actions ---
-        self.btn_autosize = QtGui.QAction("Autosize", self)
-        self.btn_autosize.triggered.connect(lambda: self.autosize_columns(force=True))
-        toolbar.addAction(self.btn_autosize)
 
         # --- Table View ---
         self.table = SmoothScrollTableView()
@@ -3325,6 +3541,28 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Track which columns were resized since last update
         self._columns_resized = set()
+        self._suspend_row_resize_reactions = False
+
+        # Caches used by fast row-height calculation for wrapped text.
+        self._row_height_font_metrics_cache: dict[tuple[t.Any, ...], QtGui.QFontMetrics] = {}
+        self._row_height_wrap_cache: dict[tuple[t.Any, ...], int] = {}
+        self._row_height_wrap_cache_limit = 12000
+        self._row_height_background_batch_size = 4
+        self._row_height_background_apply_size = 4
+        self._row_height_background_apply_interval_ms = 0
+        self._row_height_background_generation = 0
+        self._row_height_background_active = False
+        self._row_height_background_result_buffer: list[tuple[int, int]] = []
+        self._row_height_background_task: t.Optional[_RowHeightBatchTask] = None
+        self._row_height_thread_pool = QtCore.QThreadPool(self)
+        self._row_height_thread_pool.setMaxThreadCount(1)
+        self._row_height_apply_timer = QtCore.QTimer(self)
+        self._row_height_apply_timer.setSingleShot(True)
+        self._row_height_apply_timer.setInterval(self._row_height_background_apply_interval_ms)
+        self._row_height_apply_timer.timeout.connect(self._flush_background_row_height_updates)
+        self._pending_resize_rows: list[int] = []
+        self._pending_resize_col_widths: list[int] = []
+        self._pending_resize_default_height = 0
         
         # Connect column resize signal
         self.table.horizontalHeader().sectionResized.connect(self._on_column_resized)
@@ -3465,6 +3703,38 @@ class DataViewerPage(QtWidgets.QWidget):
         self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._select_all_shortcut.activated.connect(self._select_all_data_cells)
         self._apply_session_mode_ui()
+
+    def _apply_search_width_ratio_once(self):
+        if self._search_width_adjusted_once:
+            return
+        if not getattr(self, "toolbar", None) or not self.toolbar.isVisible():
+            return
+        if not getattr(self, "search_edit", None):
+            return
+
+        current_width = int(self.search_edit.width())
+        if current_width <= 0:
+            QtCore.QTimer.singleShot(0, self._apply_search_width_ratio_once)
+            return
+
+        target_width = max(160, int(round(current_width * float(self._search_width_ratio))))
+        if target_width < current_width:
+            self.search_edit.setMaximumWidth(target_width)
+        self._search_width_adjusted_once = True
+
+    def _set_match_navigation_visible(self, visible: bool):
+        visible = bool(visible)
+        if hasattr(self, "btn_prev_action"):
+            self.btn_prev_action.setVisible(visible)
+        self.btn_prev.setVisible(visible)
+        if hasattr(self, "btn_next_action"):
+            self.btn_next_action.setVisible(visible)
+        self.btn_next.setVisible(visible)
+        if hasattr(self, "match_label_action"):
+            self.match_label_action.setVisible(visible)
+        self.match_label.setVisible(visible)
+        if hasattr(self, "match_nav_separator"):
+            self.match_nav_separator.setVisible(visible)
         
     def refresh_dims_display(self):
         """Updates the status bar with current row and column counts in bold."""
@@ -4413,7 +4683,13 @@ class DataViewerPage(QtWidgets.QWidget):
         self.controls.back_btn.setEnabled(True)
         self.status.showMessage(status_message)
 
-        self.autosize_columns(force=True)
+        self._suspend_row_resize_reactions = True
+        try:
+            self.autosize_columns(force=True)
+        finally:
+            self._suspend_row_resize_reactions = False
+        self._columns_resized.clear()
+        self._row_resize_timer.stop()
         QtCore.QTimer.singleShot(50, self._autosize_all_rows)
 
         self.current_match_pos = -1
@@ -4426,12 +4702,13 @@ class DataViewerPage(QtWidgets.QWidget):
         self.update_dirty_indicator()
         self._update_edit_meta_indicator()
         self._apply_session_mode_ui()
-        if hasattr(self.app_ref, "_set_compact_window_lock"):
-            try:
+        if hasattr(self.app_ref, "show_viewer_maximized"):
+            self.app_ref.show_viewer_maximized()
+        else:
+            if hasattr(self.app_ref, "_set_compact_window_lock"):
                 self.app_ref._set_compact_window_lock(False)
-            except Exception:
-                pass
-        self.window().showMaximized()
+            self.window().showMaximized()
+        QtCore.QTimer.singleShot(0, self._apply_search_width_ratio_once)
         QtCore.QTimer.singleShot(0, lambda: self._queue_collab_presence_broadcast(force=True))
 
     def _apply_collab_snapshot(self, snapshot: dict[str, t.Any], source_label: str) -> bool:
@@ -4942,6 +5219,7 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Reset indicators
         self.match_label.setText("Matching cells: 0")
+        self._set_match_navigation_visible(False)
         self.status.clearMessage()
         self.size_label.clear()
         self.dirty_indicator.hide()
@@ -4959,6 +5237,14 @@ class DataViewerPage(QtWidgets.QWidget):
         self.dd.icon.setText(DROP_HINT_TEXT)
         
                
+    def _invalidate_background_row_resize(self):
+        self._row_height_background_generation += 1
+        self._row_height_background_active = False
+        self._row_height_background_task = None
+        self._row_height_background_result_buffer = []
+        if self._row_height_apply_timer.isActive():
+            self._row_height_apply_timer.stop()
+
     def _show_background_indicator(self, task_name: str, total_rows: int, current_row: int = 0):
         """Show the background processing indicator with progress and elapsed time"""
         self.bg_task_name = task_name
@@ -4971,12 +5257,16 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def _hide_background_indicator(self):
         """Hide the background processing indicator"""
+        self._invalidate_background_row_resize()
         self.bg_timer.stop()
         self.bg_indicator.hide()
         self.bg_start_time = None
         self.bg_task_name = ""
         self.bg_total_rows = 0
         self.bg_current_row = 0
+        self._pending_resize_rows = []
+        self._pending_resize_col_widths = []
+        self._pending_resize_default_height = 0
 
     def _update_bg_indicator(self):
         """Update the progress and elapsed time in the indicator"""
@@ -5086,6 +5376,7 @@ class DataViewerPage(QtWidgets.QWidget):
                              
     def on_search_return_pressed(self):
         search_text = self.search_edit.text()
+        self._set_match_navigation_visible(bool(search_text.strip()))
         if not self.model:
             return
             
@@ -5124,6 +5415,7 @@ class DataViewerPage(QtWidgets.QWidget):
             return
             
         search_text = self.search_edit.text()
+        self._set_match_navigation_visible(bool(search_text.strip()))
         
         # Update the model's search term to trigger repainting
         self.model.set_search_term(search_text)
@@ -5403,6 +5695,8 @@ class DataViewerPage(QtWidgets.QWidget):
         font = self.table.font()
         font.setPointSize(new_size)
         self.table.setFont(font)
+        self._row_height_font_metrics_cache.clear()
+        self._row_height_wrap_cache.clear()
         
         # Refresh table to apply changes
         self.table.viewport().update()
@@ -5495,6 +5789,7 @@ class DataViewerPage(QtWidgets.QWidget):
             return
         self.model.set_search_term(text)
         self.current_match_pos = -1
+        self._set_match_navigation_visible(bool(text.strip()))
         self.replace_container.setVisible(bool(text.strip()))
         self._update_replace_buttons()
 
@@ -5541,6 +5836,8 @@ class DataViewerPage(QtWidgets.QWidget):
         return None
 
     def _on_matches_changed(self, total: int):
+        has_search_term = bool(self.model and str(self.model.search_term or "").strip())
+        self._set_match_navigation_visible(has_search_term)
         current = self.current_match_pos + 1 if total > 0 and self.current_match_pos >= 0 else 0
         self.match_label.setText(f"Matching cells: {current} / {total}")
         self.btn_prev.setEnabled(total > 0)
@@ -5657,55 +5954,176 @@ class DataViewerPage(QtWidgets.QWidget):
                 self.model.is_dirty = True
                 self.model.layoutChanged.emit()
             
+    @staticmethod
+    def _font_cache_key(font: QtGui.QFont) -> tuple[t.Any, ...]:
+        return _row_height_font_cache_key(font)
+
+    def _font_metrics_cached(self, font: QtGui.QFont) -> tuple[QtGui.QFontMetrics, tuple[t.Any, ...]]:
+        key = self._font_cache_key(font)
+        metrics = self._row_height_font_metrics_cache.get(key)
+        if metrics is None:
+            metrics = QtGui.QFontMetrics(font)
+            self._row_height_font_metrics_cache[key] = metrics
+        return metrics, key
+
+    def _current_column_text_widths(self) -> list[int]:
+        if not self.model:
+            return []
+        header = self.table.horizontalHeader()
+        widths: list[int] = []
+        for col in range(self.model.data_column_count()):
+            widths.append(max(24, int(header.sectionSize(col)) - 10))
+        return widths
+
+    def _wrapped_cell_height(self, text: str, font: QtGui.QFont, usable_width: int) -> int:
+        metrics, font_key = self._font_metrics_cached(font)
+        line_height = int(metrics.lineSpacing())
+        if usable_width <= 8 or not text:
+            return line_height + TABLE_VERTICAL_TEXT_PADDING
+
+        if "\n" not in text:
+            avg_char_width = max(1, int(metrics.averageCharWidth()))
+            quick_fit_chars = max(8, int((usable_width / avg_char_width) * 0.85))
+            if len(text) <= quick_fit_chars:
+                return line_height + TABLE_VERTICAL_TEXT_PADDING
+            if len(text) <= quick_fit_chars * 3 and int(metrics.horizontalAdvance(text)) <= usable_width:
+                return line_height + TABLE_VERTICAL_TEXT_PADDING
+
+        cache_key = None
+        if len(text) <= 256:
+            cache_key = (font_key, int(usable_width), text)
+            cached = self._row_height_wrap_cache.get(cache_key)
+            if cached is not None:
+                return int(cached)
+
+        flags = int(QtCore.Qt.TextFlag.TextWordWrap | QtCore.Qt.TextFlag.TextExpandTabs)
+        rect = metrics.boundingRect(QtCore.QRect(0, 0, int(usable_width), 10000000), flags, text)
+        content_height = max(line_height, int(rect.height()))
+        if content_height > line_height:
+            content_height = int(math.ceil(content_height * (TABLE_LINE_HEIGHT_PERCENT / 100.0)))
+
+        total_height = int(content_height + TABLE_VERTICAL_TEXT_PADDING)
+        if cache_key is not None:
+            if len(self._row_height_wrap_cache) >= self._row_height_wrap_cache_limit:
+                self._row_height_wrap_cache.clear()
+            self._row_height_wrap_cache[cache_key] = total_height
+        return total_height
+
+    def _calculate_row_target_height(
+        self,
+        row: int,
+        column_widths: list[int],
+        default_height: int,
+    ) -> int:
+        if not self.model:
+            return int(default_height)
+
+        data_rows = self.model.data_row_count()
+        data_cols = self.model.data_column_count()
+        if row < 0 or row >= data_rows:
+            return int(default_height)
+
+        max_cell_height = int(default_height)
+        base_font = self.table.font()
+        styles = self.model.cell_styles()
+
+        for col in range(data_cols):
+            if col >= len(column_widths):
+                break
+            value = self.model.df.iat[row, col]
+            if _is_missing_value(value):
+                continue
+
+            text = str(value)
+            if not text:
+                continue
+
+            style = styles.get((row, col), {})
+            style_font = style.get("font") if isinstance(style, dict) else None
+            cell_font = style_font if isinstance(style_font, QtGui.QFont) else base_font
+            cell_height = self._wrapped_cell_height(text, cell_font, column_widths[col])
+            if cell_height > max_cell_height:
+                max_cell_height = cell_height
+
+        return int(max_cell_height + 3)
+
+    def _resize_rows_with_padding(
+        self,
+        rows: list[int],
+        *,
+        column_widths: t.Optional[list[int]] = None,
+        default_height: t.Optional[int] = None,
+    ):
+        if not self.model or not rows:
+            return
+
+        widths = column_widths if column_widths is not None else self._current_column_text_widths()
+        base_height = int(default_height) if default_height is not None else int(self.table.verticalHeader().defaultSectionSize())
+
+        was_updates_enabled = bool(self.table.updatesEnabled())
+        if was_updates_enabled:
+            self.table.setUpdatesEnabled(False)
+        try:
+            for row in rows:
+                row_int = int(row)
+                if row_int < 0:
+                    continue
+                target_height = self._calculate_row_target_height(row_int, widths, base_height)
+                if int(self.table.rowHeight(row_int)) != int(target_height):
+                    self.table.setRowHeight(row_int, int(target_height))
+        finally:
+            if was_updates_enabled:
+                self.table.setUpdatesEnabled(True)
+
     def autosize_columns(self, force=False):
         if not self.model:
             return
-        
-        # Cache metrics and calculate once
+
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
-        avg_char_width = metrics.averageCharWidth()
+        avg_char_width = max(1, int(metrics.averageCharWidth()))
         min_w, max_w = 80, 650
-        
-        # Sample size: 200 rows is enough for most cases
-        SAMPLE_SIZE = 200
-        df_sample = self.model.df.head(SAMPLE_SIZE) if len(self.model.df) > SAMPLE_SIZE else self.model.df
-        
-        for c in range(len(self.model.df.columns)):
-            header = str(self.model.df.columns[c])
-            col = df_sample.iloc[:, c]
-            
-            # Initialize avg_len with a default value
-            avg_len = 8  # ← FIX: Define it here
-            
-            # Fast path: numeric columns need less width
-            if pd.api.types.is_numeric_dtype(col):
-                # Find max numeric width
-                max_val = col.dropna().abs().max() if not col.dropna().empty else 0
-                avg_len = len(f"{max_val:.2f}") if pd.notna(max_val) else 8  # ← Assign here
-            else:
-                # Use vectorized string length calculation
-                sample = col.dropna().astype(str)
-                if not sample.empty:
-                    avg_len = sample.str.len().mean()
-                    avg_len = min(avg_len, 100)  # Cap extremely long text
+
+        sample_size = 200
+        df_sample = self.model.df.head(sample_size) if len(self.model.df) > sample_size else self.model.df
+        header_view = self.table.horizontalHeader()
+
+        was_updates_enabled = bool(self.table.updatesEnabled())
+        if was_updates_enabled:
+            self.table.setUpdatesEnabled(False)
+        try:
+            for col_idx in range(self.model.data_column_count()):
+                header_text = str(self.model.df.columns[col_idx])
+                col_series = df_sample.iloc[:, col_idx]
+                non_null = col_series.dropna()
+
+                avg_len = 8.0
+                if pd.api.types.is_numeric_dtype(col_series):
+                    if not non_null.empty:
+                        max_val = non_null.abs().max()
+                        avg_len = float(len(f"{max_val:.2f}")) if pd.notna(max_val) else 8.0
                 else:
-                    avg_len = 8  # ← Fallback here
-            
-            # Now avg_len is always defined
-            is_id_col = "id" in header.strip().lower() and avg_len <= 16
-            base = 8 if is_id_col else int(avg_len)
-            w = int(avg_char_width * (base + len(header) * 0.15)) + 28
-            w = max(min_w, min(max_w, w))
-            
-            # Set width without triggering multiple signals
-            self.table.horizontalHeader().resizeSection(c, w)
+                    if not non_null.empty:
+                        sample_text = non_null.astype(str)
+                        avg_len = float(sample_text.str.len().mean())
+                        avg_len = min(avg_len, 100.0)
+
+                is_id_col = "id" in header_text.strip().lower() and avg_len <= 16
+                base = 8 if is_id_col else int(avg_len)
+                width = int(avg_char_width * (base + len(header_text) * 0.15)) + 28
+                width = max(min_w, min(max_w, width))
+                header_view.resizeSection(col_idx, int(width))
+        finally:
+            if was_updates_enabled:
+                self.table.setUpdatesEnabled(True)
     
     # === NEW: Column resize handler (debounced) ===
     def _on_column_resized(self, logical_index: int, old_size: int, new_size: int):
         """Triggered when any column is resized. Starts debounced row update."""
-        # Ignore tiny adjustments (less than 5 pixels) to avoid micro-calculations
+        if self._suspend_row_resize_reactions:
+            return
         if abs(new_size - old_size) > 5:
+            self._row_height_wrap_cache.clear()
             self._columns_resized.add(logical_index)
             self._row_resize_timer.start()
 
@@ -5714,78 +6132,202 @@ class DataViewerPage(QtWidgets.QWidget):
         """Recalculates row heights for visible area based on resized columns."""
         if not self.model or not self._columns_resized:
             return
-        
-        # Get viewport boundaries for visible rows
+
         viewport = self.table.viewport()
         top_row = self.table.rowAt(0)
         bottom_row = self.table.rowAt(viewport.height())
-        
-        # Handle edge cases
-        if top_row == -1: 
+
+        if top_row == -1:
             top_row = 0
-        if bottom_row == -1: 
-            bottom_row = self.model.rowCount() - 1
-        
-        # Add buffer rows for smoother scrolling (25 rows above/below)
-        BUFFER_ROWS = 25
-        top_row = max(0, top_row - BUFFER_ROWS)
-        bottom_row = min(self.model.rowCount() - 1, bottom_row + BUFFER_ROWS)
-        
-        # Calculate new heights only for rows in visible+buffer zone
-        for row in range(top_row, bottom_row + 1):
-            self._resize_row_with_padding(row)
-        
-        # Clear the tracking set
+        if bottom_row == -1:
+            bottom_row = self.model.data_row_count() - 1
+
+        buffer_rows = 25
+        top_row = max(0, top_row - buffer_rows)
+        bottom_row = min(self.model.data_row_count() - 1, bottom_row + buffer_rows)
+        if bottom_row < top_row:
+            self._columns_resized.clear()
+            return
+
+        rows = list(range(top_row, bottom_row + 1))
+        widths = self._current_column_text_widths()
+        default_height = int(self.table.verticalHeader().defaultSectionSize())
+        self._resize_rows_with_padding(rows, column_widths=widths, default_height=default_height)
+
         self._columns_resized.clear()
-        
-        # Background full update for very large tables (>1000 rows)
-        if self.model.rowCount() > 1000:
+
+        if self.model.data_row_count() > 1000:
             QtCore.QTimer.singleShot(800, self._background_resize_rows)
             
     def _resize_row_with_padding(self, row: int):
-        """
-        Resize row to fit content and add a small amount of extra vertical space
-        so wrapped text is easier to scan.
-        """
-        # Resize to fit content first
-        self.table.resizeRowToContents(row)
+        self._resize_rows_with_padding([int(row)])
 
-        extra_padding = 3
-        current_height = self.table.rowHeight(row)
-        new_height = current_height + extra_padding
-        self.table.setRowHeight(row, new_height)
+    def _apply_row_heights(self, row_heights: list[tuple[int, int]]):
+        if not self.model or not row_heights:
+            return
+
+        max_row = self.model.data_row_count()
+        was_updates_enabled = bool(self.table.updatesEnabled())
+        if was_updates_enabled:
+            self.table.setUpdatesEnabled(False)
+        try:
+            for row, height in row_heights:
+                row_int = int(row)
+                if row_int < 0 or row_int >= max_row:
+                    continue
+                target_height = int(height)
+                if int(self.table.rowHeight(row_int)) != target_height:
+                    self.table.setRowHeight(row_int, target_height)
+        finally:
+            if was_updates_enabled:
+                self.table.setUpdatesEnabled(True)
+
+    def _flush_background_row_height_updates(self, force: bool = False):
+        if not self.model:
+            self._row_height_background_result_buffer = []
+            return
+
+        buffered = len(self._row_height_background_result_buffer)
+        if buffered <= 0:
+            return
+
+        if not force and buffered < int(self._row_height_background_apply_size):
+            if not self._row_height_apply_timer.isActive():
+                self._row_height_apply_timer.start()
+            return
+
+        if force:
+            apply_items = self._row_height_background_result_buffer
+            self._row_height_background_result_buffer = []
+        else:
+            apply_count = min(buffered, int(self._row_height_background_apply_size))
+            apply_items = self._row_height_background_result_buffer[:apply_count]
+            self._row_height_background_result_buffer = self._row_height_background_result_buffer[apply_count:]
+
+        self._apply_row_heights(apply_items)
+
+        if self._row_height_background_result_buffer:
+            if force:
+                self._flush_background_row_height_updates(force=True)
+            elif not self._row_height_apply_timer.isActive():
+                self._row_height_apply_timer.start()
+
+    def _start_background_row_height_batch(self):
+        if not self.model or self._row_height_background_active:
+            return
+        if not self._pending_resize_rows:
+            return
+
+        widths = self._pending_resize_col_widths or self._current_column_text_widths()
+        if not widths:
+            self._pending_resize_rows = []
+            return
+
+        batch_size = max(1, int(self._row_height_background_batch_size))
+        current_batch = self._pending_resize_rows[:batch_size]
+        self._pending_resize_rows = self._pending_resize_rows[batch_size:]
+
+        generation = int(self._row_height_background_generation)
+        default_height = int(self._pending_resize_default_height or self.table.verticalHeader().defaultSectionSize())
+        task = _RowHeightBatchTask(
+            generation=generation,
+            df=self.model.df,
+            styles=self.model.cell_styles(),
+            rows=current_batch,
+            column_widths=widths,
+            default_height=default_height,
+            base_font=self.table.font(),
+            wrap_cache_limit=self._row_height_wrap_cache_limit,
+        )
+        task.signals.completed.connect(self._on_background_row_height_batch_completed)
+        task.signals.failed.connect(self._on_background_row_height_batch_failed)
+        self._row_height_background_task = task
+        self._row_height_background_active = True
+        self._row_height_thread_pool.start(task)
+
+    def _on_background_row_height_batch_completed(self, generation: int, payload: t.Any):
+        if int(generation) != int(self._row_height_background_generation):
+            return
+
+        self._row_height_background_active = False
+        self._row_height_background_task = None
+
+        incoming: list[tuple[int, int]] = []
+        if isinstance(payload, list):
+            for item in payload:
+                if not isinstance(item, (list, tuple)) or len(item) < 2:
+                    continue
+                try:
+                    incoming.append((int(item[0]), int(item[1])))
+                except Exception:
+                    continue
+        if incoming:
+            self._row_height_background_result_buffer.extend(incoming)
+            if len(self._row_height_background_result_buffer) >= int(self._row_height_background_apply_size):
+                self._flush_background_row_height_updates()
+            elif not self._row_height_apply_timer.isActive():
+                self._row_height_apply_timer.start()
+
+        if self.bg_total_rows > 0:
+            remaining = len(self._pending_resize_rows)
+            self.bg_current_row = int(max(0, self.bg_total_rows - remaining))
+
+        if self._pending_resize_rows:
+            QtCore.QTimer.singleShot(0, self._background_resize_remaining)
+            return
+
+        self._flush_background_row_height_updates(force=True)
+        if self.bg_start_time is not None:
+            self._hide_background_indicator()
+            self.status.showMessage("Finished formatting.")
+
+    def _on_background_row_height_batch_failed(self, generation: int, error_message: str):
+        if int(generation) != int(self._row_height_background_generation):
+            return
+
+        self._row_height_background_active = False
+        self._row_height_background_task = None
+        self._pending_resize_rows = []
+        self._flush_background_row_height_updates(force=True)
+        self._hide_background_indicator()
+        self.status.showMessage(f"Autosize interrupted: {error_message}", 4000)
         
     # === NEW: Background processing for off-screen rows ===
     def _background_resize_rows(self):
         """Low-priority update for rows outside viewport (runs after idle)."""
         if not self.model:
             return
-        
-        total_rows = self.model.rowCount()
-        
-        # Process in batches of 50 to maintain UI responsiveness
-        BATCH_SIZE = 50
-        delay = 15  # milliseconds between batches
-        
-        # Use closure to maintain state
+
+        total_rows = self.model.data_row_count()
+        if total_rows <= 0:
+            return
+
+        batch_size = 80
+        delay = 8
+        widths = self._current_column_text_widths()
+        default_height = int(self.table.verticalHeader().defaultSectionSize())
+
         def create_batch_processor():
             current_row = 0
+
             def process_next_batch():
                 nonlocal current_row
-                if not self.model:  # Safety check
+                if not self.model:
                     return
-                    
-                end_row = min(current_row + BATCH_SIZE, total_rows)
-                for row in range(current_row, end_row):
-                    self._resize_row_with_padding(row)
-                
+
+                end_row = min(current_row + batch_size, total_rows)
+                batch_rows = list(range(current_row, end_row))
+                self._resize_rows_with_padding(
+                    batch_rows,
+                    column_widths=widths,
+                    default_height=default_height,
+                )
                 current_row = end_row
                 if current_row < total_rows:
                     QtCore.QTimer.singleShot(delay, process_next_batch)
-            
+
             return process_next_batch
-        
-        # Start processing from first row
+
         processor = create_batch_processor()
         processor()
 
@@ -5793,174 +6335,153 @@ class DataViewerPage(QtWidgets.QWidget):
     def _on_cell_data_changed(self, top_left, bottom_right, roles):
         """Recalculate row height when cell data changes via editing."""
         if not roles or QtCore.Qt.ItemDataRole.DisplayRole in roles:
-            # Recalculate just the changed rows
-            for row in range(top_left.row(), bottom_right.row() + 1):
-                self._resize_row_with_padding(row)
+            start_row = max(0, int(top_left.row()))
+            end_row = max(start_row, int(bottom_right.row()))
+            self._resize_rows_with_padding(list(range(start_row, end_row + 1)))
         self._update_edit_meta_indicator()
 
     # === NEW: Handle scrolling for on-demand row sizing ===
     def _on_scroll(self, value):
-        """Precalculate rows as they come into view - optimized version"""
+        """Precalculate rows as they come into view - optimized version."""
         if not self.model:
             return
-        
-        # More aggressive throttling
+
         if abs(value - self._last_scroll_value) < 150:
             return
-        
         self._last_scroll_value = value
-        
-        # Get viewport boundaries more efficiently
+
         viewport_height = self.table.viewport().height()
         if viewport_height <= 0:
             return
-        
+
         top_row = self.table.rowAt(0)
         bottom_row = self.table.rowAt(viewport_height)
-        
-        # Validate row indices
+
         if top_row == -1:
-            top_row = max(0, int(value / self.table.verticalHeader().defaultSectionSize()) - 10)
+            approx = int(value / max(1, self.table.verticalHeader().defaultSectionSize()))
+            top_row = max(0, approx - 10)
         if bottom_row == -1:
-            bottom_row = min(self.model.rowCount() - 1, top_row + 100)
-        
-        # Add smaller buffer for better performance
-        BUFFER_ROWS = 20
-        top_row = max(0, top_row - BUFFER_ROWS)
-        bottom_row = min(self.model.rowCount() - 1, bottom_row + BUFFER_ROWS)
-        
-        # Check if rows already have reasonable height
+            bottom_row = min(self.model.data_row_count() - 1, top_row + 100)
+
+        buffer_rows = 20
+        top_row = max(0, top_row - buffer_rows)
+        bottom_row = min(self.model.data_row_count() - 1, bottom_row + buffer_rows)
+        if bottom_row < top_row:
+            return
+
         font_metrics = QtGui.QFontMetrics(self.table.font())
-        min_expected_height = font_metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING
-        
-        # Process only rows that need it
+        min_expected_height = int(font_metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING)
+        rows_to_resize: list[int] = []
+
         for row in range(top_row, bottom_row + 1):
-            if row >= len(self.model.df.index):
+            if row >= self.model.data_row_count():
                 continue
-            if self.table.rowHeight(row) < min_expected_height:
-                # Double-check if this row actually needs resizing
-                needs_resize = False
-                for c in range(self.model.columnCount() - 1):
-                    val = self.model.df.iat[row, c]
-                    if pd.notna(val):
-                        s = str(val)
-                        if '\n' in s or len(s) > 100:  # Only resize if multiline or very long
-                            needs_resize = True
-                            break
-                
-                if needs_resize:
-                    self._resize_row_with_padding(row)
+            if int(self.table.rowHeight(row)) >= min_expected_height:
+                continue
+            needs_resize = False
+            for c in range(self.model.data_column_count()):
+                val = self.model.df.iat[row, c]
+                if _is_missing_value(val):
+                    continue
+                s = str(val)
+                if "\n" in s or len(s) > 100:
+                    needs_resize = True
+                    break
+            if needs_resize:
+                rows_to_resize.append(row)
+
+        if rows_to_resize:
+            self._resize_rows_with_padding(rows_to_resize)
                     
     # === NEW: Full recalculation on initial load ===
     def _autosize_all_rows(self):
         """
-        Optimized: Sets a default height for all rows instantly, then uses 
-        Pandas vectorization to find ONLY the complex rows that need 
-        calculation.
+        Sets a default row height instantly, then computes exact wrapped heights
+        only for rows that contain complex text.
         """
         if not self.model:
             return
-        
-        row_count = self.model.rowCount()
+
+        row_count = self.model.data_row_count()
         if row_count == 0:
             return
 
-        # 1. Set global default height (Instant)
-        # This handles 90-99% of rows without ANY calculation overhead
         font = self.table.font()
         metrics = QtGui.QFontMetrics(font)
-        default_height = metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING
+        default_height = int(metrics.lineSpacing() + TABLE_VERTICAL_TEXT_PADDING)
         self.table.verticalHeader().setDefaultSectionSize(default_height)
-        
-        # 2. Identify "Complex" rows using Vectorized Pandas (Fast)
-        # We only care about columns that are 'object' type (text)
-        text_cols = self.model.df.select_dtypes(include=['object']).columns
-        
-        complex_rows_set = set()
-        
-        if len(text_cols) > 0:
-            # Show busy cursor if file is huge
+        self._row_height_wrap_cache.clear()
+
+        text_col_indices: list[int] = []
+        for col_idx, dtype in enumerate(list(self.model.df.dtypes)):
+            if pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype):
+                text_col_indices.append(int(col_idx))
+
+        complex_rows_set: set[int] = set()
+
+        if text_col_indices:
             if row_count > 10000:
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
-
             try:
-                # Check each text column for newlines or excessive length
-                # We do this column by column to save memory
-                for col in text_cols:
-                    series = self.model.df[col].dropna().astype(str)
-                    
-                    # Criteria: Contains newline OR is longer than 100 chars
-                    # We get the boolean mask and then the indices
-                    mask = (series.str.contains('\n')) | (series.str.len() > 100)
-                    
-                    # Add indices of complex rows to our set
-                    complex_rows_set.update(series[mask].index.tolist())
+                df_index = self.model.df.index
+                is_range_index = (
+                    isinstance(df_index, pd.RangeIndex)
+                    and int(df_index.start) == 0
+                    and int(df_index.step) == 1
+                )
+                for col_idx in text_col_indices:
+                    series = self.model.df.iloc[:, col_idx].dropna().astype(str)
+                    if series.empty:
+                        continue
+                    mask = series.str.contains("\n", regex=False) | (series.str.len() > 100)
+                    if not bool(mask.any()):
+                        continue
+                    marked_index = series.index[mask]
+                    if is_range_index:
+                        complex_rows_set.update(int(v) for v in marked_index.tolist())
+                    else:
+                        positions = df_index.get_indexer(marked_index)
+                        complex_rows_set.update(int(pos) for pos in positions if int(pos) >= 0)
             finally:
-                 if row_count > 10000:
+                if row_count > 10000:
                     QtWidgets.QApplication.restoreOverrideCursor()
 
-        # Convert to a sorted list for processing
+        self._hide_background_indicator()
         self._pending_resize_rows = sorted(list(complex_rows_set))
+        self._pending_resize_col_widths = self._current_column_text_widths()
+        self._pending_resize_default_height = int(default_height)
         total_complex = len(self._pending_resize_rows)
-        
-        # If very few complex rows, just do it now and finish
-        if total_complex < 50:
-            for row in self._pending_resize_rows:
-                self._resize_row_with_padding(row)
+
+        if total_complex <= int(self._row_height_background_batch_size):
+            self._resize_rows_with_padding(
+                self._pending_resize_rows,
+                column_widths=self._pending_resize_col_widths,
+                default_height=self._pending_resize_default_height,
+            )
+            self._pending_resize_rows = []
             return
 
-        # 3. Setup Background Processing for the Complex Rows ONLY
         self._show_background_indicator("Autosizing rows", total_complex, 0)
-        
-        # Process first batch immediately to give instant feedback
-        BATCH_SIZE = 20
-        initial_batch = self._pending_resize_rows[:BATCH_SIZE]
-        self._pending_resize_rows = self._pending_resize_rows[BATCH_SIZE:]
-        
-        for row in initial_batch:
-            self._resize_row_with_padding(row)
-            
-        # Schedule the rest
-        if self._pending_resize_rows:
-            QtCore.QTimer.singleShot(50, self._background_resize_remaining)
-        else:
-            self._hide_background_indicator()
+        QtCore.QTimer.singleShot(0, self._background_resize_remaining)
 
     def _background_resize_remaining(self):
         """
-        Optimized: Process the queue of specific rows that need resizing.
-        Does NOT iterate through the whole table, only the necessary rows.
+        Process only rows queued for wrapped-text sizing.
         """
-        # Safety check: ensure the queue exists and model is loaded
-        if not self.model or not hasattr(self, '_pending_resize_rows') or not self._pending_resize_rows:
+        if not self.model:
             self._hide_background_indicator()
             return
-            
-        # Process in batches
-        BATCH_SIZE = 50 
-        
-        # Take the next batch of indices from the queue
-        current_batch = self._pending_resize_rows[:BATCH_SIZE]
-        self._pending_resize_rows = self._pending_resize_rows[BATCH_SIZE:]
-        
-        # Resize only these specific rows
-        for row in current_batch:
-            self._resize_row_with_padding(row)
-            
-        # Update progress based on how many are LEFT
-        if self.bg_total_rows > 0:
-            remaining = len(self._pending_resize_rows)
-            done = self.bg_total_rows - remaining
-            self.bg_current_row = done
-            self._update_bg_indicator()
-        
-        # If there are still rows left, schedule the next batch
-        if self._pending_resize_rows:
-            # Short delay (10ms) to keep UI responsive
-            QtCore.QTimer.singleShot(10, self._background_resize_remaining)
-        else:
+
+        if self._row_height_background_active:
+            return
+
+        if not self._pending_resize_rows:
+            self._flush_background_row_height_updates(force=True)
             self._hide_background_indicator()
-            self.status.showMessage(f"Finished formatting.")    
+            self.status.showMessage("Finished formatting.")
+            return
+
+        self._start_background_row_height_batch()
         
     def toggle_mode(self, checked: bool):
         if self.model:
@@ -6560,11 +7081,67 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _set_compact_window_lock(self, lock: bool):
         if lock:
-            self.setFixedSize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
+            self.setMinimumSize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
+            self.setMaximumSize(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
             return
         max_size = int(getattr(QtWidgets, "QWIDGETSIZE_MAX", 16777215))
         self.setMinimumSize(0, 0)
         self.setMaximumSize(max_size, max_size)
+
+    def _active_screen_for_window(self) -> t.Optional[QtGui.QScreen]:
+        handle = self.windowHandle()
+        if handle is not None:
+            screen = handle.screen()
+            if screen is not None:
+                return screen
+        center_point = self.frameGeometry().center()
+        screen = QtWidgets.QApplication.screenAt(center_point)
+        if screen is not None:
+            return screen
+        screen = QtWidgets.QApplication.screenAt(QtGui.QCursor.pos())
+        if screen is not None:
+            return screen
+        return QtGui.QGuiApplication.primaryScreen()
+
+    def _fit_window_to_active_screen(self):
+        screen = self._active_screen_for_window()
+        if screen is None:
+            return
+        target = screen.availableGeometry()
+        if target.isValid():
+            self.setGeometry(target)
+
+    def _ensure_viewer_maximized(self):
+        if self.centralWidget().currentWidget() is not self.viewer:
+            return
+        self._set_compact_window_lock(False)
+        current_state = self.windowState()
+        if current_state & QtCore.Qt.WindowState.WindowMinimized:
+            self.setWindowState(current_state & ~QtCore.Qt.WindowState.WindowMinimized)
+        if not self.isMaximized():
+            self.showNormal()
+            self._fit_window_to_active_screen()
+            self.setWindowState(self.windowState() | QtCore.Qt.WindowState.WindowMaximized)
+            self.showMaximized()
+        if not self.isMaximized():
+            # Fallback for edge cases where frameless windows ignore maximize state.
+            self.showNormal()
+            self._fit_window_to_active_screen()
+
+    def show_viewer_maximized(self):
+        self._set_compact_window_lock(False)
+        self.showNormal()
+        self._fit_window_to_active_screen()
+        self.setWindowState(
+            (self.windowState() & ~QtCore.Qt.WindowState.WindowMinimized)
+            | QtCore.Qt.WindowState.WindowMaximized
+        )
+        self.showMaximized()
+        self.raise_()
+        self.activateWindow()
+        QtCore.QTimer.singleShot(0, self._ensure_viewer_maximized)
+        QtCore.QTimer.singleShot(60, self._ensure_viewer_maximized)
+        QtCore.QTimer.singleShot(140, self._ensure_viewer_maximized)
 
     def closeEvent(self, event):
         """Intercept close to check for unsaved changes"""

@@ -167,8 +167,5 @@ MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
     "tokenizer-mode": "mistral",
     "config_format": "mistral",
     "load_format": "mistral",
-    
-    
-    
     "ignore_patterns": ["original/**", "metal/**"],
 }
