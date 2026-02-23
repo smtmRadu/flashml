@@ -45,7 +45,8 @@ except Exception:
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.7"
+APP_NAME = "Better Excel v1.8"
+WINDOWS_APP_ID = "flashml.BetterExcel"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 320
 TABLE_LINE_HEIGHT_PERCENT = 112
@@ -1759,6 +1760,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self.replace_term: str = ""
         self._is_dark = True
         self._matches: list[QtCore.QModelIndex] = []
+        self._match_occurrence_total: int = 0
         self.case_sensitive: bool = False
         self._is_dirty = False
         self._cell_styles: dict[tuple[int, int], dict[str, t.Any]] = cell_styles or {}
@@ -2107,6 +2109,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
 
     def _rebuild_matches(self):
         self._matches = []
+        self._match_occurrence_total = 0
         if not self.search_term:
             return
         
@@ -2117,8 +2120,11 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                     val = self._df.iat[r, c]
                     if _is_missing_value(val):
                         continue
-                    if st in str(val):
+                    text = str(val)
+                    occ = int(text.count(st))
+                    if occ > 0:
                         self._matches.append(self.index(r, c))
+                        self._match_occurrence_total += occ
         else:
             st = self.search_term.lower()
             for r in range(self.data_row_count()):
@@ -2126,8 +2132,11 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                     val = self._df.iat[r, c]
                     if _is_missing_value(val):
                         continue
-                    if st in str(val).lower():
+                    text = str(val)
+                    occ = int(text.lower().count(st))
+                    if occ > 0:
                         self._matches.append(self.index(r, c))
+                        self._match_occurrence_total += int(occ)
 
     def match_at(self, pos: int) -> t.Optional[QtCore.QModelIndex]:
         if 0 <= pos < len(self._matches):
@@ -2136,6 +2145,9 @@ class DataFrameModel(QtCore.QAbstractTableModel):
 
     def total_matches(self) -> int:
         return len(self._matches)
+
+    def total_match_occurrences(self) -> int:
+        return int(self._match_occurrence_total)
     
     def add_new_column(self, col_name: str):
         """Add a new column to the DataFrame"""
@@ -3431,10 +3443,13 @@ class DataViewerPage(QtWidgets.QWidget):
 
         self.match_label = QtWidgets.QLabel("Matching cells: 0")
         self.match_label.setMinimumWidth(100)
+        self.total_matches_label = QtWidgets.QLabel(" | Total matches: 0")
+        self.total_matches_label.setMinimumWidth(120)
 
         self.btn_prev_action = toolbar.addWidget(self.btn_prev)
         self.btn_next_action = toolbar.addWidget(self.btn_next)
         self.match_label_action = toolbar.addWidget(self.match_label)
+        self.total_matches_label_action = toolbar.addWidget(self.total_matches_label)
 
         self.match_nav_separator = toolbar.addSeparator()
         self._set_match_navigation_visible(False)
@@ -3733,6 +3748,9 @@ class DataViewerPage(QtWidgets.QWidget):
         if hasattr(self, "match_label_action"):
             self.match_label_action.setVisible(visible)
         self.match_label.setVisible(visible)
+        if hasattr(self, "total_matches_label_action"):
+            self.total_matches_label_action.setVisible(visible)
+        self.total_matches_label.setVisible(visible)
         if hasattr(self, "match_nav_separator"):
             self.match_nav_separator.setVisible(visible)
         
@@ -5219,6 +5237,7 @@ class DataViewerPage(QtWidgets.QWidget):
         
         # Reset indicators
         self.match_label.setText("Matching cells: 0")
+        self.total_matches_label.setText(" | Total matches: 0")
         self._set_match_navigation_visible(False)
         self.status.clearMessage()
         self.size_label.clear()
@@ -5840,6 +5859,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self._set_match_navigation_visible(has_search_term)
         current = self.current_match_pos + 1 if total > 0 and self.current_match_pos >= 0 else 0
         self.match_label.setText(f"Matching cells: {current} / {total}")
+        total_occurrences = int(self.model.total_match_occurrences()) if self.model else 0
+        self.total_matches_label.setText(f" | Total matches: {total_occurrences}")
         self.btn_prev.setEnabled(total > 0)
         self.btn_next.setEnabled(total > 0)
 
@@ -5874,42 +5895,129 @@ class DataViewerPage(QtWidgets.QWidget):
                     return True  # Event handled
         return super().eventFilter(obj, event)
 
+    def _current_match_center_y_in_cell(self, idx: QtCore.QModelIndex) -> t.Optional[float]:
+        if not self.model or not idx.isValid():
+            return None
+
+        term = str(self.model.search_term or "")
+        if not term:
+            return None
+
+        row = int(idx.row())
+        col = int(idx.column())
+        if row < 0 or col < 0:
+            return None
+        if row >= self.model.data_row_count() or col >= self.model.data_column_count():
+            return None
+
+        value = self.model.df.iat[row, col]
+        if _is_missing_value(value):
+            return None
+        text = str(value)
+        if not text:
+            return None
+
+        flags = 0 if self.model.case_sensitive else re.IGNORECASE
+        match = re.search(re.escape(term), text, flags)
+        if match is None:
+            return None
+
+        text_width = max(24, int(self.table.horizontalHeader().sectionSize(col)) - 8)
+        cell_font = idx.data(QtCore.Qt.ItemDataRole.FontRole) or self.table.font()
+
+        doc = QtGui.QTextDocument()
+        doc.setDefaultFont(cell_font)
+        text_option = QtGui.QTextOption()
+        text_option.setWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        text_option.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft)
+        doc.setDefaultTextOption(text_option)
+        doc.setPlainText(text)
+        doc.setTextWidth(text_width)
+        _apply_document_line_spacing(doc)
+
+        layout = doc.documentLayout()
+        if layout is None:
+            return None
+        layout.documentSize()  # Force layout before asking for line geometry.
+
+        pos = int(match.start())
+        block = doc.findBlock(pos)
+        if not block.isValid():
+            return None
+
+        block_layout = block.layout()
+        if block_layout is None:
+            return None
+
+        rel_pos = max(0, pos - block.position())
+        line = block_layout.lineForTextPosition(rel_pos)
+        if not line.isValid():
+            if block_layout.lineCount() <= 0:
+                return None
+            line = block_layout.lineAt(0)
+            if not line.isValid():
+                return None
+
+        block_rect = layout.blockBoundingRect(block)
+        return float(block_rect.top() + line.y() + (line.height() * 0.5))
+
     def _scroll_to_current(self):
+        if not self.model:
+            return
+
         idx = self.model.match_at(self.current_match_pos)
-        if idx:
-            row = idx.row()
-            col = idx.column()
-            
-            # === VERTICAL SCROLLING (Animated) ===
-            v_header = self.table.verticalHeader()
-            row_top = v_header.sectionPosition(row)
-            row_height = v_header.sectionSize(row)
-            viewport_height = self.table.viewport().height()
-            
-            target_v_scroll = row_top - (viewport_height - row_height) // 2
-            v_sb = self.table.verticalScrollBar()
-            target_v_scroll = max(0, min(target_v_scroll, v_sb.maximum()))
-            
-            # Use animated setValue (this triggers AnimatedScrollBar's animation)
-            v_sb.setValue(int(target_v_scroll))
-            
-            # === HORIZONTAL SCROLLING (Animated) ===
-            h_header = self.table.horizontalHeader()
-            col_left = h_header.sectionPosition(col)
-            col_width = h_header.sectionSize(col)
-            viewport_width = self.table.viewport().width()
-            
-            target_h_scroll = col_left - (viewport_width - col_width) // 2
-            h_sb = self.table.horizontalScrollBar()
-            target_h_scroll = max(0, min(target_h_scroll, h_sb.maximum()))
-            
-            # Use animated setValue for horizontal too
-            h_sb.setValue(int(target_h_scroll))
-            
-            self.table.setCurrentIndex(idx)
-            self._on_matches_changed(self.model.total_matches())
+        if not idx or not idx.isValid():
+            return
+
+        row = int(idx.row())
+        col = int(idx.column())
+        if row < 0 or col < 0:
+            return
+
+        # Select first, then force precise scroll positioning.
+        self.table.setCurrentIndex(idx)
+
+        # Ensure the target row has its wrapped height before computing scroll.
+        self._resize_row_with_padding(row)
+
+        viewport_height = max(1, int(self.table.viewport().height()))
+        viewport_width = max(1, int(self.table.viewport().width()))
+
+        v_header = self.table.verticalHeader()
+        row_top = int(v_header.sectionPosition(row))
+        row_height = int(v_header.sectionSize(row))
+
+        match_center_in_cell = self._current_match_center_y_in_cell(idx)
+        if match_center_in_cell is not None:
+            # Delegate text rect starts at +2 px from the cell top.
+            target_v_scroll = (row_top + 2.0 + float(match_center_in_cell)) - (viewport_height / 2.0)
+        else:
+            target_v_scroll = row_top - ((viewport_height - row_height) / 2.0)
+
+        v_sb = self.table.verticalScrollBar()
+        target_v_scroll = max(float(v_sb.minimum()), min(float(target_v_scroll), float(v_sb.maximum())))
+
+        h_header = self.table.horizontalHeader()
+        col_left = int(h_header.sectionPosition(col))
+        col_width = int(h_header.sectionSize(col))
+        target_h_scroll = col_left - ((viewport_width - col_width) / 2.0)
+
+        h_sb = self.table.horizontalScrollBar()
+        target_h_scroll = max(float(h_sb.minimum()), min(float(target_h_scroll), float(h_sb.maximum())))
+
+        # Keep animated movement so navigation distance is visually clear.
+        v_sb.setValue(int(round(target_v_scroll)))
+        h_sb.setValue(int(round(target_h_scroll)))
+
+        self._on_matches_changed(self.model.total_matches())
 
     def keyPressEvent(self, event: QtGui.QKeyEvent):
+        # Let text inputs consume Enter/Shift+Enter themselves.
+        focused = QtWidgets.QApplication.focusWidget()
+        if isinstance(focused, (QtWidgets.QLineEdit, QtWidgets.QTextEdit, QtWidgets.QPlainTextEdit)):
+            super().keyPressEvent(event)
+            return
+
         # Existing Enter key logic
         if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
             if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
@@ -7048,7 +7156,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setWindowIcon(QtGui.QIcon())
+        app_icon = QtWidgets.QApplication.instance().windowIcon()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         self.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint)
         central = QtWidgets.QStackedWidget()
         self.setCentralWidget(central)
@@ -7291,6 +7401,24 @@ def main():
     )
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_ID)
+        except Exception:
+            pass
+
+    icon_candidates = []
+    if getattr(sys, "frozen", False):
+        icon_candidates.append(Path(sys.executable))
+    icon_candidates.append(Path(__file__).resolve().with_name("BetterExcel.ico"))
+    for icon_path in icon_candidates:
+        icon = QtGui.QIcon(str(icon_path))
+        if not icon.isNull():
+            app.setWindowIcon(icon)
+            break
+
     app_font = QtGui.QFont(app.font())
     app_font.setFamily(DEFAULT_DISPLAY_FONT_FAMILY)
     app_font.setPointSize(DEFAULT_DISPLAY_FONT_SIZE)
