@@ -45,12 +45,15 @@ except Exception:
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.8"
+APP_NAME = "Better Excel v1.9"
 WINDOWS_APP_ID = "flashml.BetterExcel"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 320
 TABLE_LINE_HEIGHT_PERCENT = 112
 TABLE_VERTICAL_TEXT_PADDING = 10
+COLUMN_STATS_HEADER_TOP_HEIGHT = 30
+COLUMN_STATS_HEADER_BODY_HEIGHT = 132
+COLUMN_STATS_HIST_MAX_BINS = 10
 QA_TEXT_BG_COLOR = QtGui.QColor(255, 235, 90)
 QA_TEXT_FG_COLOR = QtGui.QColor(200, 0, 0)
 QA_METADATA_SHEET_NAME = "__betterexcel_qa_spans__"
@@ -210,6 +213,78 @@ def _is_missing_value(value: t.Any) -> bool:
         return bool(pd.isna(value))
     except Exception:
         return False
+
+
+def _is_missing_or_empty_value(value: t.Any) -> bool:
+    if _is_missing_value(value):
+        return True
+    return isinstance(value, str) and value == ""
+
+
+def _format_profile_count(value: int) -> str:
+    try:
+        return f"{int(value):,}"
+    except Exception:
+        return str(value)
+
+
+def _format_profile_percent(part: int, total: int) -> str:
+    total_int = max(0, int(total))
+    part_int = max(0, int(part))
+    if total_int <= 0:
+        return "0%"
+    pct = (100.0 * float(part_int)) / float(total_int)
+    if pct <= 0.0:
+        return "0%"
+    if pct >= 100.0:
+        return "100%"
+    if pct < 0.5:
+        return "<1%"
+    if pct > 99.5:
+        return ">99%"
+    rounded = round(pct)
+    if abs(pct - rounded) < 0.05:
+        return f"{int(rounded)}%"
+    return f"{pct:.1f}%"
+
+
+def _series_missing_or_empty_mask(series: pd.Series) -> pd.Series:
+    try:
+        missing_mask = series.isna()
+    except Exception:
+        missing_mask = series.apply(_is_missing_value)
+
+    if hasattr(missing_mask, "fillna"):
+        missing_mask = missing_mask.fillna(False)
+
+    empty_mask: t.Optional[pd.Series] = None
+    try:
+        empty_mask = series.astype("object").eq("")
+    except Exception:
+        try:
+            empty_mask = series.map(lambda v: isinstance(v, str) and v == "")
+        except Exception:
+            empty_mask = None
+
+    if empty_mask is not None:
+        if hasattr(empty_mask, "fillna"):
+            empty_mask = empty_mask.fillna(False)
+        try:
+            return (missing_mask | empty_mask).astype(bool)
+        except Exception:
+            pass
+
+    try:
+        return missing_mask.astype(bool)
+    except Exception:
+        return pd.Series([False] * int(len(series)), index=series.index, dtype=bool)
+
+
+def _profile_label_for_value(value: t.Any) -> str:
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    text = str(value)
+    return text if text else "(empty)"
 
 
 class _RowHeightBatchSignals(QtCore.QObject):
@@ -2537,7 +2612,18 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         
         # Check if item is selected
         is_selected = option.state & QtWidgets.QStyle.StateFlag.State_Selected
-        
+        is_data_cell = (
+            index.row() < self.model.data_row_count()
+            and index.column() < self.model.data_column_count()
+        )
+        is_missing_like = False
+        if is_data_cell:
+            try:
+                raw_value = self.model.df.iat[index.row(), index.column()]
+            except Exception:
+                raw_value = None
+            is_missing_like = _is_missing_or_empty_value(raw_value)
+
         if bg_brush:
             base_color = bg_brush.color()
             if is_selected:
@@ -2554,7 +2640,37 @@ class HighlightDelegate(QtWidgets.QStyledItemDelegate):
         elif is_selected:
             # Fallback to standard selection color if no background
             painter.fillRect(option.rect, option.palette.highlight())
-        
+
+        if is_missing_like:
+            shade_alpha = 36 if self.model._is_dark else 24
+            painter.fillRect(option.rect, QtGui.QColor(0, 0, 0, shade_alpha))
+
+            cell_w = option.rect.width()
+            cell_h = option.rect.height()
+            if cell_w > 10 and cell_h > 10:
+                painter.save()
+                painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+                x_color = (
+                    QtGui.QColor(245, 245, 245, 42)
+                    if self.model._is_dark
+                    else QtGui.QColor(20, 20, 20, 40)
+                )
+                pen = QtGui.QPen(x_color)
+                pen.setWidthF(2.0)
+                pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
+                pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+                pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+                painter.setPen(pen)
+                painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Source)
+                half_pen = pen.widthF() / 2.0
+                x1 = float(option.rect.left()) + half_pen
+                y1 = float(option.rect.top()) + half_pen
+                x2 = float(option.rect.right()) - half_pen
+                y2 = float(option.rect.bottom()) - half_pen
+                painter.drawLine(QtCore.QPointF(x1, y1), QtCore.QPointF(x2, y2))
+                painter.drawLine(QtCore.QPointF(x1, y2), QtCore.QPointF(x2, y1))
+                painter.restore()
+
         text = index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
         st = self.model.search_term
         
@@ -3278,6 +3394,964 @@ class SmoothScrollTableView(QtWidgets.QTableView):
         super().scrollTo(index, hint)
 
 
+class ColumnStatsHeader(QtWidgets.QHeaderView):
+    def __init__(self, parent=None):
+        super().__init__(QtCore.Qt.Orientation.Horizontal, parent)
+        self._is_dark = True
+        self._profile_cache: dict[int, dict[str, t.Any]] = {}
+        self._model_connections: list[tuple[t.Any, t.Any]] = []
+        self._title_height = COLUMN_STATS_HEADER_TOP_HEIGHT
+        self._body_height = COLUMN_STATS_HEADER_BODY_HEIGHT
+        self._current_body_height = int(self._body_height)
+        self._stats_collapsed = False
+        self._big_value_point_size = 24
+        self._max_hist_bins = COLUMN_STATS_HIST_MAX_BINS
+        self._hover_tooltip_key: t.Optional[str] = None
+        self._body_height_anim = QtCore.QPropertyAnimation(self, b"statsBodyHeight", self)
+        self._body_height_anim.setDuration(240)
+        self._body_height_anim.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+        self.setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.setHighlightSections(False)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self.refresh_layout_metrics()
+
+    def _apply_header_height(self):
+        total_height = int(self._title_height + max(0, int(self._current_body_height)))
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
+        self.updateGeometry()
+        self.viewport().update()
+
+    def _get_stats_body_height(self) -> int:
+        return int(self._current_body_height)
+
+    def _set_stats_body_height(self, value: int):
+        clamped = max(0, min(int(value), int(self._body_height)))
+        if clamped == int(self._current_body_height):
+            return
+        self._current_body_height = clamped
+        self._apply_header_height()
+
+    statsBodyHeight = QtCore.pyqtProperty(int, fget=_get_stats_body_height, fset=_set_stats_body_height)
+
+    def is_stats_collapsed(self) -> bool:
+        return bool(self._stats_collapsed)
+
+    def set_stats_collapsed(self, collapsed: bool, *, animate: bool = True):
+        target_collapsed = bool(collapsed)
+        target_height = 0 if target_collapsed else int(self._body_height)
+        self._stats_collapsed = target_collapsed
+        self._clear_stats_tooltip()
+
+        self._body_height_anim.stop()
+        if not animate:
+            self._set_stats_body_height(target_height)
+            return
+
+        if int(self._current_body_height) == int(target_height):
+            self._apply_header_height()
+            return
+
+        self._body_height_anim.setStartValue(int(self._current_body_height))
+        self._body_height_anim.setEndValue(int(target_height))
+        self._body_height_anim.start()
+
+    def toggle_stats_collapsed(self, *, animate: bool = True):
+        self.set_stats_collapsed(not self._stats_collapsed, animate=animate)
+
+    def refresh_layout_metrics(self):
+        metrics = QtGui.QFontMetrics(self.font())
+        self._title_height = max(COLUMN_STATS_HEADER_TOP_HEIGHT, int(metrics.height() + 12))
+        self._body_height = max(COLUMN_STATS_HEADER_BODY_HEIGHT, int(metrics.height() * 8 + 18))
+        base_pt = max(8, int(self.font().pointSize()))
+        self._big_value_point_size = max(16, min(34, int(round(base_pt * 2.9))))
+        self._body_height_anim.stop()
+        if self._stats_collapsed:
+            self._current_body_height = 0
+        else:
+            current = int(self._current_body_height)
+            if current <= 0 or current > int(self._body_height):
+                self._current_body_height = int(self._body_height)
+        self._apply_header_height()
+
+    def set_dark_mode(self, is_dark: bool):
+        value = bool(is_dark)
+        if self._is_dark != value:
+            self._is_dark = value
+            self.viewport().update()
+
+    def invalidate_profiles(self, columns: t.Optional[t.Iterable[int]] = None):
+        self._clear_stats_tooltip()
+        if columns is None:
+            self._profile_cache.clear()
+        else:
+            for col in columns:
+                self._profile_cache.pop(int(col), None)
+        self.viewport().update()
+
+    def _connect_signal(self, signal: t.Any, slot: t.Any):
+        if signal is None:
+            return
+        try:
+            signal.connect(slot)
+            self._model_connections.append((signal, slot))
+        except Exception:
+            pass
+
+    def _disconnect_model_signals(self):
+        for signal, slot in self._model_connections:
+            try:
+                signal.disconnect(slot)
+            except Exception:
+                pass
+        self._model_connections = []
+
+    def setModel(self, model: t.Optional[QtCore.QAbstractItemModel]):
+        self._disconnect_model_signals()
+        super().setModel(model)
+        if model is None:
+            self.invalidate_profiles()
+            return
+
+        self._connect_signal(getattr(model, "dataChanged", None), self._on_model_data_changed)
+        self._connect_signal(getattr(model, "layoutChanged", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "modelReset", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "rowsInserted", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "rowsRemoved", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "columnsInserted", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "columnsRemoved", None), self._on_model_structure_changed)
+        self._connect_signal(getattr(model, "headerDataChanged", None), self._on_header_data_changed)
+        self._connect_signal(getattr(model, "dataChangedHard", None), self._on_model_structure_changed)
+        self.invalidate_profiles()
+
+    def _on_model_data_changed(self, top_left, bottom_right, _roles):
+        first = int(top_left.column())
+        last = int(bottom_right.column())
+        if first < 0 or last < first:
+            self.invalidate_profiles()
+            return
+        cols = [c for c in range(first, last + 1) if c >= 0]
+        self.invalidate_profiles(cols)
+
+    def _on_model_structure_changed(self, *args):
+        self.invalidate_profiles()
+
+    def _on_header_data_changed(self, orientation, first, last):
+        if orientation != QtCore.Qt.Orientation.Horizontal:
+            return
+        if first < 0 or last < first:
+            self.invalidate_profiles()
+            return
+        self.invalidate_profiles(range(int(first), int(last) + 1))
+
+    def _palette_colors(self) -> dict[str, QtGui.QColor]:
+        if self._is_dark:
+            return {
+                "top_bg": QtGui.QColor(11, 61, 96),
+                "body_bg": QtGui.QColor(28, 29, 34),
+                "grid": QtGui.QColor(70, 72, 80),
+                "title": QtGui.QColor(242, 242, 245),
+                "label": QtGui.QColor(170, 172, 180),
+                "value": QtGui.QColor(214, 216, 224),
+                "accent": QtGui.QColor(96, 168, 255),
+                "accent_alt": QtGui.QColor(188, 132, 232),
+                "bar_bg": QtGui.QColor(45, 47, 56),
+                "bar_border": QtGui.QColor(96, 98, 108),
+                "bar_zero": QtGui.QColor(120, 126, 138),
+            }
+        return {
+            "top_bg": QtGui.QColor(220, 236, 248),
+            "body_bg": QtGui.QColor(245, 248, 252),
+            "grid": QtGui.QColor(182, 188, 197),
+            "title": QtGui.QColor(24, 28, 33),
+            "label": QtGui.QColor(88, 96, 107),
+            "value": QtGui.QColor(40, 47, 56),
+            "accent": QtGui.QColor(53, 130, 222),
+            "accent_alt": QtGui.QColor(178, 106, 214),
+            "bar_bg": QtGui.QColor(227, 232, 239),
+            "bar_border": QtGui.QColor(173, 181, 192),
+            "bar_zero": QtGui.QColor(150, 158, 170),
+        }
+
+    @staticmethod
+    def _format_numeric_tick(value: t.Optional[float]) -> str:
+        if value is None:
+            return "-"
+        try:
+            val = float(value)
+        except Exception:
+            return "-"
+        if not math.isfinite(val):
+            return "-"
+        abs_val = abs(val)
+        if abs_val >= 1000:
+            return f"{val:,.0f}"
+        if abs_val >= 10:
+            return f"{val:.1f}".rstrip("0").rstrip(".")
+        if abs_val >= 1:
+            return f"{val:.2f}".rstrip("0").rstrip(".")
+        return f"{val:.4f}".rstrip("0").rstrip(".")
+
+    def _clear_stats_tooltip(self):
+        if self._hover_tooltip_key is None:
+            return
+        self._hover_tooltip_key = None
+        QtWidgets.QToolTip.hideText()
+
+    def _is_data_column(self, logical_index: int) -> bool:
+        model = self.model()
+        if not isinstance(model, DataFrameModel):
+            return False
+        data_cols = int(model.data_column_count())
+        return 0 <= int(logical_index) < data_cols
+
+    def _section_content_rect(self, section_rect: QtCore.QRect) -> QtCore.QRect:
+        if not section_rect.isValid() or section_rect.isEmpty():
+            return QtCore.QRect()
+        top_height = min(int(self._title_height), int(section_rect.height()))
+        body_y = int(section_rect.top()) + top_height
+        body_h = max(0, min(int(self._current_body_height), max(0, int(section_rect.bottom()) - body_y + 1)))
+        if body_h <= 0:
+            return QtCore.QRect()
+        body_rect = QtCore.QRect(int(section_rect.left()), body_y, int(section_rect.width()), body_h)
+        content = body_rect.adjusted(6, 5, -6, -5)
+        if content.width() <= 8 or content.height() <= 8:
+            return QtCore.QRect()
+        return content
+
+    def _small_stats_font(self) -> QtGui.QFont:
+        small_font = QtGui.QFont(self.font())
+        small_font.setPointSize(max(8, small_font.pointSize() - 1))
+        return small_font
+
+    @staticmethod
+    def _stats_line_height(font: QtGui.QFont) -> int:
+        return max(12, int(QtGui.QFontMetrics(font).height() + 1))
+
+    @staticmethod
+    def _hist_bin_rects(hist_rect: QtCore.QRect, bin_count: int) -> list[QtCore.QRect]:
+        if bin_count <= 0 or not hist_rect.isValid() or hist_rect.isEmpty():
+            return []
+        rects: list[QtCore.QRect] = []
+        for idx in range(bin_count):
+            x0 = int(hist_rect.left() + (idx * hist_rect.width()) / bin_count)
+            x1 = int(hist_rect.left() + ((idx + 1) * hist_rect.width()) / bin_count) - 1
+            rects.append(
+                QtCore.QRect(
+                    x0,
+                    hist_rect.top(),
+                    max(1, x1 - x0 + 1),
+                    hist_rect.height(),
+                )
+            )
+        return rects
+
+    def _numeric_hist_rect(
+        self,
+        content: QtCore.QRect,
+        y_start: int,
+        small_font: QtGui.QFont,
+    ) -> tuple[QtCore.QRect, int]:
+        hist_bottom_reserved = max(14, QtGui.QFontMetrics(small_font).height() + 1)
+        hist_rect = QtCore.QRect(
+            content.left(),
+            y_start,
+            content.width(),
+            max(16, content.bottom() - y_start - hist_bottom_reserved + 1),
+        )
+        return hist_rect, int(hist_bottom_reserved)
+
+    def _format_hist_range(self, min_value: t.Any, max_value: t.Any) -> str:
+        min_text = self._format_numeric_tick(min_value)
+        max_text = self._format_numeric_tick(max_value)
+        if min_text == "-" and max_text == "-":
+            return "Range unavailable"
+        if min_text == max_text:
+            return min_text
+        return f"{min_text} - {max_text}"
+
+    def _tooltip_payload_at(self, pos: QtCore.QPoint) -> t.Optional[tuple[str, str]]:
+        logical_index = int(self.logicalIndexAt(pos))
+        if logical_index < 0 or not self._is_data_column(logical_index):
+            return None
+
+        section_x = int(self.sectionViewportPosition(logical_index))
+        section_w = int(self.sectionSize(logical_index))
+        if section_w <= 0:
+            return None
+
+        section_rect = QtCore.QRect(section_x, 0, section_w, self.viewport().height())
+        if not section_rect.contains(pos):
+            return None
+
+        content = self._section_content_rect(section_rect)
+        if not content.isValid() or content.isEmpty():
+            return None
+
+        profile = self._column_profile(logical_index)
+        kind = str(profile.get("kind") or "")
+        colors = self._palette_colors()
+        small_font = self._small_stats_font()
+        line_h = self._stats_line_height(small_font)
+        y = int(content.top()) + line_h + line_h + 4
+
+        if kind == "numeric":
+            counts = [max(0, int(v)) for v in list(profile.get("hist_counts", []))]
+            if not counts:
+                return None
+            hist_rect, _ = self._numeric_hist_rect(content, y, small_font)
+            if not hist_rect.contains(pos):
+                return None
+            ranges = list(profile.get("hist_ranges", []))
+            for idx, bin_rect in enumerate(self._hist_bin_rects(hist_rect, len(counts))):
+                if not bin_rect.contains(pos):
+                    continue
+                count = counts[idx] if idx < len(counts) else 0
+                if idx < len(ranges):
+                    range_min, range_max = ranges[idx]
+                else:
+                    range_min = profile.get("min_value")
+                    range_max = profile.get("max_value")
+                range_text = html.escape(self._format_hist_range(range_min, range_max))
+                count_text = _format_profile_count(count)
+                dot = colors["accent"].name()
+                tip_html = (
+                    "<div style='white-space:nowrap;'>"
+                    f"{range_text}<br>"
+                    f"<span style='color:{dot};'>●</span> Count: <b>{count_text}</b>"
+                    "</div>"
+                )
+                key = f"numeric:{logical_index}:{idx}:{count}:{range_text}"
+                return key, tip_html
+            return None
+
+        if kind == "two_value":
+            entries = list(profile.get("bool_entries", []))[:2]
+            if not entries:
+                return None
+            y_after_entries = y + (line_h * len(entries))
+            bar_h = max(12, min(18, content.height() // 5))
+            bar_rect = QtCore.QRect(
+                content.left(),
+                max(y_after_entries + 3, content.bottom() - bar_h + 1),
+                content.width(),
+                bar_h,
+            )
+            if not bar_rect.contains(pos):
+                return None
+
+            lines = ["Count"]
+            key_parts = [f"binary:{logical_index}"]
+            for idx, entry in enumerate(entries):
+                seg_color = colors["accent"] if idx == 0 else colors["accent_alt"]
+                label = html.escape(str(entry.get("label", "")))
+                count = max(0, int(entry.get("count", 0)))
+                count_text = _format_profile_count(count)
+                lines.append(
+                    f"<span style='color:{seg_color.name()};'>●</span> {label}: <b>{count_text}</b>"
+                )
+                key_parts.append(f"{label}:{count}")
+            tip_html = "<div style='white-space:nowrap;'>" + "<br>".join(lines) + "</div>"
+            return "|".join(key_parts), tip_html
+
+        return None
+
+    def _build_column_profile(self, logical_index: int) -> dict[str, t.Any]:
+        model = self.model()
+        if not isinstance(model, DataFrameModel):
+            return {"kind": "none", "total": 0, "missing": 0, "distinct": 0}
+
+        data_cols = int(model.data_column_count())
+        if logical_index < 0 or logical_index >= data_cols:
+            return {"kind": "sentinel", "total": 0, "missing": 0, "distinct": 0}
+
+        try:
+            series = model.df.iloc[:, logical_index]
+        except Exception:
+            return {"kind": "none", "total": 0, "missing": 0, "distinct": 0}
+
+        total = int(len(series))
+        if total <= 0:
+            return {"kind": "empty", "total": 0, "missing": 0, "distinct": 0}
+
+        missing_mask = _series_missing_or_empty_mask(series)
+        try:
+            missing_count = int(missing_mask.sum())
+        except Exception:
+            missing_count = 0
+
+        try:
+            present = series[~missing_mask]
+        except Exception:
+            present = series
+            missing_count = 0
+
+        present_count = int(len(present))
+        try:
+            distinct_count = int(present.nunique(dropna=True)) if present_count > 0 else 0
+        except Exception:
+            distinct_count = 0
+
+        profile: dict[str, t.Any] = {
+            "kind": "text",
+            "total": total,
+            "missing": max(0, missing_count),
+            "present": max(0, present_count),
+            "distinct": max(0, distinct_count),
+            "list_values": [],
+            "hist_counts": [],
+            "hist_ranges": [],
+            "min_value": None,
+            "max_value": None,
+            "bool_entries": [],
+        }
+
+        if present_count <= 0:
+            profile["kind"] = "empty"
+            return profile
+
+        is_bool_series = bool(pd.api.types.is_bool_dtype(series))
+        if is_bool_series or distinct_count <= 2:
+            counts_series: pd.Series
+            counts_are_text = False
+            try:
+                counts_series = present.value_counts(dropna=True)
+            except Exception:
+                counts_series = present.map(_profile_label_for_value).value_counts(dropna=True)
+                counts_are_text = True
+
+            entries: list[dict[str, t.Any]] = []
+            if is_bool_series and not counts_are_text:
+                false_count = int(counts_series.get(False, 0))
+                true_count = int(counts_series.get(True, 0))
+                if false_count > 0:
+                    entries.append({"label": "False", "count": false_count})
+                if true_count > 0:
+                    entries.append({"label": "True", "count": true_count})
+            else:
+                for raw_value, raw_count in counts_series.items():
+                    count = int(raw_count)
+                    if count <= 0:
+                        continue
+                    label = str(raw_value) if counts_are_text else _profile_label_for_value(raw_value)
+                    entries.append({"label": label, "count": count})
+                entries.sort(key=lambda it: (-int(it["count"]), str(it["label"]).lower()))
+
+            if entries:
+                profile["kind"] = "two_value"
+                profile["bool_entries"] = entries[:2]
+                return profile
+
+        if pd.api.types.is_numeric_dtype(series):
+            numeric_values = pd.to_numeric(present, errors="coerce").dropna()
+            if not numeric_values.empty:
+                try:
+                    profile["min_value"] = float(numeric_values.min())
+                    profile["max_value"] = float(numeric_values.max())
+                except Exception:
+                    profile["min_value"] = None
+                    profile["max_value"] = None
+
+                unique_num = int(max(1, numeric_values.nunique(dropna=True)))
+                if unique_num <= int(self._max_hist_bins):
+                    try:
+                        discrete_counts = numeric_values.value_counts(dropna=True, sort=False)
+                    except TypeError:
+                        discrete_counts = numeric_values.value_counts(dropna=True)
+                    except Exception:
+                        discrete_counts = pd.Series(dtype=int)
+
+                    try:
+                        discrete_counts = discrete_counts.sort_index()
+                    except Exception:
+                        pass
+
+                    count_by_value: dict[float, int] = {}
+                    for raw_value, raw_count in discrete_counts.items():
+                        count = int(raw_count)
+                        if count < 0:
+                            continue
+                        try:
+                            value_f = float(raw_value)
+                        except Exception:
+                            continue
+                        if not math.isfinite(value_f):
+                            continue
+                        count_by_value[value_f] = int(count_by_value.get(value_f, 0) + count)
+
+                    if not count_by_value:
+                        profile["hist_counts"] = [int(len(numeric_values))]
+                        profile["hist_ranges"] = [(profile.get("min_value"), profile.get("max_value"))]
+                    else:
+                        ordered_values = sorted(count_by_value.keys())
+                        int_like = all(abs(v - round(v)) <= 1e-9 for v in ordered_values)
+                        if int_like:
+                            min_int = int(round(ordered_values[0]))
+                            max_int = int(round(ordered_values[-1]))
+                            span = int(max_int - min_int + 1)
+                        else:
+                            span = -1
+
+                        hist_counts: list[int] = []
+                        hist_ranges: list[tuple[t.Optional[float], t.Optional[float]]] = []
+
+                        # For small integer domains, include absent integers as explicit zero-count bins.
+                        if int_like and 0 < span <= int(self._max_hist_bins):
+                            int_count_map: dict[int, int] = {}
+                            for val, cnt in count_by_value.items():
+                                int_count_map[int(round(val))] = int(cnt)
+                            for value_i in range(min_int, max_int + 1):
+                                count_i = int(int_count_map.get(value_i, 0))
+                                hist_counts.append(max(0, count_i))
+                                value_f = float(value_i)
+                                hist_ranges.append((value_f, value_f))
+                        else:
+                            for value_f in ordered_values:
+                                count_i = int(count_by_value.get(value_f, 0))
+                                hist_counts.append(max(0, count_i))
+                                hist_ranges.append((value_f, value_f))
+
+                        profile["hist_counts"] = hist_counts
+                        profile["hist_ranges"] = hist_ranges
+                else:
+                    bins = int(self._max_hist_bins)
+                    try:
+                        binned = pd.cut(
+                            numeric_values.astype(float),
+                            bins=bins,
+                            include_lowest=True,
+                            duplicates="drop",
+                        )
+                        counts = binned.value_counts(sort=False)
+                        profile["hist_counts"] = [int(v) for v in counts.tolist()]
+                        raw_ranges = [
+                            (
+                                float(interval.left) if hasattr(interval, "left") else None,
+                                float(interval.right) if hasattr(interval, "right") else None,
+                            )
+                            for interval in counts.index
+                        ]
+                        min_bound = profile.get("min_value")
+                        max_bound = profile.get("max_value")
+                        try:
+                            min_bound = float(min_bound) if min_bound is not None else None
+                        except Exception:
+                            min_bound = None
+                        try:
+                            max_bound = float(max_bound) if max_bound is not None else None
+                        except Exception:
+                            max_bound = None
+                        if min_bound is not None and not math.isfinite(min_bound):
+                            min_bound = None
+                        if max_bound is not None and not math.isfinite(max_bound):
+                            max_bound = None
+
+                        clamped_ranges: list[tuple[t.Optional[float], t.Optional[float]]] = []
+                        for left, right in raw_ranges:
+                            left_f = left
+                            right_f = right
+                            if min_bound is not None and (left_f is None or float(left_f) < min_bound):
+                                left_f = min_bound
+                            if max_bound is not None and (right_f is None or float(right_f) > max_bound):
+                                right_f = max_bound
+                            if (
+                                left_f is not None
+                                and right_f is not None
+                                and float(left_f) > float(right_f)
+                            ):
+                                left_f, right_f = right_f, left_f
+                            clamped_ranges.append((left_f, right_f))
+
+                        if clamped_ranges and min_bound is not None:
+                            first_left, first_right = clamped_ranges[0]
+                            clamped_ranges[0] = (min_bound, first_right)
+                        if clamped_ranges and max_bound is not None:
+                            last_left, last_right = clamped_ranges[-1]
+                            clamped_ranges[-1] = (last_left, max_bound)
+                        profile["hist_ranges"] = clamped_ranges
+                    except Exception:
+                        profile["hist_counts"] = [int(len(numeric_values))]
+                        profile["hist_ranges"] = [(profile.get("min_value"), profile.get("max_value"))]
+            profile["kind"] = "numeric"
+            return profile
+
+        profile["kind"] = "text"
+        if 0 < distinct_count < 10:
+            try:
+                value_counts = present.map(_profile_label_for_value).value_counts(dropna=True)
+            except Exception:
+                value_counts = pd.Series(dtype=int)
+            profile["list_values"] = [
+                {"label": str(label), "count": int(count)}
+                for label, count in value_counts.items()
+            ]
+        return profile
+
+    def _column_profile(self, logical_index: int) -> dict[str, t.Any]:
+        cached = self._profile_cache.get(int(logical_index))
+        if cached is not None:
+            return cached
+        profile = self._build_column_profile(int(logical_index))
+        self._profile_cache[int(logical_index)] = profile
+        return profile
+
+    def _draw_kv_line(
+        self,
+        painter: QtGui.QPainter,
+        rect: QtCore.QRect,
+        y: int,
+        label: str,
+        value: str,
+        *,
+        label_color: QtGui.QColor,
+        value_color: QtGui.QColor,
+        font: QtGui.QFont,
+    ) -> int:
+        metrics = QtGui.QFontMetrics(font)
+        line_h = max(12, int(metrics.height() + 1))
+        left_width = max(44, int(rect.width() * 0.46))
+        label_rect = QtCore.QRect(rect.left(), y, left_width, line_h)
+        value_rect = QtCore.QRect(label_rect.right() + 2, y, rect.right() - label_rect.right() - 2, line_h)
+
+        painter.setFont(font)
+        painter.setPen(label_color)
+        painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter, label)
+        painter.setPen(value_color)
+        painter.drawText(value_rect, QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter, value)
+        return y + line_h
+
+    def _draw_numeric_histogram(
+        self,
+        painter: QtGui.QPainter,
+        rect: QtCore.QRect,
+        counts: list[int],
+        *,
+        bar_color: QtGui.QColor,
+        bg_color: QtGui.QColor,
+        zero_bar_color: QtGui.QColor,
+    ):
+        # Keep histogram area transparent so only bars are visible on header background.
+        if not counts:
+            return
+
+        max_count = max(int(v) for v in counts) if counts else 0
+        if max_count <= 0:
+            return
+
+        bin_count = len(counts)
+        if bin_count <= 0:
+            return
+
+        zero_bar_h = max(2, min(6, int(rect.height() * 0.12)))
+        for idx, value in enumerate(counts):
+            x0 = int(rect.left() + (idx * rect.width()) / bin_count)
+            x1 = int(rect.left() + ((idx + 1) * rect.width()) / bin_count) - 1
+            bar_w = max(1, x1 - x0)
+            count_i = max(0, int(value))
+            if count_i <= 0:
+                bar_h = int(zero_bar_h)
+                fill = zero_bar_color
+            else:
+                ratio = float(count_i) / float(max_count)
+                bar_h = max(1, int((rect.height() - 2) * ratio))
+                fill = bar_color
+            bar_h = max(1, min(int(rect.height()), int(bar_h)))
+            y = int(rect.bottom() - bar_h + 1)
+            painter.fillRect(QtCore.QRect(x0, y, bar_w, bar_h), fill)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+        payload = self._tooltip_payload_at(event.pos())
+        if payload is None:
+            self._clear_stats_tooltip()
+        else:
+            key, tooltip_html = payload
+            if key != self._hover_tooltip_key:
+                self._hover_tooltip_key = key
+                global_pos = self.viewport().mapToGlobal(event.pos() + QtCore.QPoint(14, 18))
+                QtWidgets.QToolTip.showText(
+                    global_pos,
+                    tooltip_html,
+                    self.viewport(),
+                    self.viewport().rect(),
+                    5000,
+                )
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event: QtCore.QEvent):
+        self._clear_stats_tooltip()
+        super().leaveEvent(event)
+
+    def _draw_column_type_icon(
+        self,
+        painter: QtGui.QPainter,
+        rect: QtCore.QRect,
+        kind: str,
+        *,
+        fg: QtGui.QColor,
+        accent: QtGui.QColor,
+    ):
+        if not rect.isValid() or rect.isEmpty():
+            return
+
+        painter.save()
+        try:
+            if kind == "numeric":
+                icon_font = QtGui.QFont(self.font())
+                icon_font.setBold(True)
+                icon_font.setPointSize(max(9, icon_font.pointSize()))
+                painter.setFont(icon_font)
+                painter.setPen(fg)
+                painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "#")
+                return
+
+            if kind == "two_value":
+                h = max(8, min(rect.height() - 1, 11))
+                w = max(13, min(rect.width() - 1, 19))
+                x = rect.left() + max(0, (rect.width() - w) // 2)
+                y = rect.top() + max(0, (rect.height() - h) // 2)
+                pill = QtCore.QRect(x, y, w, h)
+                radius = int(h / 2)
+                painter.setPen(QtGui.QPen(fg, 1))
+                painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(pill, radius, radius)
+
+                dot_r = max(2, int((h - 4) / 2))
+                center = QtCore.QPointF(float(pill.left() + dot_r + 2), float(pill.center().y()))
+                painter.setPen(QtCore.Qt.PenStyle.NoPen)
+                painter.setBrush(accent)
+                painter.drawEllipse(center, float(dot_r), float(dot_r))
+                return
+
+            # text/default icon
+            icon_font = QtGui.QFont(self.font())
+            icon_font.setBold(True)
+            icon_font.setPointSize(max(8, icon_font.pointSize() - 1))
+            painter.setFont(icon_font)
+            painter.setPen(fg)
+            painter.drawText(rect.adjusted(0, 0, -3, 0), QtCore.Qt.AlignmentFlag.AlignCenter, "A")
+            corner_x = rect.right() - 2
+            top_y = rect.top() + 2
+            mid_y = rect.center().y()
+            painter.drawLine(corner_x, top_y, corner_x, mid_y)
+            painter.drawLine(corner_x - 3, top_y, corner_x, top_y)
+        finally:
+            painter.restore()
+
+    def paintSection(self, painter: QtGui.QPainter, rect: QtCore.QRect, logicalIndex: int):
+        if not rect.isValid() or rect.isEmpty():
+            return
+
+        colors = self._palette_colors()
+        model = self.model()
+        title = ""
+        if model is not None:
+            try:
+                title = str(model.headerData(logicalIndex, QtCore.Qt.Orientation.Horizontal, QtCore.Qt.ItemDataRole.DisplayRole) or "")
+            except Exception:
+                title = ""
+
+        profile = self._column_profile(int(logicalIndex))
+        top_rect = QtCore.QRect(rect.left(), rect.top(), rect.width(), min(self._title_height, rect.height()))
+        body_y = top_rect.bottom() + 1
+        body_h = max(0, min(int(self._current_body_height), max(0, rect.bottom() - body_y + 1)))
+        body_rect = QtCore.QRect(rect.left(), body_y, rect.width(), body_h)
+
+        painter.save()
+        painter.fillRect(top_rect, colors["top_bg"])
+        painter.fillRect(body_rect, colors["body_bg"])
+        painter.setPen(QtGui.QPen(colors["grid"], 1))
+        painter.drawLine(rect.topRight(), rect.bottomRight())
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        painter.drawLine(top_rect.bottomLeft(), top_rect.bottomRight())
+
+        title_font = QtGui.QFont(self.font())
+        title_font.setBold(True)
+        title_font.setPointSize(max(9, title_font.pointSize()))
+        painter.setFont(title_font)
+        painter.setPen(colors["title"])
+
+        data_cols = int(model.data_column_count()) if isinstance(model, DataFrameModel) else -1
+        is_data_col = 0 <= int(logicalIndex) < data_cols
+
+        title_rect = top_rect.adjusted(6, 2, -6, -2)
+        text_rect = QtCore.QRect(title_rect)
+
+        title_text = title.strip()
+        elided_title = QtGui.QFontMetrics(title_font).elidedText(
+            title_text,
+            QtCore.Qt.TextElideMode.ElideRight,
+            max(1, int(text_rect.width())),
+        )
+        painter.drawText(
+            text_rect,
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+            elided_title,
+        )
+
+        if not is_data_col:
+            painter.restore()
+            return
+
+        if body_h <= 0:
+            painter.restore()
+            return
+
+        content = body_rect.adjusted(6, 5, -6, -5)
+        if content.width() <= 8 or content.height() <= 8:
+            painter.restore()
+            return
+
+        small_font = QtGui.QFont(self.font())
+        small_font.setPointSize(max(8, small_font.pointSize() - 1))
+        y = int(content.top())
+
+        total = int(profile.get("total", 0))
+        missing = int(profile.get("missing", 0))
+        distinct = int(profile.get("distinct", 0))
+        missing_text = f"{_format_profile_count(missing)} ({_format_profile_percent(missing, total)})"
+        distinct_text = f"{_format_profile_count(distinct)} ({_format_profile_percent(distinct, total)})"
+
+        y = self._draw_kv_line(
+            painter,
+            content,
+            y,
+            "Missing:",
+            missing_text,
+            label_color=colors["label"],
+            value_color=colors["value"],
+            font=small_font,
+        )
+        y = self._draw_kv_line(
+            painter,
+            content,
+            y,
+            "Distinct:",
+            distinct_text,
+            label_color=colors["label"],
+            value_color=colors["value"],
+            font=small_font,
+        )
+        y += 4
+
+        kind = str(profile.get("kind") or "")
+        if kind == "numeric":
+            hist_rect, hist_bottom_reserved = self._numeric_hist_rect(content, y, small_font)
+            self._draw_numeric_histogram(
+                painter,
+                hist_rect,
+                list(profile.get("hist_counts", [])),
+                bar_color=colors["accent"],
+                bg_color=colors["bar_bg"],
+                zero_bar_color=colors["bar_zero"],
+            )
+            tick_y = hist_rect.bottom() + 1
+            min_text = f"Min {self._format_numeric_tick(profile.get('min_value'))}"
+            max_text = f"Max {self._format_numeric_tick(profile.get('max_value'))}"
+            painter.setFont(small_font)
+            painter.setPen(colors["label"])
+            painter.drawText(
+                QtCore.QRect(content.left(), tick_y, content.width() // 2, hist_bottom_reserved),
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+                min_text,
+            )
+            painter.drawText(
+                QtCore.QRect(content.left() + content.width() // 2, tick_y, content.width() - content.width() // 2, hist_bottom_reserved),
+                QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter,
+                max_text,
+            )
+            painter.restore()
+            return
+
+        if kind == "two_value":
+            entries = list(profile.get("bool_entries", []))
+            for entry in entries[:2]:
+                label = f"{entry.get('label', '')}:"
+                count = int(entry.get("count", 0))
+                value = f"{_format_profile_count(count)} ({_format_profile_percent(count, total)})"
+                y = self._draw_kv_line(
+                    painter,
+                    content,
+                    y,
+                    label,
+                    value,
+                    label_color=colors["label"],
+                    value_color=colors["value"],
+                    font=small_font,
+                )
+
+            bar_h = max(12, min(18, content.height() // 5))
+            bar_rect = QtCore.QRect(content.left(), max(y + 3, content.bottom() - bar_h + 1), content.width(), bar_h)
+            painter.fillRect(bar_rect, colors["bar_bg"])
+            entries_total = sum(int(item.get("count", 0)) for item in entries)
+            if entries_total > 0:
+                cursor_x = int(bar_rect.left())
+                for idx, entry in enumerate(entries):
+                    count = max(0, int(entry.get("count", 0)))
+                    if count <= 0:
+                        continue
+                    if idx == len(entries) - 1:
+                        seg_right = int(bar_rect.right())
+                    else:
+                        seg_w = max(1, int(round((count / float(entries_total)) * bar_rect.width())))
+                        seg_right = min(int(bar_rect.right()), cursor_x + seg_w - 1)
+                    if seg_right < cursor_x:
+                        continue
+                    seg_color = colors["accent"] if idx == 0 else colors["accent_alt"]
+                    painter.fillRect(QtCore.QRect(cursor_x, bar_rect.top(), seg_right - cursor_x + 1, bar_rect.height()), seg_color)
+                    cursor_x = seg_right + 1
+                    if cursor_x > int(bar_rect.right()):
+                        break
+            painter.setPen(QtGui.QPen(colors["bar_border"], 1))
+            painter.drawRect(bar_rect)
+            painter.restore()
+            return
+
+        list_values = list(profile.get("list_values", []))
+        if kind == "text" and 0 < distinct < 10 and list_values:
+            list_font = QtGui.QFont(self.font())
+            list_font.setPointSize(max(8, list_font.pointSize() - 2))
+            metrics = QtGui.QFontMetrics(list_font)
+            line_h = max(11, int(metrics.height() + 1))
+            painter.setFont(list_font)
+            for item in list_values:
+                if y + line_h > content.bottom() + 1:
+                    break
+                label_text = str(item.get("label", ""))
+                count = int(item.get("count", 0))
+                pct_text = _format_profile_percent(count, total)
+                right_w = max(42, int(content.width() * 0.26))
+                left_rect = QtCore.QRect(content.left(), y, content.width() - right_w - 4, line_h)
+                right_rect = QtCore.QRect(content.right() - right_w + 1, y, right_w, line_h)
+                elided = metrics.elidedText(label_text, QtCore.Qt.TextElideMode.ElideRight, max(8, left_rect.width()))
+                painter.setPen(colors["label"])
+                painter.drawText(left_rect, QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter, elided)
+                painter.setPen(colors["value"])
+                painter.drawText(right_rect, QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter, pct_text)
+                y += line_h
+            painter.restore()
+            return
+
+        big_rect = QtCore.QRect(content.left(), y + 2, content.width(), max(18, content.bottom() - y - 18))
+        big_font = QtGui.QFont(self.font())
+        big_font.setBold(True)
+        big_font.setPointSize(int(self._big_value_point_size))
+        painter.setFont(big_font)
+        painter.setPen(colors["accent"])
+        painter.drawText(big_rect, QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom, _format_profile_count(distinct))
+
+        sub_font = QtGui.QFont(self.font())
+        sub_font.setPointSize(max(8, sub_font.pointSize() - 1))
+        painter.setFont(sub_font)
+        painter.setPen(colors["title"])
+        painter.drawText(
+            QtCore.QRect(content.left(), big_rect.bottom() + 1, content.width(), max(12, content.bottom() - big_rect.bottom())),
+            QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignTop,
+            "Distinct values",
+        )
+        painter.restore()
+
+
 class DataViewerPage(QtWidgets.QWidget):
     backRequested = QtCore.pyqtSignal()
 
@@ -3314,6 +4388,8 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_broadcast_timer.timeout.connect(self._broadcast_current_snapshot)
         self._search_width_ratio = 0.85
         self._search_width_adjusted_once = False
+        self._corner_toggle_btn: t.Optional[QtWidgets.QAbstractButton] = None
+        self._corner_toggle_mouse_down = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -3370,23 +4446,24 @@ class DataViewerPage(QtWidgets.QWidget):
         self.btn_save_copy.triggered.connect(self.save_copy)
         toolbar.addAction(self.btn_save_copy)
 
-        toolbar.addSeparator()
+        self.sheet_selector_separator_before = toolbar.addSeparator()
 
         self.sheet_label = QtWidgets.QLabel("Sheet:")
-        self.sheet_label.setVisible(True)
+        self.sheet_label.setVisible(False)
         toolbar.addWidget(self.sheet_label)
 
         self.sheet_combo = QtWidgets.QComboBox()
         self.sheet_combo.setMinimumWidth(120)
         self.sheet_combo.setMaximumWidth(240)
         self.sheet_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.sheet_combo.setVisible(True)
+        self.sheet_combo.setVisible(False)
         self.sheet_combo.addItem("(No sheet)")
         self.sheet_combo.setEnabled(False)
         self.sheet_combo.currentTextChanged.connect(self._on_sheet_changed)
         toolbar.addWidget(self.sheet_combo)
 
-        toolbar.addSeparator()
+        self.sheet_selector_separator_after = toolbar.addSeparator()
+        self._set_sheet_selector_visible(False)
 
         # --- Dark/Light Toggle ---
         self.mode_toggle = QtWidgets.QToolButton()
@@ -3515,6 +4592,10 @@ class DataViewerPage(QtWidgets.QWidget):
         table_font.setFamily(DEFAULT_DISPLAY_FONT_FAMILY)
         table_font.setPointSize(DEFAULT_DISPLAY_FONT_SIZE)
         self.table.setFont(table_font)
+        self.column_stats_header = ColumnStatsHeader(self.table)
+        self.column_stats_header.setFont(table_font)
+        self.column_stats_header.set_dark_mode(self.mode_toggle.isChecked())
+        self.table.setHorizontalHeader(self.column_stats_header)
         self.table.setAlternatingRowColors(False)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -3532,6 +4613,8 @@ class DataViewerPage(QtWidgets.QWidget):
         
         self.table.horizontalHeader().sectionClicked.connect(self._select_column)
         self.table.verticalHeader().sectionClicked.connect(self._select_row)
+        self.table.verticalHeader().sectionDoubleClicked.connect(self._toggle_stats_collapse_from_index_header)
+        self.table.verticalHeader().setToolTip("Double-click row index column to collapse/expand column stats")
         self.table.horizontalHeader().setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.horizontalHeader().customContextMenuRequested.connect(self._show_column_header_menu)
         self.table.verticalHeader().setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
@@ -3718,6 +4801,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._select_all_shortcut.activated.connect(self._select_all_data_cells)
         self._apply_session_mode_ui()
+        QtCore.QTimer.singleShot(0, self._ensure_corner_toggle_button)
 
     def _apply_search_width_ratio_once(self):
         if self._search_width_adjusted_once:
@@ -4676,6 +5760,11 @@ class DataViewerPage(QtWidgets.QWidget):
         self.model = model
 
         self.table.setModel(self.model)
+        self._ensure_corner_toggle_button()
+        header = self.table.horizontalHeader()
+        if isinstance(header, ColumnStatsHeader):
+            header.set_dark_mode(bool(self.model._is_dark))
+            header.invalidate_profiles()
         self._bind_table_selection_model()
         self._sync_remote_selection_overlay()
         self.refresh_dims_display()
@@ -4871,7 +5960,7 @@ class DataViewerPage(QtWidgets.QWidget):
         if span_count <= 0 and (not feedback_col_found) and (not feedback_data_found):
             clipboard.setText("[NO ISSUES FOUND]")
             self._show_bottom_right_notice(
-                "[NO ISSUES FOUND] copied to clipboard.",
+                "No issue marks found in the file!",
                 3000,
             )
             return
@@ -5144,24 +6233,36 @@ class DataViewerPage(QtWidgets.QWidget):
         self._stop_collaboration()
 
     def _set_sheet_selector(self, sheet_names: list[str], selected_sheet: t.Optional[str]):
-        self._xlsx_sheet_names = sheet_names
-        has_any = len(sheet_names) > 0
-        self.sheet_label.setVisible(True)
-        self.sheet_combo.setVisible(True)
-        self.sheet_combo.setEnabled((not self._is_guest_mode()) and has_any and len(sheet_names) > 1)
+        self._xlsx_sheet_names = list(sheet_names)
+        has_any = len(self._xlsx_sheet_names) > 0
+        self._set_sheet_selector_visible(has_any)
+        self.sheet_combo.setEnabled((not self._is_guest_mode()) and has_any and len(self._xlsx_sheet_names) > 1)
 
         self.sheet_combo.blockSignals(True)
         self.sheet_combo.clear()
         if has_any:
-            self.sheet_combo.addItems(sheet_names)
-            if selected_sheet and selected_sheet in sheet_names:
+            self.sheet_combo.addItems(self._xlsx_sheet_names)
+            if selected_sheet and selected_sheet in self._xlsx_sheet_names:
                 self.sheet_combo.setCurrentText(selected_sheet)
-            elif sheet_names:
+            elif self._xlsx_sheet_names:
                 self.sheet_combo.setCurrentIndex(0)
         else:
             self.sheet_combo.addItem("(No sheet)")
             self.sheet_combo.setCurrentIndex(0)
         self.sheet_combo.blockSignals(False)
+
+    def _set_sheet_selector_visible(self, visible: bool):
+        value = bool(visible)
+        self.sheet_label.setVisible(value)
+        self.sheet_combo.setVisible(value)
+        try:
+            self.sheet_selector_separator_before.setVisible(value)
+        except Exception:
+            pass
+        try:
+            self.sheet_selector_separator_after.setVisible(value)
+        except Exception:
+            pass
 
     def _on_sheet_changed(self, sheet_name: str):
         if self._is_guest_mode():
@@ -5590,6 +6691,136 @@ class DataViewerPage(QtWidgets.QWidget):
             self._add_new_row()
             return
         self.table.selectRow(logical_index)
+
+    def _build_corner_toggle_icon(self, collapsed: bool) -> QtGui.QIcon:
+        size = 14
+        pixmap = QtGui.QPixmap(size, size)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        is_dark = bool(self.model and self.model._is_dark)
+        arrow_color = QtGui.QColor(232, 232, 236) if is_dark else QtGui.QColor(52, 58, 66)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(arrow_color)
+
+        if collapsed:
+            points = [
+                QtCore.QPointF(3.0, 4.5),
+                QtCore.QPointF(float(size - 3), 4.5),
+                QtCore.QPointF(float(size) / 2.0, float(size - 3)),
+            ]
+        else:
+            points = [
+                QtCore.QPointF(3.0, float(size - 4.5)),
+                QtCore.QPointF(float(size - 3), float(size - 4.5)),
+                QtCore.QPointF(float(size) / 2.0, 3.0),
+            ]
+        painter.drawPolygon(QtGui.QPolygonF(points))
+        painter.end()
+        return QtGui.QIcon(pixmap)
+
+    def _paint_corner_toggle_button(self, btn: QtWidgets.QAbstractButton):
+        if btn is None:
+            return
+        rect = btn.rect().adjusted(0, 0, -1, -1)
+        if not rect.isValid() or rect.isEmpty():
+            return
+
+        header = self.table.horizontalHeader()
+        collapsed = bool(isinstance(header, ColumnStatsHeader) and header.is_stats_collapsed())
+        is_dark = bool(self.model and self.model._is_dark)
+
+        bg = QtGui.QColor(56, 56, 60) if is_dark else QtGui.QColor(236, 239, 243)
+        border = QtGui.QColor(84, 84, 90) if is_dark else QtGui.QColor(188, 194, 202)
+        arrow = QtGui.QColor(232, 232, 236) if is_dark else QtGui.QColor(52, 58, 66)
+
+        if self._corner_toggle_mouse_down:
+            bg = bg.darker(118) if is_dark else bg.darker(105)
+        elif btn.underMouse():
+            bg = bg.lighter(118) if is_dark else bg.darker(102)
+
+        painter = QtGui.QPainter(btn)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.fillRect(rect, bg)
+        painter.setPen(QtGui.QPen(border, 1))
+        painter.drawRect(rect)
+
+        cx = float(rect.center().x())
+        cy = float(rect.center().y())
+        half_w = max(3.0, min(7.0, rect.width() * 0.22))
+        half_h = max(2.0, min(6.0, rect.height() * 0.18))
+
+        if collapsed:
+            points = [
+                QtCore.QPointF(cx - half_w, cy - half_h),
+                QtCore.QPointF(cx + half_w, cy - half_h),
+                QtCore.QPointF(cx, cy + half_h + 1.0),
+            ]
+        else:
+            points = [
+                QtCore.QPointF(cx - half_w, cy + half_h),
+                QtCore.QPointF(cx + half_w, cy + half_h),
+                QtCore.QPointF(cx, cy - half_h - 1.0),
+            ]
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(arrow)
+        painter.drawPolygon(QtGui.QPolygonF(points))
+        painter.end()
+
+    def _sync_corner_toggle_button_visual(self):
+        btn = self._corner_toggle_btn
+        if btn is None:
+            return
+        header = self.table.horizontalHeader()
+        collapsed = bool(isinstance(header, ColumnStatsHeader) and header.is_stats_collapsed())
+        btn.setStyleSheet("")
+        btn.setText("")
+        btn.setIcon(QtGui.QIcon())
+        btn.setToolTip(
+            "Expand column stats" if collapsed else "Collapse column stats"
+        )
+        btn.update()
+
+    def _ensure_corner_toggle_button(self):
+        if not getattr(self, "table", None):
+            return
+        btn = self._corner_toggle_btn
+        if btn is None:
+            try:
+                btn = self.table.findChild(QtWidgets.QAbstractButton)
+            except Exception:
+                btn = None
+        if btn is None:
+            return
+
+        if self._corner_toggle_btn is not btn:
+            if self._corner_toggle_btn is not None:
+                try:
+                    self._corner_toggle_btn.removeEventFilter(self)
+                except Exception:
+                    pass
+            self._corner_toggle_btn = btn
+            btn.installEventFilter(self)
+            btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            if hasattr(btn, "setFlat"):
+                try:
+                    btn.setFlat(True)
+                except Exception:
+                    pass
+            try:
+                btn.setAutoFillBackground(False)
+            except Exception:
+                pass
+
+        self._sync_corner_toggle_button_visual()
+
+    def _toggle_stats_collapse_from_index_header(self, *_args):
+        header = self.table.horizontalHeader()
+        if not isinstance(header, ColumnStatsHeader):
+            return
+        header.toggle_stats_collapsed(animate=True)
+        self._sync_corner_toggle_button_visual()
     
     
     def load_path(self, path: Path, xlsx_sheet_name: t.Optional[str] = None):
@@ -5714,6 +6945,11 @@ class DataViewerPage(QtWidgets.QWidget):
         font = self.table.font()
         font.setPointSize(new_size)
         self.table.setFont(font)
+        header = self.table.horizontalHeader()
+        if isinstance(header, ColumnStatsHeader):
+            header.setFont(font)
+            header.refresh_layout_metrics()
+            header.invalidate_profiles()
         self._row_height_font_metrics_cache.clear()
         self._row_height_wrap_cache.clear()
         
@@ -5878,6 +7114,43 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def eventFilter(self, obj, event):
         """Capture Shift+Enter in search box for backwards navigation"""
+        if obj == self._corner_toggle_btn:
+            et = event.type()
+            if et == QtCore.QEvent.Type.Paint:
+                try:
+                    self._paint_corner_toggle_button(self._corner_toggle_btn)
+                except Exception:
+                    pass
+                return True
+            if et in (
+                QtCore.QEvent.Type.MouseButtonPress,
+                QtCore.QEvent.Type.MouseButtonDblClick,
+            ):
+                self._corner_toggle_mouse_down = True
+                try:
+                    self._corner_toggle_btn.update()
+                except Exception:
+                    pass
+                return True
+            if et == QtCore.QEvent.Type.MouseButtonRelease:
+                self._corner_toggle_mouse_down = False
+                try:
+                    if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                        self._toggle_stats_collapse_from_index_header()
+                        self._corner_toggle_btn.update()
+                        return True
+                except Exception:
+                    try:
+                        self._corner_toggle_btn.update()
+                    except Exception:
+                        pass
+                    return True
+            if et in (QtCore.QEvent.Type.HoverEnter, QtCore.QEvent.Type.HoverLeave, QtCore.QEvent.Type.Enter, QtCore.QEvent.Type.Leave):
+                try:
+                    self._corner_toggle_btn.update()
+                except Exception:
+                    pass
+
         if obj == self.controls.share_btn and event.type() == QtCore.QEvent.Type.ToolTip:
             tooltip_html = self._build_share_people_tooltip_html()
             if tooltip_html:
@@ -6237,7 +7510,7 @@ class DataViewerPage(QtWidgets.QWidget):
 
     # === NEW: Efficient row height updater for visible area ===
     def _resize_visible_rows(self):
-        """Recalculates row heights for visible area based on resized columns."""
+        """Queue row-height recalculation in the background after column resize."""
         if not self.model or not self._columns_resized:
             return
 
@@ -6260,12 +7533,15 @@ class DataViewerPage(QtWidgets.QWidget):
         rows = list(range(top_row, bottom_row + 1))
         widths = self._current_column_text_widths()
         default_height = int(self.table.verticalHeader().defaultSectionSize())
-        self._resize_rows_with_padding(rows, column_widths=widths, default_height=default_height)
+
+        # Cancel any in-flight sizing work and restart with the latest resized width.
+        self._invalidate_background_row_resize()
+        self._pending_resize_rows = rows
+        self._pending_resize_col_widths = widths
+        self._pending_resize_default_height = default_height
+        QtCore.QTimer.singleShot(0, self._background_resize_remaining)
 
         self._columns_resized.clear()
-
-        if self.model.data_row_count() > 1000:
-            QtCore.QTimer.singleShot(800, self._background_resize_rows)
             
     def _resize_row_with_padding(self, row: int):
         self._resize_rows_with_padding([int(row)])
@@ -6585,8 +7861,14 @@ class DataViewerPage(QtWidgets.QWidget):
 
         if not self._pending_resize_rows:
             self._flush_background_row_height_updates(force=True)
-            self._hide_background_indicator()
-            self.status.showMessage("Finished formatting.")
+            if self.bg_start_time is not None:
+                self._hide_background_indicator()
+                self.status.showMessage("Finished formatting.")
+            else:
+                self._invalidate_background_row_resize()
+                self._pending_resize_rows = []
+                self._pending_resize_col_widths = []
+                self._pending_resize_default_height = 0
             return
 
         self._start_background_row_height_batch()
@@ -6594,6 +7876,9 @@ class DataViewerPage(QtWidgets.QWidget):
     def toggle_mode(self, checked: bool):
         if self.model:
             self.model._is_dark = checked
+        header = self.table.horizontalHeader()
+        if isinstance(header, ColumnStatsHeader):
+            header.set_dark_mode(checked)
         if checked:
             apply_dark_palette(QtWidgets.QApplication.instance())
             self.mode_toggle.setText("Dark")
@@ -6661,6 +7946,7 @@ class DataViewerPage(QtWidgets.QWidget):
                 }
             """
             self.table.setStyleSheet(light_scrollbar_style)
+        self._sync_corner_toggle_button_visual()
         self.table.viewport().update()
                 
     def _handle_plus_column_click(self, index: QtCore.QModelIndex):
@@ -7430,3 +8716,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

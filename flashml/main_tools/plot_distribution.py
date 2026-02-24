@@ -39,6 +39,9 @@ def plot_dist(
         total_samples = sum(y_vals)
         if total_samples == 0:
             return
+        
+        # Plotly bar default width for categorical bars (centered on integer slots).
+        bar_width = 0.8
             
         # Calculate cumulative sample counts
         cumulative_counts = []
@@ -55,86 +58,133 @@ def plot_dist(
             (total_samples, '100%', 'rgba(200, 200, 0, 0.2)')
         ]
         
-        # Find which bars contain each quantile
+        # Find where each quantile threshold is crossed.
+        # If a threshold falls inside a bin, place the separator proportionally
+        # inside that bin (instead of snapping to the bin boundary).
         quantile_bars = []
         for threshold, name, color in all_quantiles:
             for j, cum_count in enumerate(cumulative_counts):
                 if cum_count >= threshold:
-                    # Calculate precise position within the bar
                     if j == 0:
                         bar_start_count = 0
                     else:
-                        bar_start_count = cumulative_counts[j-1]
-                    
+                        bar_start_count = cumulative_counts[j - 1]
+
                     bar_total_samples = y_vals[j]
                     samples_needed_from_bar = threshold - bar_start_count
-                    
+
                     if bar_total_samples > 0:
                         position_in_bar = samples_needed_from_bar / bar_total_samples
-                        position = j - 0.5 + position_in_bar
+                        # Keep floating-point artifacts from pushing outside bin edges.
+                        position_in_bar = max(0.0, min(1.0, position_in_bar))
+                        if position_in_bar <= 0.0:
+                            position = j - 0.5
+                        elif position_in_bar >= 1.0:
+                            position = j + 0.5
+                        else:
+                            # Place separator inside the visible bar body, not the slot.
+                            position = (j - (bar_width / 2)) + (position_in_bar * bar_width)
                     else:
                         position = j - 0.5
-                    
+
                     quantile_bars.append((position, name, color, threshold))
                     break
         
-        # Group quantiles that fall in the same or adjacent bars
+        # Group quantiles into readable zones.
+        # When quartile slices are cramped, choose where the 50% zone goes
+        # based on high-importance bins (largest frequencies), not only distance.
         if not quantile_bars:
             return
-            
-        # Sort by position
+
         quantile_bars.sort(key=lambda x: x[0])
-        
-        # Merge quantiles that are too close together
-        merged_boxes = []
-        current_start = -0.5
-        current_end = quantile_bars[0][0]
-        current_names = [quantile_bars[0][1]]
-        current_color = quantile_bars[0][2]
-        
-        for i in range(1, len(quantile_bars)):
-            next_pos = quantile_bars[i][0]
-            next_name = quantile_bars[i][1]
-            next_color = quantile_bars[i][2]
-            
-            # If the next quantile is very close (less than 0.8 bar widths away), merge them
-            if next_pos - current_end < 0.8:
-                current_end = next_pos
-                current_names.append(next_name)
-                # Use the color of the highest quantile in the group
-                current_color = next_color
-            else:
-                # Finalize current box
-                if current_end > current_start + 0.05:
-                    # Calculate the percentage this box represents
-                    if len(current_names) == 1:
-                        label = "25%"  # Each quartile represents 25%
-                    else:
-                        # Multiple quartiles merged - calculate total percentage
-                        quartile_count = len(current_names)
-                        total_percentage = quartile_count * 25
-                        label = f"{total_percentage}%"
-                    
-                    merged_boxes.append((current_start, current_end, label, current_color))
-                
-                # Start new box
-                current_start = current_end
-                current_end = next_pos
-                current_names = [next_name]
-                current_color = next_color
-        
-        # Add the final box
-        if current_end > current_start + 0.05:
-            # Calculate the percentage this box represents
-            if len(current_names) == 1:
-                label = "25%"  # Each quartile represents 25%
-            else:
-                # Multiple quartiles merged - calculate total percentage
-                quartile_count = len(current_names)
-                total_percentage = quartile_count * 25
-                label = f"{total_percentage}%"
-            
-            merged_boxes.append((current_start, current_end, label, current_color))
+        if len(quantile_bars) < 4:
+            return
+
+        start_pos = -0.5
+        end_pos = len(x_vals) - 0.5
+        merge_threshold = 0.35
+        q_positions = [q[0] for q in quantile_bars]
+        q_colors = [q[2] for q in quantile_bars]
+
+        def overlap_fraction(zone_start, zone_end, bar_index):
+            if zone_end <= zone_start:
+                return 0.0
+            bar_left = bar_index - (bar_width / 2)
+            bar_right = bar_index + (bar_width / 2)
+            overlap = min(zone_end, bar_right) - max(zone_start, bar_left)
+            if overlap <= 0:
+                return 0.0
+            return overlap / bar_width
+
+        def candidate_score(fifty_start, fifty_end):
+            top_bar_index = int(np.argmax(y_vals))
+            weighted_importance = 0.0
+            for i, val in enumerate(y_vals):
+                if val <= 0:
+                    continue
+                frac = overlap_fraction(fifty_start, fifty_end, i)
+                if frac > 0:
+                    # Square to bias toward high-frequency bars.
+                    weighted_importance += (val ** 2) * frac
+
+            top_overlap = overlap_fraction(fifty_start, fifty_end, top_bar_index)
+            center_distance = abs(((fifty_start + fifty_end) / 2) - top_bar_index)
+            return (weighted_importance, top_overlap, -center_distance)
+
+        zone_widths = [
+            q_positions[0] - start_pos,
+            q_positions[1] - q_positions[0],
+            q_positions[2] - q_positions[1],
+            end_pos - q_positions[2],
+        ]
+        should_use_three_zones = any(width < merge_threshold for width in zone_widths)
+
+        if should_use_three_zones:
+            # 3-zone candidates:
+            # A) 50-25-25, B) 25-50-25, C) 25-25-50
+            candidates = [
+                (
+                    [
+                        (start_pos, q_positions[1], "50%", q_colors[1]),
+                        (q_positions[1], q_positions[2], "25%", q_colors[2]),
+                        (q_positions[2], end_pos, "25%", q_colors[3]),
+                    ],
+                    (start_pos, q_positions[1]),
+                ),
+                (
+                    [
+                        (start_pos, q_positions[0], "25%", q_colors[0]),
+                        (q_positions[0], q_positions[2], "50%", q_colors[2]),
+                        (q_positions[2], end_pos, "25%", q_colors[3]),
+                    ],
+                    (q_positions[0], q_positions[2]),
+                ),
+                (
+                    [
+                        (start_pos, q_positions[0], "25%", q_colors[0]),
+                        (q_positions[0], q_positions[1], "25%", q_colors[1]),
+                        (q_positions[1], end_pos, "50%", q_colors[3]),
+                    ],
+                    (q_positions[1], end_pos),
+                ),
+            ]
+
+            best_boxes = None
+            best_score = None
+            for boxes, fifty_zone in candidates:
+                score = candidate_score(fifty_zone[0], fifty_zone[1])
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_boxes = boxes
+
+            merged_boxes = best_boxes if best_boxes is not None else []
+        else:
+            merged_boxes = [
+                (start_pos, q_positions[0], "25%", q_colors[0]),
+                (q_positions[0], q_positions[1], "25%", q_colors[1]),
+                (q_positions[1], q_positions[2], "25%", q_colors[2]),
+                (q_positions[2], end_pos, "25%", q_colors[3]),
+            ]
         
         # Draw the merged boxes
         for start_pos, end_pos, label, color in merged_boxes:
