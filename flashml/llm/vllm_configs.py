@@ -46,6 +46,67 @@ QWEN3_VL_4B_THINKING_AWQ_VLLM_CONFIG = {
     "gpu-memory-utilization": 0.85,
 }
 
+QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
+    "model": "unsloth/Qwen3-VL-8B-Thinking-bnb-4bit",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "limit-mm-per-prompt.video": 0,
+    "async-scheduling": "",
+    "gpu-memory-utilization": 0.95,
+    "tensor-parallel-size": 1,
+}
+
+
+QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
+    "model": "QuantTrio/Qwen3-VL-30B-A3B-Thinking-AWQ",
+    "max_model_len": 40_960,
+    "max_completion_tokens": 30_720,
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 20,
+    "limit-mm-per-prompt.video": 0,
+    "async-scheduling": "",
+    "gpu-memory-utilization": 0.95,
+    "tensor-parallel-size": 1,
+}
+
+
+QWEN_3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
+    "model": "Qwen/Qwen3.5-122B-A10B",
+    "max_model_length": 81_920,
+    "max_completion_tokens": 61_440,
+    
+    "gpu-memory-utilization": 0.95,
+    "tensor-parallel-size": 1,
+    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    
+    "top_p": 0.95,
+    "top_k": 20,
+    "reasoning-parser": "qwen3",
+    "language-model-only": "",
+    "enable-prefix-caching": ""
+}
+
+QWEN_3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
+    "model": "Qwen/Qwen3.5-35B-A3B",
+    "max_model_length": 81_920,
+    "max_completion_tokens": 61_440,
+    
+    "gpu-memory-utilization": 0.95,
+    "tensor-parallel-size": 1,
+    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    
+    "top_p": 0.95,
+    "top_k": 20,
+    "reasoning-parser": "qwen3",
+    "language-model-only": "",
+    "enable-prefix-caching": ""
+}
+
+
 GEMMA3_4B_IT_VLLM_CONFIG = {
     "model": "google/gemma3-4b-it",
     "max_model_len": 32768,
@@ -76,32 +137,6 @@ GEMMA3_27B_IT_VLLM_CONFIG = {
     "limit_mm_per_prompt.video": 0,
 }
 
-QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
-    "model": "unsloth/Qwen3-VL-8B-Thinking-bnb-4bit",
-    "max_model_len": 40_960,
-    "max_completion_tokens": 30_720,
-    "temperature": 0.6,
-    "top_p": 0.95,
-    "top_k": 20,
-    "limit-mm-per-prompt.video": 0,
-    "async-scheduling": "",
-    "gpu-memory-utilization": 0.95,
-    "tensor-parallel-size": 1,
-}
-
-
-QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
-    "model": "QuantTrio/Qwen3-VL-30B-A3B-Thinking-AWQ",
-    "max_model_len": 40_960,
-    "max_completion_tokens": 30_720,
-    "temperature": 0.7,
-    "top_p": 0.95,
-    "top_k": 20,
-    "limit-mm-per-prompt.video": 0,
-    "async-scheduling": "",
-    "gpu-memory-utilization": 0.95,
-    "tensor-parallel-size": 1,
-}
 
 
 GPT_OSS_120B_HIGH_VLLM_CONFIG = {
@@ -113,6 +148,7 @@ GPT_OSS_120B_HIGH_VLLM_CONFIG = {
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
+    "async-scheduling": "",
     "reasoning_effort": "high",
     "ignore-patterns": ["original/**", "metal/**"]
 }
@@ -126,6 +162,7 @@ GPT_OSS_120B_LOW_VLLM_CONFIG = {
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
+    "async-scheduling": "",
     "reasoning_effort": "low",
     "ignore-patterns": ["original/**", "metal/**"]
 }
@@ -169,3 +206,5 @@ MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
     "load_format": "mistral",
     "ignore_patterns": ["original/**", "metal/**"],
 }
+
+

@@ -175,9 +175,6 @@ plot_tsne(x, labels=["A"] * 120 + ["B"] * 120 + ["C"] * 200)
 ```
 ![tp](https://github.com/smtmRadu/flashml/blob/main/doc/plot_tsne.jpg?raw=true)
 ***
-### Architectures common implementations
-Enumerate **GQA**, **SwiGLU**, **FFN**, **MinGRU** ...
-***
 ## Standalone scripts with GUI
 - Color picker
 - Image converter, resizer, processor etc.

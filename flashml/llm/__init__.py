@@ -1,6 +1,5 @@
 from .plot_chat import plot_chat
 from .openai_api_batch_builder import OpenAIBatchRequest, OpenAISyncRequest
-from .vllm_chat import vllm_chat
 from .vllm_compute_logprobs import vllm_compute_logprobs
 from .vllm_engine import vllm_close
 from .vllm_chat_openai_entrypoint import vllm_chat_openai_entrypoint
@@ -67,7 +66,6 @@ __all__ = [
     
     "vllm_chat_openai_entrypoint",
     "plot_chat",
-    "vllm_chat",
     "vllm_close",
     "vllm_compute_logprobs",
 ]

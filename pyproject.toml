@@ -51,7 +51,7 @@ dependencies = [
     "dspy",
     "fuzzywuzzy",
     "python-Levenshtein",
-
+    "peft",
 
     # do not add flash_attn, xformers etc.
     #"unsloth",
