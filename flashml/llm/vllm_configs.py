@@ -74,7 +74,7 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
 }
 
 
-QWEN_3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
+QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3.5-122B-A10B",
     "max_model_length": 81_920,
     "max_completion_tokens": 61_440,
@@ -90,7 +90,7 @@ QWEN_3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     "enable-prefix-caching": ""
 }
 
-QWEN_3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
+QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3.5-35B-A3B",
     "max_model_length": 81_920,
     "max_completion_tokens": 61_440,
