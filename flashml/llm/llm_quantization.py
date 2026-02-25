@@ -50,9 +50,10 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
             )
         
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-        print(f"{BLUE}[Step 2] Saving to {GREEN}{model_path.replace("_fp16", "_bnb_4bit")}{RESET} ...")
-        model.save_pretrained(model_path.replace("_fp16", "_bnb_4bit"), safe_serialization=True)
-        tokenizer.save_pretrained(model_path.replace("_fp16", "_bnb_4bit"))
+        quantized_path = model_path.replace("_fp16", "_bnb_4bit")
+        print(f"{BLUE}[Step 2] Saving to {GREEN}{quantized_path}{RESET} ...")
+        model.save_pretrained(quantized_path, safe_serialization=True)
+        tokenizer.save_pretrained(quantized_path)
     else:   
         raise Exception(f"Unhandled quantization method {quantization}")
     print("✅ Quantization complete!")
@@ -90,14 +91,15 @@ def _quantize_mistral_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4b
             trust_remote_code=True,
             )
         
-        print(f"{BLUE}[Step 2] Saving to {GREEN}{model_path.replace("_fp16", "_bnb_4bit")}{RESET} ...")
-        model.save_pretrained(model_path.replace("_fp16", "_bnb_4bit"), safe_serialization=True)
+        quantized_path = model_path.replace("_fp16", "_bnb_4bit")
+        print(f"{BLUE}[Step 2] Saving to {GREEN}{quantized_path}{RESET} ...")
+        model.save_pretrained(quantized_path, safe_serialization=True)
         
         ## copy tokenizer and tokenizer_config files to the new folder 
         
         tokenizer_path = model_path + "/tokenizer.json"
         tokenizer_config_path = model_path + "/tokenizer_config.json"
-        new_folder = model_path.replace("_fp16", "_bnb_4bit")
+        new_folder = quantized_path
         if os.path.exists(tokenizer_path):
             shutil.copy(tokenizer_path, new_folder + "/tokenizer.json")
         if os.path.exists(tokenizer_config_path):

@@ -47,7 +47,9 @@ class GeminiBatchRequest():
             }
             log_json(record=request, path=file_name, add_timestamp=True)
             
-        print(f"[1] \x1b[38;5;33mGemini\x1b[38;5;32m Batch File (File Name: x1b[38;5;39m{file_name}\x1b[38;5;32m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\x1b[37m")
+        request_id_mode = "w/ custom IDs" if custom_ids is not None else "w/ default request IDs"
+        structured_output_suffix = ", w/ structured output" if getattr(self, "output_structure", None) is not None else ""
+        print(f"[1] \x1b[38;5;33mGemini\x1b[38;5;32m Batch File (File Name: x1b[38;5;39m{file_name}\x1b[38;5;32m) created locally (num_requests={len(self.messages_batch)}, {request_id_mode}{structured_output_suffix}).\x1b[37m")
         
     def step_2_upload_batch_file(self, file_name="current"):
         from google.genai import types

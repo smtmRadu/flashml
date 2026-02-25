@@ -150,7 +150,9 @@ for r in resps:
                 req["body"]["response_format"] = {"type": "json_object"}
             log_json(record=req, path=self.current_file_name, add_timestamp=False)
             
-        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[32m{self.current_file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {"w/ custom IDs" if custom_ids is not None else "w/ default request IDs"}{", w/ structured output" if self.output_structure is not None else ""}).\033[37m")
+        request_id_mode = "w/ custom IDs" if custom_ids is not None else "w/ default request IDs"
+        structured_output_suffix = ", w/ structured output" if self.output_structure is not None else ""
+        print(f"[1] \033[32mOpenAI\033[38;2;189;252;201m Batch File (File Name: \033[32m{self.current_file_name}\033[38;2;189;252;201m) created locally (num_requests={len(self.messages_batch)}, {request_id_mode}{structured_output_suffix}).\033[37m")
 
     def step_2_upload_batch_file(self, file_name = "current"):
         if file_name == "current":
@@ -185,7 +187,8 @@ for r in resps:
                 metadata=metadata
             )
 
-        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch Job created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{self.CURRENT__file_id if file_id=="current" else file_id}\033[37m). \033[38;2;189;252;201mSee: https://platform.openai.com/batches.\033[37m")
+        batch_file_id = self.CURRENT__file_id if file_id == "current" else file_id
+        print(f"[3] \033[32mOpenAI\033[38;2;189;252;201m Batch Job created (Batch ID: \033[32m{self.CURRENT__batch.id}\033[37m, File ID: \033[32m{batch_file_id}\033[37m). \033[38;2;189;252;201mSee: https://platform.openai.com/batches.\033[37m")
     
     def step_4_poll_batch(self, batch_id = "current", check_every_s: float = 5):
         """

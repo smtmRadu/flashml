@@ -66,7 +66,8 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
     print(f"{BLUE}[Step 3] Merge adapter with base model...")
     merged_model = merged_model.merge_and_unload()
     
-    print(f"{BLUE}[Step 4] Saving {GREEN}{adapter_path + "_fp16"}{RESET} ...")
+    merged_fp16_path = adapter_path + "_fp16"
+    print(f"{BLUE}[Step 4] Saving {GREEN}{merged_fp16_path}{RESET} ...")
     merged_model.to(dtype=torch.bfloat16)
     merged_model.save_pretrained(adapter_path + "_fp16", safe_serialization=True)
     tokenizer.save_pretrained(adapter_path + "_fp16")

@@ -76,7 +76,7 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
 
 QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3.5-122B-A10B",
-    "max_model_length": 81_920,
+    "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
     "gpu-memory-utilization": 0.95,
@@ -92,7 +92,7 @@ QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
 
 QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3.5-35B-A3B",
-    "max_model_length": 81_920,
+    "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
     "gpu-memory-utilization": 0.95,
@@ -148,9 +148,9 @@ GPT_OSS_120B_HIGH_VLLM_CONFIG = {
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
-    "async-scheduling": "",
     "reasoning_effort": "high",
     "ignore-patterns": ["original/**", "metal/**"]
+    # don't put async scheduling, it fucks up the memory..
 }
 
 GPT_OSS_120B_LOW_VLLM_CONFIG = {
@@ -162,9 +162,9 @@ GPT_OSS_120B_LOW_VLLM_CONFIG = {
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
-    "async-scheduling": "",
     "reasoning_effort": "low",
     "ignore-patterns": ["original/**", "metal/**"]
+    # don't put async scheduling, it fucks up the memory..
 }
 
 
@@ -179,6 +179,7 @@ GPT_OSS_20B_LOW_VLLM_CONFIG = {
     "top_p": 1,
     "top_k": -1,
     "ignore-patterns": ["original/**", "metal/**"]
+    # don't put async scheduling, it fucks up the memory..
 }
 
 MINISTRAL_3_3B_INSTRUCT_2512_FINETUNED_VLLM_CONFIG = {
