@@ -76,5 +76,7 @@ dependencies = [
 
 
 
-[tool.setuptools]
-packages = ["flashml"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["flashml*"]
+

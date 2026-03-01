@@ -2128,7 +2128,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             else:
                 if section == self.data_row_count():
                     return "+"
-                return str(self._df.index[section])
+                return str(int(section) + 1)
         return None
 
     def flags(self, index):
@@ -4931,19 +4931,7 @@ class DataViewerPage(QtWidgets.QWidget):
         return False
 
     def _row_label(self, row_idx: int) -> str:
-        if not self.model:
-            return str(row_idx)
-        try:
-            label = self.model.df.index[row_idx]
-        except Exception:
-            return str(row_idx)
-        try:
-            if _is_missing_value(label):
-                return str(row_idx)
-        except Exception:
-            pass
-        text = str(label).strip()
-        return text if text else str(row_idx)
+        return str(int(row_idx) + 1)
 
     @staticmethod
     def _build_span_context_snippet(

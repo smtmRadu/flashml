@@ -43,7 +43,7 @@ def log_json(
 
 def load_jsonl(
     path="flashml_logger.jsonl",
-    as_df: Literal["pd", "pl"] = False,
+    as_df: Literal["pd", "pl", False] = False,
     utf="utf-8",
 ) -> list[dict] | None:
     """
@@ -51,7 +51,7 @@ def load_jsonl(
     if as_df == False, it returns list[dict]
     """
     import os, json
-
+    path=str(path) # case of Path object
     if not path.endswith((".jsonl", ".json")):
         path += ".jsonl"
 

@@ -153,6 +153,9 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+.unsloth_compiled_cache/
+flashml/unsloth_compiled_cache/
+
 # Pyre type checker
 .pyre/
 

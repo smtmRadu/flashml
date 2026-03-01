@@ -143,7 +143,7 @@ GPT_OSS_120B_HIGH_VLLM_CONFIG = {
     "model": "openai/gpt-oss-120b",
     "max_model_len": 81_920, # the model reasons even 12.5k samples
     "max_completion_tokens": 61_440,
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
@@ -157,7 +157,7 @@ GPT_OSS_120B_LOW_VLLM_CONFIG = {
     "model": "openai/gpt-oss-120b",
     "max_model_len": 81_920, # the model reasons even 12.5k samples
     "max_completion_tokens": 61_440,
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
     "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
