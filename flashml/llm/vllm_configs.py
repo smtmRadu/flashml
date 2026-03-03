@@ -55,7 +55,7 @@ QWEN3_VL_8B_THINKING_VLLM_CONFIG = {
     "top_k": 20,
     "limit-mm-per-prompt.video": 0,
     "async-scheduling": "",
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
 }
 
@@ -69,7 +69,7 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
     "top_k": 20,
     "limit-mm-per-prompt.video": 0,
     "async-scheduling": "",
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
 }
 
@@ -79,7 +79,7 @@ QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
     "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     
@@ -91,13 +91,13 @@ QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
 }
 
 QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
-    "model": "Qwen/Qwen3.5-35B-A3B",
+    "model": "QuantTrio/Qwen3.5-35B-A3B-AWQ",
     "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
-    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "temperature": 0.7, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     
     "top_p": 0.95,
     "top_k": 20,
@@ -106,6 +106,20 @@ QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
     "enable-prefix-caching": ""
 }
 
+QWEN3_5_27B_TEXT_THINKING_VLLM_CONFIG = {
+    "model": "Qwen/Qwen3.5-27B-FP8",
+    "max_model_len": 81_920,
+    "max_completion_tokens": 61_440,
+    "gpu-memory-utilization": 0.9,
+    "tensor-parallel-size": 1,
+    "temperature": 0.7, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "top_p": 0.95,
+    "top_k": 20,
+    
+    "reasoning-parser": "qwen3",
+    "language-model-only": "",
+    "enable-prefix-caching": ""
+}
 
 GEMMA3_4B_IT_VLLM_CONFIG = {
     "model": "google/gemma3-4b-it",
@@ -173,7 +187,7 @@ GPT_OSS_20B_LOW_VLLM_CONFIG = {
     "max_model_len": 40_960,
     "max_completion_tokens": 30_720,
     "reasoning_effort": "low",
-    "gpu-memory-utilization": 0.95,
+    "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
     "temperature": 1.0,
     "top_p": 1,

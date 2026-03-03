@@ -7,13 +7,10 @@ name = "flashml"
 version = "0.6.7"
 authors = [{ name = "kbradu" }]
 dependencies = [
-    
-
-
+    "uv",
     "python-dotenv",
     "hydra-core",
     "mlflow==3.3.0",
-    "bitsandbytes",
     "python-telegram-bot",
     "magic-wormhole",
     "PyPDF2",
@@ -47,15 +44,17 @@ dependencies = [
     "weave",
     "wandb",
     "evaluate",
-    "rouge_score",
-    "dspy",
     "fuzzywuzzy",
     "python-Levenshtein",
-    "peft",
+
+   
 
     # do not add flash_attn, xformers etc.
     #"unsloth",
     #"transformers",
+    #"bitsandbytes",
+    #"dspy",
+    #"peft",
     #"trl",
     #"ollama",
     #"torch-optimi", # no more needed, Muon rocks!
@@ -68,6 +67,7 @@ dependencies = [
     #"ipywidgets",
     #"ipykernel",
     #"notebook",
+    #"rouge_score",
     #"jupyterlab",
     #"auto-gptq",
     #"llmcompressor",
