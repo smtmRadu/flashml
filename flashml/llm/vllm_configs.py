@@ -74,8 +74,25 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
 }
 
 
+
+QWEN3_5_0_8B_VLLM_CONFIG = {
+    "model": "Qwen/Qwen3.5-0.6B-GPTQ-Int4",
+    "max_model_len": 16384,
+    "max_completion_tokens": 8192,
+    
+    "gpu-memory-utilization": 0.8,
+    "tensor-parallel-size": 1,
+    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    
+    "top_p": 0.95,
+    "top_k": 20,
+    "reasoning-parser": "qwen3",
+    "language-model-only": "",
+    "enable-prefix-caching": ""
+}
+
 QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
-    "model": "Qwen/Qwen3.5-122B-A10B",
+    "model": "Qwen/Qwen3.5-122B-A10B-GPTQ-Int4",
     "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
@@ -91,7 +108,7 @@ QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
 }
 
 QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
-    "model": "QuantTrio/Qwen3.5-35B-A3B-AWQ",
+    "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
     "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     
@@ -107,7 +124,7 @@ QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG = {
 }
 
 QWEN3_5_27B_TEXT_THINKING_VLLM_CONFIG = {
-    "model": "Qwen/Qwen3.5-27B-FP8",
+    "model": "Qwen/Qwen3.5-27B-GPTQ-Int4",
     "max_model_len": 81_920,
     "max_completion_tokens": 61_440,
     "gpu-memory-utilization": 0.9,
@@ -119,6 +136,23 @@ QWEN3_5_27B_TEXT_THINKING_VLLM_CONFIG = {
     "reasoning-parser": "qwen3",
     "language-model-only": "",
     "enable-prefix-caching": ""
+}
+
+
+
+
+
+
+
+GEMMA3_270M_IT_VLLM_CONFIG = {
+    "model": "google/gemma3-4b-it",
+    "max_model_len": 32768,
+    "max_completion_tokens": 16384,
+    "temperature": 0.9,
+    "top_p": 0.95,
+    "top_k": 80,
+    "tensor-parallel-size": 1,
+    "gpu-memory-utilization": 0.85,
 }
 
 GEMMA3_4B_IT_VLLM_CONFIG = {

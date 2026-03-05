@@ -1,7 +1,6 @@
 from .plot_chat import plot_chat
 from .openai_api_batch_builder import OpenAIBatchRequest, OpenAISyncRequest
 from .vllm_compute_logprobs import vllm_compute_logprobs
-from .vllm_engine import vllm_close
 from .vllm_chat_openai_entrypoint import vllm_chat_openai_entrypoint
 
 from .llm_merging import merge_model
@@ -24,11 +23,16 @@ from .vllm_configs import (
     QWEN3_VL_4B_THINKING_AWQ_VLLM_CONFIG,
     QWEN3_VL_8B_THINKING_VLLM_CONFIG,
     QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG,
+    
+    QWEN3_5_0_8B_VLLM_CONFIG,
     QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG,
     QWEN3_5_27B_TEXT_THINKING_VLLM_CONFIG,
     QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG,
+    
+    GEMMA3_270M_IT_VLLM_CONFIG,
     GEMMA3_4B_IT_VLLM_CONFIG,
     GEMMA3_27B_IT_VLLM_CONFIG,
+    
     MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG,
     
     GPT_OSS_20B_LOW_VLLM_CONFIG, 
@@ -47,13 +51,21 @@ __all__ = [
     "QWEN3_VL_4B_THINKING_AWQ_VLLM_CONFIG",
     "QWEN3_VL_8B_THINKING_VLLM_CONFIG",
     "QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG",
+    
+    "QWEN3_5_0_8B_VLLM_CONFIG",
     "QWEN3_5_35B_A3B_TEXT_THINKING_VLLM_CONFIG",
     "QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG",
     "QWEN3_5_27B_TEXT_THINKING_VLLM_CONFIG",
-    "MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG",
     
+    
+    
+    "GEMMA3_270M_IT_VLLM_CONFIG",
     "GEMMA3_4B_IT_VLLM_CONFIG",
     "GEMMA3_27B_IT_VLLM_CONFIG",
+    
+    
+    "MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG",
+    
     
     "OpenAIBatchRequest",
     "OpenAISyncRequest",
@@ -71,6 +83,5 @@ __all__ = [
     
     "vllm_chat_openai_entrypoint",
     "plot_chat",
-    "vllm_close",
     "vllm_compute_logprobs",
 ]
