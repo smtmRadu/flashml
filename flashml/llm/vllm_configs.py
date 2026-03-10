@@ -237,10 +237,13 @@ MINISTRAL_3_3B_INSTRUCT_2512_FINETUNED_VLLM_CONFIG = {
     "top_p": 0.95,
     "top_k": 128,
     #"quantization" : "bitsandbytes", #in practice not ok to quantize at runtime.. but because i didn't manage to quantize it keep it like this.
+    "tensor-parallel-size": 1,
+    "quantization": "bitsandbytes",
     "gpu-memory-utilization": 0.85,
     "tokenizer-mode": "mistral",
     "config_format": "auto",
     "load_format": "safetensors",
+    "limit_mm_per_prompt.image": 0,
 }
 
 MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {

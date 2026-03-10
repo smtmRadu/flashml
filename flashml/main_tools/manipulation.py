@@ -164,6 +164,7 @@ def shuffle_df(df):
     """
     Shuffles dataframe elements (or element-wise shuffling of multiple dataframes of similar length).
     The seed is sampled from random class. (so it remains static if you set random.seed())
+    NOT in place operation!
     Args:
         df: DataFrame (Polars or Pandas) or list of DataFrames
     Returns:

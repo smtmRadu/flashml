@@ -8,7 +8,7 @@ BLUE = '\033[34m'
 RED = "\033[31m"
 
 
-def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
+def quantize_model(model_path, device_map="auto", quantization:Literal["bnb_4bit"]="bnb_4bit"):
     """
     Loads an fp16 model that was previously merged and quantizes it.
     """
@@ -25,7 +25,7 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
         if config_data["model_type"].lower() == "mistral3":
 # 
             print(f"{BLUE}[INFO] {RED}Mistral model detected.")
-            _quantize_mistral_model(model_path, quantization)
+            _quantize_mistral_model(model_path, device_map, quantization)
             return
             
     
@@ -43,7 +43,7 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16
             ),
-            device_map="auto",
+            device_map=device_map,
             dtype=None,
             offload_folder="./offload_flashml",
             trust_remote_code=True, 
@@ -59,7 +59,7 @@ def quantize_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
     print("✅ Quantization complete!")
     
     
-def _quantize_mistral_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4bit"):
+def _quantize_mistral_model(model_path, device_map, quantization:Literal["bnb_4bit"]="bnb_4bit"):
     
     """
     Loads an fp16 model that was previously merged and quantizes it.
@@ -85,7 +85,7 @@ def _quantize_mistral_model(model_path, quantization:Literal["bnb_4bit"]="bnb_4b
         
         model = Mistral3ForConditionalGeneration.from_pretrained(
             model_path,
-            device_map="auto",
+            device_map=device_map,
             offload_folder="./offload_flashml",
             quantization_config=bnb_config,
             trust_remote_code=True,

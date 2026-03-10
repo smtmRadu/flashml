@@ -1,5 +1,396 @@
 from typing import Literal, Union, Collection
 
+
+def _detect_plot_renderer() -> Literal["notebook", "console"]:
+    try:
+        from IPython import get_ipython
+    except Exception:
+        return "console"
+
+    shell = get_ipython()
+    if shell is None:
+        return "console"
+
+    shell_name = shell.__class__.__name__
+    if shell_name != "ZMQInteractiveShell":
+        return "console"
+
+    try:
+        import ipykernel  # noqa: F401
+    except Exception:
+        return "console"
+
+    return "notebook"
+
+
+def _plot_dist_console(
+    labels: Collection[str],
+    values: Collection[float | int],
+    percentages: Collection[float],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    bar_color: str = "skyblue",
+    size: Literal["small", "big"] = "big",
+):
+    import numbers
+    import os
+    import re
+    import shutil
+    import sys
+    import textwrap
+
+    labels = [str(label) for label in labels]
+    values = list(values)
+    percentages = list(percentages)
+
+    def format_number(value):
+        if isinstance(value, bool):
+            return str(int(value))
+        if isinstance(value, numbers.Integral):
+            return str(int(value))
+        if isinstance(value, numbers.Real):
+            numeric_value = float(value)
+            if numeric_value.is_integer():
+                return str(int(numeric_value))
+            return f"{numeric_value:.2f}"
+        return str(value)
+
+    def wrap_label(label: str, width: int, max_lines: int = 3):
+        wrapped = textwrap.wrap(label, width=width) or [label]
+        if len(wrapped) <= max_lines:
+            return wrapped
+
+        head = wrapped[: max_lines - 1]
+        remainder = "".join(wrapped[max_lines - 1 :])
+        tail = remainder[: max(1, width - 3)] + "..."
+        return [*head, tail]
+
+    def ansi_color_prefix(color_name: str):
+        if os.getenv("NO_COLOR") or not sys.stdout.isatty():
+            return ""
+
+        if isinstance(color_name, str) and len(color_name) == 7 and color_name.startswith("#"):
+            try:
+                red = int(color_name[1:3], 16)
+                green = int(color_name[3:5], 16)
+                blue = int(color_name[5:7], 16)
+                return f"\033[38;2;{red};{green};{blue}m"
+            except ValueError:
+                return ""
+
+        color_lookup = {
+            "black": "\033[30m",
+            "red": "\033[31m",
+            "green": "\033[32m",
+            "yellow": "\033[33m",
+            "blue": "\033[34m",
+            "magenta": "\033[35m",
+            "cyan": "\033[36m",
+            "white": "\033[37m",
+            "gray": "\033[90m",
+            "grey": "\033[90m",
+            "orange": "\033[38;5;214m",
+            "pink": "\033[38;5;212m",
+            "purple": "\033[38;5;141m",
+            "skyblue": "\033[38;5;117m",
+        }
+        return color_lookup.get(str(color_name).lower(), "")
+
+    def colorize_with(text: str, color_name: str):
+        prefix = ansi_color_prefix(color_name)
+        if not prefix or not text:
+            return text
+        return f"{prefix}{text}\033[0m"
+
+    def colorize(text: str):
+        return colorize_with(text, bar_color)
+
+    def marginize(text: str):
+        return colorize_with(text, "gray")
+
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+
+    def visible_len(text: str):
+        return len(ansi_pattern.sub("", text))
+
+    def visible_pad(text: str, width: int, align: Literal["left", "center", "right"] = "left"):
+        padding = max(0, width - visible_len(text))
+        if align == "center":
+            left_padding = padding // 2
+            right_padding = padding - left_padding
+            return (" " * left_padding) + text + (" " * right_padding)
+        if align == "right":
+            return (" " * padding) + text
+        return text + (" " * padding)
+
+    def add_total_to_title_text(text: str, total):
+        total_text = f"total={format_number(total)}"
+        if "total=" in text:
+            return text
+        last_open = text.rfind("(")
+        if last_open != -1 and text.endswith(")"):
+            inner = text[last_open + 1 : -1].strip()
+            separator = ", " if inner else ""
+            return f"{text[:last_open + 1]}{inner}{separator}{total_text})"
+        return f"{text} ({total_text})"
+
+    def split_title_metadata(text: str):
+        stripped = text.strip()
+        last_open = stripped.rfind("(")
+        if last_open == -1 or not stripped.endswith(")"):
+            return stripped, []
+
+        title_text = stripped[:last_open].rstrip()
+        metadata_text = stripped[last_open + 1 : -1].strip()
+        metadata_parts = [part.strip() for part in metadata_text.split(",") if part.strip()]
+        return title_text or stripped, metadata_parts
+
+    def render_metadata_lines(parts: list[str], width: int):
+        if not parts:
+            return []
+
+        palette = ["skyblue", "yellow", "green", "magenta", "cyan", "orange", "pink", "purple"]
+        token_groups: list[list[str]] = []
+        current_group: list[str] = []
+        current_len = 1  # opening parenthesis on the first line
+        tokens = [f"{part}," if index < len(parts) - 1 else part for index, part in enumerate(parts)]
+
+        for index, token in enumerate(tokens):
+            extra_space = 1 if current_group else 0
+            closing_paren = 1 if index == len(tokens) - 1 else 0
+            proposed_len = current_len + extra_space + len(token) + closing_paren
+            if current_group and proposed_len > width:
+                token_groups.append(current_group)
+                current_group = [token]
+                current_len = len(token)
+            else:
+                current_group.append(token)
+                current_len += extra_space + len(token)
+
+        if current_group:
+            token_groups.append(current_group)
+
+        rendered_lines = []
+        color_index = 0
+        for line_index, group in enumerate(token_groups):
+            rendered_line = marginize("(") if line_index == 0 else ""
+            for token_index, token in enumerate(group):
+                if token_index > 0:
+                    rendered_line += " "
+                token_has_comma = token.endswith(",")
+                part_text = token[:-1] if token_has_comma else token
+                rendered_line += colorize_with(part_text, palette[color_index % len(palette)])
+                if token_has_comma:
+                    rendered_line += marginize(",")
+                color_index += 1
+            if line_index == len(token_groups) - 1:
+                rendered_line += marginize(")")
+            rendered_lines.append(rendered_line)
+
+        return rendered_lines
+
+    filled_bar_char = "▓"
+    partial_bar_char = "▓" # keep same as filled
+    empty_bar_char = "░"
+    frame_vertical_char = "│"
+    frame_horizontal_char = "─"
+    frame_top_left_char = "╭"
+    frame_top_right_char = "╮"
+    frame_middle_left_char = "├"
+    frame_middle_right_char = "┤"
+    frame_bottom_left_char = "╰"
+    frame_bottom_right_char = "╯"
+    frame_top_join_char = "┬"
+    frame_bottom_join_char = "┴"
+    frame_cross_char = "┼"
+    column_separator = marginize("│")
+
+    def build_positive_track(length: int, width: int, has_value: bool):
+        if length > 0:
+            return colorize(filled_bar_char * length) + (empty_bar_char * (width - length))
+        if has_value and width > 0:
+            return colorize(partial_bar_char) + (empty_bar_char * (width - 1))
+        return empty_bar_char * width
+
+    def build_negative_track(length: int, width: int, has_value: bool):
+        if length > 0:
+            return (empty_bar_char * (width - length)) + colorize(filled_bar_char * length)
+        if has_value and width > 0:
+            return (empty_bar_char * (width - 1)) + colorize(partial_bar_char)
+        return empty_bar_char * width
+
+    default_width = 110 if size == "big" else 88
+    min_width = 70 if size == "big" else 58
+    terminal_width = shutil.get_terminal_size((default_width, 24)).columns
+    total_width = max(min_width, min(terminal_width, default_width))
+    left_margin_plain = f"{frame_vertical_char}  "
+    right_margin_plain = f"  {frame_vertical_char}"
+    canvas_width = max(24, total_width - len(left_margin_plain) - len(right_margin_plain))
+    left_margin = marginize(left_margin_plain)
+    right_margin = marginize(right_margin_plain)
+    border_left = marginize(frame_vertical_char)
+    border_right = marginize(frame_vertical_char)
+
+    def frame_line(text: str = "", align: Literal["left", "center"] = "left"):
+        return f"{left_margin}{visible_pad(text, canvas_width, align=align)}{right_margin}"
+
+    def frame_rule_line(
+        kind: Literal["top", "middle", "bottom"],
+        connector_positions: Collection[int] | None = None,
+    ):
+        rule_width = max(1, total_width - 2)
+        if kind == "top":
+            left_char = frame_top_left_char
+            right_char = frame_top_right_char
+            join_char = frame_top_join_char
+        elif kind == "bottom":
+            left_char = frame_bottom_left_char
+            right_char = frame_bottom_right_char
+            join_char = frame_bottom_join_char
+        else:
+            left_char = frame_middle_left_char
+            right_char = frame_middle_right_char
+            join_char = frame_top_join_char
+
+        rule_chars = [frame_horizontal_char] * rule_width
+        for position in connector_positions or []:
+            if 0 <= position < rule_width:
+                rule_chars[position] = join_char
+
+        return (
+            f"{marginize(left_char)}"
+            f"{marginize(''.join(rule_chars))}"
+            f"{marginize(right_char)}"
+        )
+
+    def get_rule_connector_positions():
+        left_inner_padding = len(left_margin_plain) - 1
+        positions: list[int] = []
+
+        if stacked_labels:
+            bar_start = left_inner_padding + 2
+            value_separator = bar_start + bar_width + 1
+            positions.append(value_separator)
+            count_percent_separator = value_separator + 2 + count_width + 1
+            positions.append(count_percent_separator)
+            if has_negative_values:
+                left_width = max(4, (bar_width - 1) // 2)
+                positions.append(bar_start + left_width)
+            return positions
+
+        first_separator = left_inner_padding + label_width + 1
+        bar_start = first_separator + 2
+        second_separator = bar_start + bar_width + 1
+        positions.extend([first_separator, second_separator])
+        count_percent_separator = second_separator + 2 + count_width + 1
+        positions.append(count_percent_separator)
+        if has_negative_values:
+            left_width = max(4, (bar_width - 1) // 2)
+            positions.append(bar_start + left_width)
+        return positions
+
+    longest_label = max((len(label) for label in labels), default=0)
+    label_width_cap = 30 if size == "big" else 22
+    label_width = max(8, min(longest_label, label_width_cap))
+    count_texts = [format_number(value) for value in values]
+    percent_texts = [f"{percentage:4.1f}%" for percentage in percentages]
+    count_width = max((len(text) for text in count_texts), default=1)
+    percent_width = max((len(text) for text in percent_texts), default=4)
+    value_plain_texts = [
+        f"{count_text:>{count_width}} {frame_vertical_char} {percent_text:>{percent_width}}"
+        for count_text, percent_text in zip(count_texts, percent_texts)
+    ]
+    value_width = max((len(text) for text in value_plain_texts), default=12)
+
+    def format_value_text(count_text: str, percent_text: str):
+        count_field = visible_pad(count_text, count_width, align="right")
+        percent_field = colorize(visible_pad(percent_text, percent_width, align="right"))
+        return f"{count_field} {column_separator} {percent_field}"
+
+    stacked_labels = longest_label > label_width_cap or len(labels) > (12 if size == "big" else 9)
+
+    if stacked_labels:
+        bar_width = max(
+            16 if size == "big" else 12,
+            min(56 if size == "big" else 34, canvas_width - value_width - 6),
+        )
+    else:
+        bar_width = max(
+            16 if size == "big" else 12,
+            min(
+                56 if size == "big" else 34,
+                canvas_width - label_width - value_width - 6,
+            ),
+        )
+
+    max_positive = max((max(float(value), 0.0) for value in values), default=0.0)
+    min_negative = min((min(float(value), 0.0) for value in values), default=0.0)
+    has_negative_values = min_negative < 0
+    total_value = sum(values)
+    title = add_total_to_title_text(title, total_value)
+    title_text, metadata_parts = split_title_metadata(title)
+
+    rule_connector_positions = get_rule_connector_positions()
+
+    lines = [frame_rule_line("top")]
+    for title_line in textwrap.wrap(title_text, width=canvas_width) or [title_text]:
+        lines.append(frame_line(title_line, align="center"))
+    for metadata_line in render_metadata_lines(metadata_parts, canvas_width):
+        lines.append(frame_line(metadata_line, align="center"))
+    lines.append(frame_rule_line("middle", connector_positions=rule_connector_positions))
+
+    for label, value, count_text, percent_text in zip(labels, values, count_texts, percent_texts):
+        numeric_value = float(value)
+        value_text = format_value_text(count_text, percent_text)
+        if has_negative_values:
+            max_abs = max(abs(min_negative), abs(max_positive), 1.0)
+            left_width = max(4, (bar_width - 1) // 2)
+            right_width = max(4, bar_width - left_width - 1)
+            negative_value = abs(min(numeric_value, 0.0))
+            positive_value = max(numeric_value, 0.0)
+            negative_length = int(round((negative_value / max_abs) * left_width))
+            positive_length = int(round((positive_value / max_abs) * right_width))
+            negative_track = build_negative_track(
+                negative_length,
+                left_width,
+                has_value=negative_value > 0,
+            )
+            positive_track = build_positive_track(
+                positive_length,
+                right_width,
+                has_value=positive_value > 0,
+            )
+            bar_track = f"{negative_track}{marginize(frame_vertical_char)}{positive_track}"
+        else:
+            scale_base = max(max_positive, 1.0)
+            bar_length = int(round((max(numeric_value, 0.0) / scale_base) * bar_width))
+            bar_track = build_positive_track(
+                bar_length,
+                bar_width,
+                has_value=numeric_value > 0,
+            )
+
+        if stacked_labels:
+            wrapped_label = wrap_label(label, width=min(label_width_cap, canvas_width))
+            lines.extend(frame_line(label_line) for label_line in wrapped_label)
+            lines.append(frame_line(f"  {bar_track} {column_separator} {value_text}"))
+        else:
+            wrapped_label = wrap_label(label, width=label_width, max_lines=2)
+            for extra_label_line in wrapped_label[:-1]:
+                lines.append(frame_line(f"{extra_label_line:<{label_width}} {column_separator}"))
+            lines.append(
+                frame_line(
+                    f"{wrapped_label[-1]:<{label_width}} {column_separator} {bar_track} {column_separator} {value_text}"
+                )
+            )
+
+    lines.append(frame_rule_line("bottom", connector_positions=rule_connector_positions))
+    rendered = "\n".join(lines).rstrip()
+    print(rendered)
+    return None
+
+
 def plot_dist(
     data: Union[dict, Collection[float], Collection[int], Collection[bool], Collection[str]],
     title: str = "Distribution",
@@ -8,18 +399,50 @@ def plot_dist(
     bins: int | None = None,
     xlabel: str = "Item",
     ylabel: str = "Frequency",
-    bar_color: str = "skyblue",
+    bar_color: Literal[
+        "skyblue",
+        "deepskyblue",
+        "dodgerblue",
+        "steelblue",
+        "royalblue",
+        "cadetblue",
+        "teal",
+        "turquoise",
+        "mediumturquoise",
+        "seagreen",
+        "mediumseagreen",
+        "limegreen",
+        "olivedrab",
+        "goldenrod",
+        "darkorange",
+        "coral",
+        "tomato",
+        "orangered",
+        "indianred",
+        "crimson",
+        "hotpink",
+        "deeppink",
+        "orchid",
+        "mediumorchid",
+        "mediumpurple",
+        "slateblue",
+        "plum",
+        "lavender",
+    ] | str = "skyblue",
     xlabel_rotation: int | Literal["auto"] = "auto", # degrees
     draw_details: bool = True,
     size: Literal["small", "big"] = "big",
-    renderer='notebook',
 ):
-    import plotly.graph_objects as go
-    import plotly.io as pio
     import numpy as np
     MAX_XTICKS: int = 100
     GRID_COLOR = 'rgba(150, 150, 150, 0.3)'
-    pio.templates.default = "plotly_dark"
+    renderer = _detect_plot_renderer()
+
+    if renderer == "notebook":
+        import plotly.graph_objects as go
+        import plotly.io as pio
+
+        pio.templates.default = "plotly_dark"
     
     scale = 1.0 if size == "big" else 0.66
     title_font_size = 18 if size == "big" else 12
@@ -303,6 +726,19 @@ def plot_dist(
             else:
                 colors.append(bar_color)
                 display_values.append(v)
+        title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}, median={dict_median:.2f}" if dict_mean is not None else ""
+        plot_title = f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''}{title_suffix})"
+        if renderer == "console":
+            return _plot_dist_console(
+                labels=str_keys,
+                values=display_values,
+                percentages=percentages,
+                title=plot_title,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                bar_color=bar_color,
+                size=size,
+            )
         fig = go.Figure(
             data=go.Bar(
                 x=str_keys,
@@ -323,10 +759,9 @@ def plot_dist(
         num_items = len(str_keys)
         width = int(max(1100, min(1200, num_items * 40)) * scale)
         height = int(max(500, min(800, 300 + num_items * 5)) * scale)
-        
-        title_suffix = f", mean={dict_mean:.2f}, std={dict_std:.2f}, median={dict_median:.2f}" if dict_mean is not None else ""
+
         fig.update_layout(
-            title=f"{title} ({len(freq_dict)} elements{f', displayed {top_n}' if top_n else ''}{f', sorted {sort}' if sort else ''}{title_suffix})",
+            title=plot_title,
             title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
@@ -380,6 +815,18 @@ def plot_dist(
         total = none_count
         percentages = [100.0]
         customdata = np.array(percentages).reshape(-1, 1)
+        plot_title = f"{title} ({len(data_list)} elements, 1 unique)"
+        if renderer == "console":
+            return _plot_dist_console(
+                labels=keys,
+                values=values,
+                percentages=percentages,
+                title=plot_title,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                bar_color="gray",
+                size=size,
+            )
         fig = go.Figure(
             data=go.Bar(
                 x=keys,
@@ -397,7 +844,7 @@ def plot_dist(
             )
         )
         fig.update_layout(
-            title=f"{title} ({len(data_list)} elements, 1 unique)",
+            title=plot_title,
             title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
@@ -456,6 +903,20 @@ def plot_dist(
         percentages = [v / total * 100 if total > 0 else 0 for v in values]
         customdata = np.array(percentages).reshape(-1, 1)
         colors = ["gray" if k == "None" else bar_color for k in keys]
+        unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
+        title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
+        plot_title = f"{title} ({len(data_list)} elements, {unique_count} unique{title_suffix})"
+        if renderer == "console":
+            return _plot_dist_console(
+                labels=keys,
+                values=values,
+                percentages=percentages,
+                title=plot_title,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                bar_color=bar_color,
+                size=size,
+            )
         fig = go.Figure(
             data=go.Bar(
                 x=keys,
@@ -476,11 +937,9 @@ def plot_dist(
         num_items = len(keys)
         width = int(max(1100, min(1200, num_items * 40)) * scale)
         height = int(max(500, min(800, 300 + num_items * 5)) * scale)
-        unique_count = len(unique_vals) + (1 if none_count > 0 else 0)
-        
-        title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
+
         fig.update_layout(
-            title=f"{title} ({len(data_list)} elements, {unique_count} unique{title_suffix})",
+            title=plot_title,
             title_font_size=title_font_size,  # ADD THIS LINE
             xaxis_title=xlabel,
             yaxis_title=ylabel,
@@ -533,6 +992,19 @@ def plot_dist(
             colors.append("gray")
         else:
             colors.append(bar_color)
+    title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
+    plot_title = f"{title} ({len(data_list)} elements{title_suffix})"
+    if renderer == "console":
+        return _plot_dist_console(
+            labels=x_labels,
+            values=values,
+            percentages=percentages,
+            title=plot_title,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            bar_color=bar_color,
+            size=size,
+        )
     fig = go.Figure(
         data=go.Bar(
             x=x_labels,
@@ -557,10 +1029,9 @@ def plot_dist(
         xlabel_rotation = min(len(x_labels) * 2, 90)
         if xlabel_rotation <= 10:
             xlabel_rotation = 0
-    
-    title_suffix = f", mean={mean_val:.2f}, std={std_val:.2f}, median={median_val:.2f}" if mean_val is not None else ""
+
     fig.update_layout(
-        title=f"{title} ({len(data_list)} elements{title_suffix})",
+        title=plot_title,
         title_font_size=title_font_size,  # ADD THIS LINE
         xaxis_title=xlabel,
         yaxis_title=ylabel,

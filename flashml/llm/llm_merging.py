@@ -8,7 +8,7 @@ BLUE = '\033[34m'
 RED = "\033[31m"
 
 
-def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
+def merge_model(adapter_path:str, device_map="auto", save_method:Literal["fp16"] = "fp16"):
     """
     Merge the adapter to the base model using this function and save it to fp16.
     Unified for unsloth and non-unsloth models.
@@ -27,7 +27,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
     base_model_path_or_path = adapter_config.get("base_model_name_or_path")
     if base_model_path_or_path.startswith("unsloth"):
         print(f"{BLUE}[INFO] {GREEN}🦥 Unsloth model detected.{RESET} Using unsloth merging method (in {save_method})...{RESET}")
-        _merge_unsloth_model(adapter_path, save_method)
+        _merge_unsloth_model(adapter_path, device_map, save_method)
         return 
         #raise ValueError("This is an unsloth model. Please use the `merge_unsloth_model` function to merge in unsloth.")
     ## Just a little warning
@@ -49,7 +49,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
 
     model = AutoModelForCausalLM.from_pretrained(
         base_model_path_or_path,
-        device_map="auto",
+        device_map=device_map,
         torch_dtype=torch.bfloat16,
         offload_folder="./offload_flashml",
         trust_remote_code=True
@@ -77,7 +77,7 @@ def merge_model(adapter_path:str, save_method:Literal["fp16"] = "fp16"):
         shutil.rmtree("./offload_flashml")
 
     
-def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] = "fp16"):
+def _merge_unsloth_model(adapter_path: str, device_map="auto", save_method:Literal["fp16", "gguf"] = "fp16"):
     """
     When training with unsloth, merge the adapter to the base model using this function and save it to fp16.
     You can quantize it afterwards and save it in 4bit (or quantize it at runtime).
@@ -98,8 +98,7 @@ def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] 
     ## Just a little warning
     if "gemma" in base_model_path_or_path.lower() and not os.path.exists(adapter_path + "/preprocessor_config.json"):
         raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download it from https://huggingface.co/google/gemma-3-4b-it/tree/main and add it manually to the adapter.")
-    if "ministral" in base_model_path_or_path.lower():
-        print("Remember to add .json files to the merge of ministral 3b model!!!")
+    
         
         
     was_4bit_training = "4bit" in base_model_path_or_path   
@@ -108,7 +107,7 @@ def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] 
     model, tokenizer = FastModel.from_pretrained(
         model_name =  adapter_path, 
         max_seq_length = 2048, 
-        device_map="auto",
+        device_map=device_map,
         offload_folder="./offload_flashml",
         # local_files_only = True,  # Force local cache usage
         dtype = None,          
@@ -146,4 +145,8 @@ def _merge_unsloth_model(adapter_path: str, save_method:Literal["fp16", "gguf"] 
     # save_method = "lora" saves only the adapter
     
     
-    print("✅ Merge complete!")
+    
+    if "ministral" in base_model_path_or_path.lower():
+        print("✅ Merge complete! Remember to add .json files to the merge of ministral 3b model!!!")
+    else:
+        print("✅ Merge complete!")

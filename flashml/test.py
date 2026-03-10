@@ -401,6 +401,86 @@ def test_plot_func():
     plot_dist(x7)       
     plot_dist(x8)      
 
+
+def test_plot_dist_signature_hides_renderer():
+    from inspect import signature
+    from flashml import plot_dist
+
+    assert "renderer" not in signature(plot_dist).parameters
+
+
+def test_plot_dist_auto_console_returns_and_prints_categorical_chart(capsys):
+    from flashml import plot_dist
+
+    rendered = plot_dist(
+        ["apple", "apple", "pear", None],
+        title="Fruit mix",
+        xlabel="Fruit",
+        ylabel="Count",
+    )
+
+    captured = capsys.readouterr()
+    output = captured.out.rstrip("\n")
+    lines = output.splitlines()
+
+    assert rendered is None
+    assert output
+    assert "Fruit mix (4 elements, 3 unique, total=4)" in output
+    assert "apple" in output
+    assert "pear" in output
+    assert "None" in output
+    assert output.count("total=") == 1
+    assert all(line.startswith("║") and line.endswith("║") for line in lines)
+    assert len({len(line) for line in lines}) == 1
+    assert "Console mode summary" not in output
+    assert "Compared to Plotly" not in output
+
+
+def test_plot_dist_auto_console_returns_and_prints_histogram_chart(capsys):
+    from flashml import plot_dist
+
+    rendered = plot_dist(
+        [0.1, 0.2, 0.4, 0.9, None],
+        title="Scores",
+        bins=2,
+    )
+
+    captured = capsys.readouterr()
+    output = captured.out.rstrip("\n")
+    lines = output.splitlines()
+
+    assert rendered is None
+    assert output
+    assert "Scores (5 elements" in output
+    assert "total=5" in output
+    assert "None" in output
+    assert "[" in output
+    assert "%" in output
+    assert output.count("total=") == 1
+    assert all(line.startswith("║") and line.endswith("║") for line in lines)
+    assert len({len(line) for line in lines}) == 1
+    assert "Console mode summary" not in output
+    assert "Compared to Plotly" not in output
+
+
+def test_plot_dist_notebook_route_uses_plotly_show():
+    from unittest.mock import patch
+    from flashml import plot_dist
+    import flashml.main_tools.plot_distribution as plot_distribution_module
+
+    show_calls = []
+
+    def fake_show(self, renderer=None):
+        show_calls.append(renderer)
+
+    with patch.object(plot_distribution_module, "_detect_plot_renderer", return_value="notebook"):
+        with patch("plotly.graph_objects.Figure.show", fake_show):
+            rendered = plot_dist(["apple", "apple", "pear"], title="Fruit mix")
+
+    assert rendered is None
+    assert len(show_calls) == 1
+    assert show_calls[0] == "notebook"
+
 def heavy_prime_check(sample):
     """
     Check if numbers are prime - computationally expensive.
@@ -452,5 +532,12 @@ def print_mlflow_logging():
             log_checkpoint(state_dict={"no": "name"})
 
 if __name__ == "__main__":
-    print_mlflow_logging()
-    # test_plot_func()
+    from flashml import plot_dist
+
+    print("Console plot_dist demo:\n")
+    plot_dist(
+        ["apple", "apple", "pear", "melon", None, "apple", "pear"],
+        title="Fruit mix demo",
+        xlabel="Fruit",
+        ylabel="Count",
+    )
