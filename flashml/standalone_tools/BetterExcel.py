@@ -15,9 +15,13 @@ import socket
 import threading
 import html
 import getpass
+import hashlib
+import os
+import shutil
 import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
+from urllib.parse import parse_qs, urlparse
 try:
     from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Font, PatternFill, Color
@@ -44,11 +48,25 @@ except Exception:
     OPENPYXL_RICH_TEXT_AVAILABLE = False
     COLOR_INDEX = []
     OPENPYXL_AVAILABLE = False
+try:
+    from google.auth.transport.requests import Request as GoogleAuthRequest
+    from google.oauth2.credentials import Credentials as GoogleOAuthCredentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build as google_build
+    from googleapiclient.errors import HttpError as GoogleHttpError
+    GOOGLE_SHEETS_AVAILABLE = True
+except Exception:
+    GoogleAuthRequest = None
+    GoogleOAuthCredentials = None
+    InstalledAppFlow = None
+    google_build = None
+    GoogleHttpError = Exception
+    GOOGLE_SHEETS_AVAILABLE = False
 
-APP_NAME = "Better Excel v1.9"
+APP_NAME = "Better Excel v2.0 beta2"
 WINDOWS_APP_ID = "flashml.BetterExcel"
 COMPACT_WINDOW_WIDTH = 470
-COMPACT_WINDOW_HEIGHT = 320
+COMPACT_WINDOW_HEIGHT = 430
 TABLE_LINE_HEIGHT_PERCENT = 112
 TABLE_VERTICAL_TEXT_PADDING = 10
 COLUMN_STATS_HEADER_TOP_HEIGHT = 30
@@ -58,13 +76,28 @@ QA_TEXT_BG_COLOR = QtGui.QColor(255, 235, 90)
 QA_TEXT_FG_COLOR = QtGui.QColor(200, 0, 0)
 QA_METADATA_SHEET_NAME = "__betterexcel_qa_spans__"
 EDIT_METADATA_SHEET_NAME = "__betterexcel_edit_meta__"
+CELL_STYLES_METADATA_SHEET_NAME = "__betterexcel_cell_styles__"
+PRESENCE_METADATA_SHEET_NAME = "__betterexcel_presence__"
 DEFAULT_DISPLAY_FONT_FAMILY = "Inter"
 DEFAULT_DISPLAY_FONT_SIZE = 10
 COLLAB_LINK_SCHEME = "betterexcel"
 COLLAB_PROTOCOL_VERSION = 1
 COLLAB_BROADCAST_DEBOUNCE_MS = 120
 COLLAB_SOCKET_TIMEOUT_SECONDS = 1.0
-DROP_HINT_TEXT = "Drop a CSV / XLS / XLSX / JSONL file here\n(open file if WSL)"
+GOOGLE_SHEETS_SOURCE_FORMAT = ".gsheet"
+GOOGLE_SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+GOOGLE_SHEETS_SYNC_DEBOUNCE_MS = 900
+GOOGLE_SHEETS_POLL_INTERVAL_MS = 1500
+GOOGLE_SHEETS_PRESENCE_DEBOUNCE_MS = 250
+GOOGLE_SHEETS_PRESENCE_HEARTBEAT_MS = 20000
+GOOGLE_SHEETS_PRESENCE_TTL_SECONDS = 35
+GOOGLE_SHEETS_BATCH_UPDATE_CHUNK_SIZE = 200
+GOOGLE_SHEETS_MAX_RETRIES = 4
+GOOGLE_SHEETS_MAX_BACKOFF_SECONDS = 6.0
+GOOGLE_SHEETS_SETUP_GUIDE_URL = "https://developers.google.com/workspace/sheets/api/quickstart/python"
+GOOGLE_SHEETS_CLIENTS_URL = "https://console.cloud.google.com/auth/clients"
+GOOGLE_SHEETS_BRANDING_URL = "https://console.cloud.google.com/auth/branding"
+DROP_HINT_TEXT = "Drop a CSV / XLS / XLSX / JSONL file here\n(open file if WSL)\nor connect below"
 SUMMARIZE_SYSTEM_PROMPT = """You are an expert QA assistant for spreadsheet reviews.
 You will receive a list of highlighted errors (within ** ** for big errors and within * * for small errors), eventually with some feedback on them.
 
@@ -99,6 +132,1147 @@ def _guess_local_ipv4() -> str:
 
 def _build_collab_link(host: str, port: int, token: str) -> str:
     return f"{COLLAB_LINK_SCHEME}://{host}:{port}/{token}"
+
+
+def _betterexcel_user_data_dir() -> Path:
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "BetterExcel"
+    return Path.home() / ".betterexcel"
+
+
+def _google_sheets_cache_dir() -> Path:
+    return _betterexcel_user_data_dir() / "google_sheets"
+
+
+def _google_sheets_credentials_path() -> Path:
+    return _google_sheets_cache_dir() / "credentials.json"
+
+
+def _google_sheets_token_path() -> Path:
+    return _google_sheets_cache_dir() / "token.json"
+
+
+def _ensure_google_sheets_cache_dir() -> Path:
+    cache_dir = _google_sheets_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _google_sheets_dependencies_error() -> str:
+    return (
+        "Google Sheets support needs these packages: "
+        "google-api-python-client, google-auth-httplib2, google-auth-oauthlib"
+    )
+
+
+def _google_sheets_client_configured() -> bool:
+    return _google_sheets_credentials_path().is_file()
+
+
+def _google_sheets_token_cached() -> bool:
+    return _google_sheets_token_path().is_file()
+
+
+def _google_sheets_status_text() -> str:
+    if not GOOGLE_SHEETS_AVAILABLE:
+        return "Google API packages are not installed."
+    if not _google_sheets_client_configured():
+        return "OAuth client file not imported yet."
+    if _google_sheets_token_cached():
+        return "OAuth ready. Cached login found."
+    return "OAuth client ready. Authorize once to cache login."
+
+
+def _import_google_sheets_client_secret(source_path: Path):
+    if not GOOGLE_SHEETS_AVAILABLE:
+        raise RuntimeError(_google_sheets_dependencies_error())
+    source = Path(source_path)
+    if not source.is_file():
+        raise FileNotFoundError(f"OAuth client file not found: {source}")
+
+    with source.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict) or "installed" not in payload:
+        raise ValueError("Use a Desktop OAuth client JSON downloaded from Google Cloud.")
+
+    _ensure_google_sheets_cache_dir()
+    shutil.copy2(source, _google_sheets_credentials_path())
+
+
+def _load_google_sheets_credentials(interactive: bool = False):
+    if not GOOGLE_SHEETS_AVAILABLE:
+        raise RuntimeError(_google_sheets_dependencies_error())
+
+    credentials_path = _google_sheets_credentials_path()
+    token_path = _google_sheets_token_path()
+    if not credentials_path.is_file():
+        raise FileNotFoundError("Import a Google Desktop OAuth JSON file first.")
+
+    creds = None
+    if token_path.is_file():
+        try:
+            creds = GoogleOAuthCredentials.from_authorized_user_file(
+                str(token_path),
+                GOOGLE_SHEETS_SCOPES,
+            )
+        except Exception:
+            creds = None
+
+    if creds and creds.valid:
+        return creds
+
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(GoogleAuthRequest())
+            token_path.write_text(creds.to_json(), encoding="utf-8")
+            return creds
+        except Exception:
+            creds = None
+
+    if not interactive:
+        raise RuntimeError("Google login is required. Click Authorize Google once.")
+
+    flow = InstalledAppFlow.from_client_secrets_file(
+        str(credentials_path),
+        GOOGLE_SHEETS_SCOPES,
+    )
+    creds = flow.run_local_server(
+        port=0,
+        open_browser=True,
+        authorization_prompt_message="",
+        success_message="BetterExcel is now connected. You can close this tab.",
+    )
+    _ensure_google_sheets_cache_dir()
+    token_path.write_text(creds.to_json(), encoding="utf-8")
+    return creds
+
+
+def _build_google_sheets_service(interactive: bool = False):
+    creds = _load_google_sheets_credentials(interactive=interactive)
+    return google_build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+
+def _google_http_status(exc: Exception) -> int:
+    try:
+        response = getattr(exc, "resp", None)
+        if response is not None:
+            return int(getattr(response, "status", 0) or 0)
+    except Exception:
+        pass
+    try:
+        return int(getattr(exc, "status_code", 0) or 0)
+    except Exception:
+        return 0
+
+
+def _google_request_is_retryable(exc: Exception) -> bool:
+    status = _google_http_status(exc)
+    if status in (429, 500, 502, 503, 504):
+        return True
+
+    text = str(exc or "").strip().lower()
+    return any(
+        token in text
+        for token in (
+            "rate limit",
+            "quota",
+            "too many requests",
+            "backend error",
+            "internal error",
+            "service unavailable",
+            "timed out",
+        )
+    )
+
+
+def _execute_google_request(request):
+    last_exc: t.Optional[Exception] = None
+    for attempt in range(max(1, int(GOOGLE_SHEETS_MAX_RETRIES))):
+        try:
+            return request.execute()
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 >= int(GOOGLE_SHEETS_MAX_RETRIES) or not _google_request_is_retryable(exc):
+                raise
+            jitter = float(secrets.randbelow(300)) / 1000.0
+            delay = min(
+                float(GOOGLE_SHEETS_MAX_BACKOFF_SECONDS),
+                (0.6 * (2 ** attempt)) + jitter,
+            )
+            time.sleep(delay)
+    if last_exc is not None:
+        raise last_exc
+    return {}
+
+
+def _build_google_sheet_link(spreadsheet_id: str, sheet_gid: t.Optional[int] = None) -> str:
+    base = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+    if sheet_gid is None:
+        return base
+    return f"{base}#gid={int(sheet_gid)}"
+
+
+def _parse_google_sheet_link(raw: str) -> t.Optional[tuple[str, t.Optional[int], str]]:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+
+    if re.fullmatch(r"[A-Za-z0-9_-]{20,}", text):
+        return text, None, _build_google_sheet_link(text)
+
+    parsed = urlparse(text)
+    host = parsed.netloc.lower().strip()
+    if "docs.google.com" not in host:
+        return None
+
+    match = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]+)", parsed.path or "")
+    if match is None:
+        return None
+    spreadsheet_id = match.group(1)
+
+    gid: t.Optional[int] = None
+    fragment_args = parse_qs(parsed.fragment or "")
+    if "gid" in fragment_args:
+        try:
+            gid = int(fragment_args["gid"][0])
+        except Exception:
+            gid = None
+
+    return spreadsheet_id, gid, _build_google_sheet_link(spreadsheet_id, gid)
+
+
+def _google_sheet_a1_sheet_name(sheet_name: str) -> str:
+    safe = str(sheet_name or "Sheet1").replace("'", "''")
+    return f"'{safe}'"
+
+
+def _google_sheet_max_cols(rows: list[list[t.Any]]) -> int:
+    max_cols = 0
+    for row in rows:
+        if isinstance(row, list) and len(row) > max_cols:
+            max_cols = len(row)
+    return max_cols
+
+
+def _google_sheet_cell_value(rows: list[list[t.Any]], row_idx: int, col_idx: int) -> t.Any:
+    if row_idx < 0 or col_idx < 0 or row_idx >= len(rows):
+        return ""
+    row = rows[row_idx]
+    if not isinstance(row, list) or col_idx >= len(row):
+        return ""
+    safe_value = _json_safe_value(row[col_idx])
+    return "" if safe_value is None else safe_value
+
+
+def _google_sheet_canonicalize_rows(rows: t.Any) -> list[list[t.Any]]:
+    normalized: list[list[t.Any]] = []
+    last_nonempty_row = -1
+    last_nonempty_col = -1
+
+    for raw_row in rows or []:
+        row_values = list(raw_row) if isinstance(raw_row, list) else []
+        normalized_row: list[t.Any] = []
+        row_has_any = False
+        for col_idx, value in enumerate(row_values):
+            safe_value = _json_safe_value(value)
+            normalized_value = "" if safe_value is None else safe_value
+            normalized_row.append(normalized_value)
+            if normalized_value != "":
+                row_has_any = True
+                if col_idx > last_nonempty_col:
+                    last_nonempty_col = col_idx
+        normalized.append(normalized_row)
+        if row_has_any:
+            last_nonempty_row = len(normalized) - 1
+
+    if last_nonempty_row < 0 or last_nonempty_col < 0:
+        return []
+
+    target_cols = last_nonempty_col + 1
+    result: list[list[t.Any]] = []
+    for row_idx in range(last_nonempty_row + 1):
+        row = normalized[row_idx] if row_idx < len(normalized) else []
+        padded = list(row[:target_cols])
+        if len(padded) < target_cols:
+            padded.extend([""] * (target_cols - len(padded)))
+        result.append(padded)
+    return result
+
+
+def _google_sheet_column_label(col_idx: int) -> str:
+    if col_idx < 0:
+        return "A"
+    value = int(col_idx) + 1
+    chars: list[str] = []
+    while value > 0:
+        value, remainder = divmod(value - 1, 26)
+        chars.append(chr(ord("A") + remainder))
+    return "".join(reversed(chars)) or "A"
+
+
+def _google_sheet_a1_row_segment(sheet_name: str, row_idx: int, start_col: int, end_col: int) -> str:
+    sheet_ref = _google_sheet_a1_sheet_name(sheet_name)
+    display_row = int(row_idx) + 1
+    start_label = _google_sheet_column_label(start_col)
+    end_label = _google_sheet_column_label(max(start_col, end_col - 1))
+    if end_col - start_col <= 1:
+        return f"{sheet_ref}!{start_label}{display_row}"
+    return f"{sheet_ref}!{start_label}{display_row}:{end_label}{display_row}"
+
+
+def _google_sheet_build_value_updates(
+    sheet_name: str,
+    source_rows: list[list[t.Any]],
+    target_rows: list[list[t.Any]],
+) -> list[dict[str, t.Any]]:
+    source = _google_sheet_canonicalize_rows(source_rows)
+    target = _google_sheet_canonicalize_rows(target_rows)
+    max_rows = max(len(source), len(target))
+    max_cols = max(_google_sheet_max_cols(source), _google_sheet_max_cols(target))
+    if max_rows <= 0 or max_cols <= 0:
+        return []
+
+    updates: list[dict[str, t.Any]] = []
+    for row_idx in range(max_rows):
+        col_idx = 0
+        while col_idx < max_cols:
+            if _google_sheet_cell_value(source, row_idx, col_idx) == _google_sheet_cell_value(target, row_idx, col_idx):
+                col_idx += 1
+                continue
+
+            start_col = col_idx
+            values: list[t.Any] = []
+            while col_idx < max_cols:
+                source_value = _google_sheet_cell_value(source, row_idx, col_idx)
+                target_value = _google_sheet_cell_value(target, row_idx, col_idx)
+                if source_value == target_value and values:
+                    break
+                if source_value != target_value:
+                    values.append(target_value)
+                elif values:
+                    break
+                col_idx += 1
+
+            updates.append(
+                {
+                    "range": _google_sheet_a1_row_segment(sheet_name, row_idx, start_col, col_idx),
+                    "majorDimension": "ROWS",
+                    "values": [values],
+                }
+            )
+    return updates
+
+
+def _google_sheet_three_way_merge_rows(
+    base_rows: list[list[t.Any]],
+    local_rows: list[list[t.Any]],
+    remote_rows: list[list[t.Any]],
+) -> tuple[list[list[t.Any]], int, int]:
+    base = _google_sheet_canonicalize_rows(base_rows)
+    local = _google_sheet_canonicalize_rows(local_rows)
+    remote = _google_sheet_canonicalize_rows(remote_rows)
+    max_rows = max(len(base), len(local), len(remote))
+    max_cols = max(_google_sheet_max_cols(base), _google_sheet_max_cols(local), _google_sheet_max_cols(remote))
+    if max_rows <= 0 or max_cols <= 0:
+        return [], 0, 0
+
+    merged_rows: list[list[t.Any]] = []
+    remote_applied_count = 0
+    conflict_count = 0
+    for row_idx in range(max_rows):
+        merged_row: list[t.Any] = []
+        for col_idx in range(max_cols):
+            base_value = _google_sheet_cell_value(base, row_idx, col_idx)
+            local_value = _google_sheet_cell_value(local, row_idx, col_idx)
+            remote_value = _google_sheet_cell_value(remote, row_idx, col_idx)
+
+            if remote_value == base_value or local_value == remote_value:
+                merged_value = local_value
+            elif local_value == base_value:
+                merged_value = remote_value
+                if remote_value != local_value:
+                    remote_applied_count += 1
+            else:
+                merged_value = remote_value
+                if remote_value != local_value:
+                    remote_applied_count += 1
+                    conflict_count += 1
+
+            merged_row.append(merged_value)
+        merged_rows.append(merged_row)
+
+    return _google_sheet_canonicalize_rows(merged_rows), remote_applied_count, conflict_count
+
+
+def _google_sheet_values_to_dataframe(values: t.Any) -> pd.DataFrame:
+    if not isinstance(values, list) or not values:
+        return pd.DataFrame()
+
+    normalized_rows: list[list[str]] = []
+    max_cols = 0
+    for raw_row in values:
+        row_values = list(raw_row) if isinstance(raw_row, list) else []
+        text_row = ["" if value is None else str(value) for value in row_values]
+        normalized_rows.append(text_row)
+        if len(text_row) > max_cols:
+            max_cols = len(text_row)
+
+    if max_cols <= 0:
+        return pd.DataFrame()
+
+    header = normalized_rows[0]
+    columns = [
+        str(header[idx]) if idx < len(header) else ""
+        for idx in range(max_cols)
+    ]
+    data_rows: list[list[str]] = []
+    for row in normalized_rows[1:]:
+        padded = list(row)
+        if len(padded) < max_cols:
+            padded.extend([""] * (max_cols - len(padded)))
+        elif len(padded) > max_cols:
+            padded = padded[:max_cols]
+        data_rows.append(padded)
+    return pd.DataFrame(data_rows, columns=columns)
+
+
+def _google_sheet_rows_from_dataframe(df: pd.DataFrame) -> list[list[t.Any]]:
+    columns = [str(col) for col in list(df.columns)]
+    if not columns:
+        return []
+
+    rows: list[list[t.Any]] = [columns]
+    for raw_row in df.values.tolist():
+        row_payload: list[t.Any] = []
+        for value in raw_row:
+            if _is_missing_or_empty_value(value):
+                row_payload.append("")
+                continue
+            safe_value = _json_safe_value(value)
+            row_payload.append("" if safe_value is None else safe_value)
+        rows.append(row_payload)
+
+    while len(rows) > 1:
+        trailing = rows[-1]
+        if any(str(value or "") != "" for value in trailing):
+            break
+        rows.pop()
+    return rows
+
+
+def _google_sheet_rows_hash(rows: list[list[t.Any]]) -> str:
+    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _google_sheet_hash_from_dataframe(df: pd.DataFrame) -> str:
+    return _google_sheet_rows_hash(_google_sheet_rows_from_dataframe(df))
+
+
+def _google_sheet_find_entry_by_name(sheet_entries: list[dict[str, t.Any]], title: str) -> t.Optional[dict[str, t.Any]]:
+    target = str(title or "")
+    for entry in sheet_entries:
+        props = entry.get("properties", {})
+        if str(props.get("title") or "") == target:
+            return entry
+    return None
+
+
+def _google_sheet_user_entries(sheet_entries: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+    metadata_names = _google_sheet_metadata_tab_names()
+    visible_entries: list[dict[str, t.Any]] = []
+    for entry in sheet_entries:
+        props = entry.get("properties", {})
+        title = str(props.get("title") or "")
+        if not title.strip():
+            continue
+        if title in metadata_names:
+            continue
+        if bool(props.get("hidden")):
+            continue
+        visible_entries.append(entry)
+    return visible_entries
+
+
+def _google_sheet_batch_get_values(
+    service,
+    spreadsheet_id: str,
+    ranges: list[str],
+) -> dict[str, list[list[t.Any]]]:
+    requested_ranges = [str(item).strip() for item in ranges if str(item or "").strip()]
+    if not requested_ranges:
+        return {}
+
+    result = _execute_google_request(
+        service.spreadsheets().values().batchGet(
+            spreadsheetId=spreadsheet_id,
+            ranges=requested_ranges,
+        )
+    )
+    value_ranges = list(result.get("valueRanges", []))
+    payload: dict[str, list[list[t.Any]]] = {}
+    for idx, requested_range in enumerate(requested_ranges):
+        entry = value_ranges[idx] if idx < len(value_ranges) and isinstance(value_ranges[idx], dict) else {}
+        values = entry.get("values", [])
+        payload[requested_range] = list(values) if isinstance(values, list) else []
+    return payload
+
+
+def _google_sheet_fetch_style_metadata(
+    service,
+    spreadsheet_id: str,
+    sheet_entries: list[dict[str, t.Any]],
+    target_sheet_name: str,
+) -> dict[tuple[int, int], dict[str, t.Any]]:
+    meta_entry = _google_sheet_find_entry_by_name(sheet_entries, CELL_STYLES_METADATA_SHEET_NAME)
+    if meta_entry is None:
+        return {}
+    values_result = _execute_google_request(
+        service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=_google_sheet_a1_sheet_name(CELL_STYLES_METADATA_SHEET_NAME),
+        )
+    )
+    return _google_sheet_parse_style_metadata_values(values_result.get("values", []), target_sheet_name)
+
+
+def _google_sheet_write_style_metadata(
+    service,
+    spreadsheet_id: str,
+    metadata_exists: bool,
+    target_sheet_name: str,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> bool:
+    canonical = _google_sheet_canonicalize_cell_styles(cell_styles)
+    if not metadata_exists and not canonical:
+        return False
+
+    if not metadata_exists:
+        created_sheet = False
+        try:
+            _execute_google_request(
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {
+                                "addSheet": {
+                                    "properties": {
+                                        "title": CELL_STYLES_METADATA_SHEET_NAME,
+                                        "hidden": True,
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                )
+            )
+        except Exception as exc:
+            if "already exists" not in str(exc or "").lower():
+                raise
+        metadata_exists = True
+
+    meta_range = _google_sheet_a1_sheet_name(CELL_STYLES_METADATA_SHEET_NAME)
+    existing_values: list[list[t.Any]] = []
+    try:
+        existing_values = _execute_google_request(
+            service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=meta_range,
+            )
+        ).get("values", [])
+    except Exception:
+        existing_values = []
+
+    other_rows: list[list[t.Any]] = []
+    for raw_row in existing_values[1:]:
+        row_values = list(raw_row) if isinstance(raw_row, list) else []
+        if len(row_values) < 4:
+            continue
+        if str(row_values[0] or "") == str(target_sheet_name):
+            continue
+        other_rows.append(row_values[:4])
+
+    _execute_google_request(
+        service.spreadsheets().values().clear(
+            spreadsheetId=spreadsheet_id,
+            range=meta_range,
+            body={},
+        )
+    )
+
+    rows = _google_sheet_style_metadata_values(target_sheet_name, canonical)
+    combined_rows = [rows[0]]
+    combined_rows.extend(other_rows)
+    combined_rows.extend(rows[1:])
+    if len(combined_rows) <= 1:
+        return metadata_exists
+
+    _execute_google_request(
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=f"{meta_range}!A1",
+            valueInputOption="RAW",
+            body={"majorDimension": "ROWS", "values": combined_rows},
+        )
+    )
+    return metadata_exists
+
+
+def _google_sheet_parse_presence_metadata_values(
+    values: t.Any,
+    target_sheet_name: str,
+    *,
+    local_username: str = "",
+) -> tuple[dict[str, tuple[int, int]], t.Optional[int], list[str]]:
+    if not isinstance(values, list) or len(values) <= 1:
+        return {}, None, []
+
+    local_key = _normalize_username(local_username).casefold()
+    freshness_cutoff = int(time.time()) - int(GOOGLE_SHEETS_PRESENCE_TTL_SECONDS)
+    latest_by_user: dict[str, dict[str, t.Any]] = {}
+    for row_number, raw_row in enumerate(values[1:], start=2):
+        row_values = list(raw_row) if isinstance(raw_row, list) else []
+        if len(row_values) < 5:
+            continue
+        if str(row_values[0] or "") != str(target_sheet_name):
+            continue
+
+        username = _normalize_username(row_values[1])
+        if not username:
+            continue
+        try:
+            row_idx = int(row_values[2])
+            col_idx = int(row_values[3])
+            updated_at = int(row_values[4])
+        except Exception:
+            continue
+
+        key = username.casefold()
+        previous = latest_by_user.get(key)
+        if previous is not None and int(previous.get("updated_at", 0)) > updated_at:
+            continue
+        latest_by_user[key] = {
+            "username": username,
+            "row": row_idx,
+            "col": col_idx,
+            "updated_at": updated_at,
+            "row_number": row_number,
+        }
+
+    selections: dict[str, tuple[int, int]] = {}
+    local_row_number: t.Optional[int] = None
+    online_users: list[str] = []
+    for key, entry in latest_by_user.items():
+        username = str(entry.get("username") or "")
+        row_idx = int(entry.get("row", -1))
+        col_idx = int(entry.get("col", -1))
+        updated_at = int(entry.get("updated_at", 0))
+        row_number = int(entry.get("row_number", 0) or 0)
+        if updated_at >= freshness_cutoff:
+            online_users.append(username)
+        if local_key and key == local_key and row_number >= 2:
+            local_row_number = row_number
+        if updated_at < freshness_cutoff or row_idx < 0 or col_idx < 0:
+            continue
+        if local_key and key == local_key:
+            continue
+        selections[username] = (row_idx, col_idx)
+    return selections, local_row_number, online_users
+
+
+def _google_sheet_write_presence_metadata(
+    service,
+    spreadsheet_id: str,
+    target_sheet_name: str,
+    username: str,
+    selected_cell: t.Optional[tuple[int, int]],
+    *,
+    metadata_exists: bool,
+    row_number: t.Optional[int],
+) -> tuple[bool, t.Optional[int]]:
+    safe_username = _normalize_username(username)
+    if not safe_username:
+        return metadata_exists, row_number
+    if selected_cell is None and row_number is None:
+        return metadata_exists, row_number
+
+    meta_range = _google_sheet_a1_sheet_name(PRESENCE_METADATA_SHEET_NAME)
+    row_idx = int(selected_cell[0]) if selected_cell is not None else -1
+    col_idx = int(selected_cell[1]) if selected_cell is not None else -1
+    payload_row = [target_sheet_name, safe_username, row_idx, col_idx, int(time.time())]
+
+    if not metadata_exists:
+        created_sheet = False
+        try:
+            _execute_google_request(
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {
+                                "addSheet": {
+                                    "properties": {
+                                        "title": PRESENCE_METADATA_SHEET_NAME,
+                                        "hidden": True,
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                )
+            )
+            created_sheet = True
+        except Exception as exc:
+            if "already exists" not in str(exc or "").lower():
+                raise
+        if created_sheet:
+            _execute_google_request(
+                service.spreadsheets().values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"{meta_range}!A1",
+                    valueInputOption="RAW",
+                    body={
+                        "majorDimension": "ROWS",
+                        "values": [
+                            ["sheet", "username", "row", "col", "updated_at"],
+                            payload_row,
+                        ],
+                    },
+                )
+            )
+            return True, 2
+
+    if row_number is not None and int(row_number) >= 2:
+        _execute_google_request(
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f"{meta_range}!A{int(row_number)}:E{int(row_number)}",
+                valueInputOption="RAW",
+                body={"majorDimension": "ROWS", "values": [payload_row]},
+            )
+        )
+        return True, int(row_number)
+
+    append_result = _execute_google_request(
+        service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range=f"{meta_range}!A:E",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"majorDimension": "ROWS", "values": [payload_row]},
+        )
+    )
+    updated_range = str((append_result.get("updates") or {}).get("updatedRange") or "")
+    match = re.search(r"![A-Z]+(\d+)(?::[A-Z]+\d+)?$", updated_range)
+    if match is not None:
+        try:
+            return True, int(match.group(1))
+        except Exception:
+            pass
+    return True, row_number
+
+
+def _google_sheet_color_payload(color: t.Optional[QtGui.QColor]) -> t.Optional[dict[str, float]]:
+    if not isinstance(color, QtGui.QColor) or not color.isValid():
+        return None
+    return {
+        "red": round(float(color.red()) / 255.0, 4),
+        "green": round(float(color.green()) / 255.0, 4),
+        "blue": round(float(color.blue()) / 255.0, 4),
+    }
+
+
+def _google_sheet_project_cell_background(style: dict[str, t.Any]) -> t.Optional[dict[str, float]]:
+    if not isinstance(style, dict):
+        return None
+    qa_mark = str(style.get("qa_mark", "")).strip().lower()
+    if qa_mark == "pass":
+        return _google_sheet_color_payload(style.get("qa_bg") if isinstance(style.get("qa_bg"), QtGui.QColor) else QtGui.QColor(28, 120, 50))
+    if qa_mark == "fail":
+        return _google_sheet_color_payload(style.get("qa_bg") if isinstance(style.get("qa_bg"), QtGui.QColor) else QtGui.QColor(145, 35, 35))
+    return None
+
+
+def _google_sheet_project_text_runs(text_value: t.Any, style: dict[str, t.Any]) -> list[dict[str, t.Any]]:
+    raw_text = "" if text_value is None else str(text_value)
+    if not raw_text or not isinstance(style, dict):
+        return []
+
+    spans = _normalize_qa_spans(style.get("qa_spans", []), len(raw_text))
+    if not spans:
+        return []
+
+    fg = _google_sheet_color_payload(QA_TEXT_FG_COLOR)
+    runs: list[dict[str, t.Any]] = []
+    for span_idx, span in enumerate(spans):
+        try:
+            start = int(span.get("start", 0))
+            length = int(span.get("length", 0))
+            kind = str(span.get("kind", ""))
+        except Exception:
+            continue
+        if start < 0 or length <= 0 or kind not in ("big", "small"):
+            continue
+        end = min(len(raw_text), start + length)
+        if end <= start:
+            continue
+        runs.append(
+            {
+                "startIndex": start,
+                "format": {
+                    "foregroundColor": fg,
+                    "bold": bool(kind == "big"),
+                    "italic": bool(kind == "small"),
+                },
+            }
+        )
+        next_start = None
+        if span_idx + 1 < len(spans):
+            try:
+                next_start = int(spans[span_idx + 1].get("start", -1))
+            except Exception:
+                next_start = None
+        if end < len(raw_text) and next_start != end:
+            runs.append(
+                {
+                    "startIndex": end,
+                    "format": {},
+                }
+            )
+    return runs
+
+
+def _google_sheet_display_signature(text_value: t.Any, style: dict[str, t.Any]) -> str:
+    payload = {
+        "bg": _google_sheet_project_cell_background(style),
+        "runs": _google_sheet_project_text_runs(text_value, style),
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _google_sheet_build_display_requests(
+    *,
+    sheet_id: int,
+    base_rows: list[list[t.Any]],
+    target_rows: list[list[t.Any]],
+    base_styles: dict[tuple[int, int], dict[str, t.Any]],
+    target_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> list[dict[str, t.Any]]:
+    requests: list[dict[str, t.Any]] = []
+    keys = sorted(set(base_styles) | set(target_styles))
+    for row_idx, col_idx in keys:
+        base_style = base_styles.get((row_idx, col_idx), {})
+        target_style = target_styles.get((row_idx, col_idx), {})
+        base_text = _google_sheet_cell_value(base_rows, int(row_idx) + 1, int(col_idx))
+        target_text = _google_sheet_cell_value(target_rows, int(row_idx) + 1, int(col_idx))
+
+        base_bg = _google_sheet_project_cell_background(base_style)
+        target_bg = _google_sheet_project_cell_background(target_style)
+        if base_bg != target_bg:
+            user_entered_format: dict[str, t.Any] = {}
+            if target_bg is not None:
+                user_entered_format["backgroundColor"] = target_bg
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": int(sheet_id),
+                            "startRowIndex": int(row_idx) + 1,
+                            "endRowIndex": int(row_idx) + 2,
+                            "startColumnIndex": int(col_idx),
+                            "endColumnIndex": int(col_idx) + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": user_entered_format,
+                        },
+                        "fields": "userEnteredFormat.backgroundColor",
+                    }
+                }
+            )
+
+        base_signature = _google_sheet_display_signature(base_text, base_style)
+        target_signature = _google_sheet_display_signature(target_text, target_style)
+        target_runs = _google_sheet_project_text_runs(target_text, target_style)
+        value_changed = base_text != target_text
+        if base_signature != target_signature or (value_changed and target_runs):
+            cell_payload: dict[str, t.Any] = {
+                "userEnteredValue": {
+                    "stringValue": "" if target_text is None else str(target_text),
+                },
+                "textFormatRuns": target_runs,
+            }
+            requests.append(
+                {
+                    "updateCells": {
+                        "start": {
+                            "sheetId": int(sheet_id),
+                            "rowIndex": int(row_idx) + 1,
+                            "columnIndex": int(col_idx),
+                        },
+                        "rows": [{"values": [cell_payload]}],
+                        "fields": "userEnteredValue,textFormatRuns",
+                    }
+                }
+            )
+    return requests
+
+
+def _fetch_google_sheet_snapshot(
+    spreadsheet_id: str,
+    *,
+    preferred_sheet_name: t.Optional[str] = None,
+    preferred_sheet_gid: t.Optional[int] = None,
+    interactive_auth: bool = False,
+    local_username: str = "",
+) -> dict[str, t.Any]:
+    service = _build_google_sheets_service(interactive=interactive_auth)
+    metadata = _execute_google_request(service.spreadsheets().get(spreadsheetId=spreadsheet_id))
+    sheet_entries = list(metadata.get("sheets", []))
+    user_entries = _google_sheet_user_entries(sheet_entries)
+    if not user_entries:
+        raise RuntimeError("This spreadsheet has no visible tabs.")
+
+    selected_entry = None
+    if preferred_sheet_gid is not None:
+        for entry in user_entries:
+            props = entry.get("properties", {})
+            if int(props.get("sheetId", -1)) == int(preferred_sheet_gid):
+                selected_entry = entry
+                break
+    if selected_entry is None and preferred_sheet_name:
+        for entry in user_entries:
+            props = entry.get("properties", {})
+            if str(props.get("title", "")) == str(preferred_sheet_name):
+                selected_entry = entry
+                break
+    if selected_entry is None:
+        selected_entry = user_entries[0]
+
+    selected_props = selected_entry.get("properties", {})
+    selected_name = str(selected_props.get("title") or "Sheet1")
+    selected_gid = int(selected_props.get("sheetId", 0))
+    range_name = _google_sheet_a1_sheet_name(selected_name)
+    has_style_metadata = _google_sheet_find_entry_by_name(sheet_entries, CELL_STYLES_METADATA_SHEET_NAME) is not None
+    has_presence_metadata = _google_sheet_find_entry_by_name(sheet_entries, PRESENCE_METADATA_SHEET_NAME) is not None
+    requested_ranges = [range_name]
+    style_meta_range = _google_sheet_a1_sheet_name(CELL_STYLES_METADATA_SHEET_NAME)
+    presence_meta_range = _google_sheet_a1_sheet_name(PRESENCE_METADATA_SHEET_NAME)
+    if has_style_metadata:
+        requested_ranges.append(style_meta_range)
+    if has_presence_metadata:
+        requested_ranges.append(presence_meta_range)
+    batch_values = _google_sheet_batch_get_values(service, spreadsheet_id, requested_ranges)
+    values = batch_values.get(range_name, [])
+    df = _google_sheet_values_to_dataframe(values)
+    rows = _google_sheet_rows_from_dataframe(df)
+    cell_styles = _google_sheet_parse_style_metadata_values(
+        batch_values.get(style_meta_range, []),
+        selected_name,
+    )
+    presence, local_presence_row, online_users = _google_sheet_parse_presence_metadata_values(
+        batch_values.get(presence_meta_range, []),
+        selected_name,
+        local_username=local_username,
+    )
+
+    title = str(metadata.get("properties", {}).get("title") or "Google Sheet")
+    sheet_names = [
+        str(entry.get("properties", {}).get("title") or "")
+        for entry in user_entries
+        if str(entry.get("properties", {}).get("title") or "").strip()
+    ]
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_title": title,
+        "spreadsheet_link": _build_google_sheet_link(spreadsheet_id, selected_gid),
+        "sheet_name": selected_name,
+        "sheet_gid": selected_gid,
+        "sheet_names": sheet_names,
+        "df": df,
+        "rows": rows,
+        "cell_styles": _serialize_cell_styles(cell_styles),
+        "presence": presence,
+        "online_users": online_users,
+        "local_presence_row": local_presence_row,
+        "has_style_metadata": has_style_metadata,
+        "has_presence_metadata": has_presence_metadata,
+        "remote_hash": _google_sheet_rows_hash(rows),
+        "style_hash": _google_sheet_cell_styles_hash(cell_styles),
+    }
+
+
+def _poll_google_sheet_snapshot(
+    spreadsheet_id: str,
+    *,
+    sheet_name: str,
+    sheet_gid: t.Optional[int],
+    spreadsheet_title: str,
+    sheet_names: list[str],
+    has_style_metadata: bool,
+    has_presence_metadata: bool,
+    local_username: str = "",
+) -> dict[str, t.Any]:
+    service = _build_google_sheets_service(interactive=False)
+    range_name = _google_sheet_a1_sheet_name(sheet_name)
+    style_meta_range = _google_sheet_a1_sheet_name(CELL_STYLES_METADATA_SHEET_NAME)
+    presence_meta_range = _google_sheet_a1_sheet_name(PRESENCE_METADATA_SHEET_NAME)
+    requested_ranges = [range_name]
+    if has_style_metadata:
+        requested_ranges.append(style_meta_range)
+    if has_presence_metadata:
+        requested_ranges.append(presence_meta_range)
+    batch_values = _google_sheet_batch_get_values(service, spreadsheet_id, requested_ranges)
+    values = batch_values.get(range_name, [])
+    df = _google_sheet_values_to_dataframe(values)
+    rows = _google_sheet_rows_from_dataframe(df)
+    cell_styles = _google_sheet_parse_style_metadata_values(
+        batch_values.get(style_meta_range, []),
+        sheet_name,
+    )
+    presence, local_presence_row, online_users = _google_sheet_parse_presence_metadata_values(
+        batch_values.get(presence_meta_range, []),
+        sheet_name,
+        local_username=local_username,
+    )
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_title": spreadsheet_title,
+        "spreadsheet_link": _build_google_sheet_link(spreadsheet_id, sheet_gid),
+        "sheet_name": sheet_name,
+        "sheet_gid": sheet_gid,
+        "sheet_names": list(sheet_names or [sheet_name]),
+        "df": df,
+        "rows": rows,
+        "cell_styles": _serialize_cell_styles(cell_styles),
+        "presence": presence,
+        "online_users": online_users,
+        "local_presence_row": local_presence_row,
+        "has_style_metadata": bool(has_style_metadata),
+        "has_presence_metadata": bool(has_presence_metadata),
+        "remote_hash": _google_sheet_rows_hash(rows),
+        "style_hash": _google_sheet_cell_styles_hash(cell_styles),
+    }
+
+
+def _push_google_sheet_snapshot(
+    spreadsheet_id: str,
+    sheet_name: str,
+    sheet_gid: t.Optional[int],
+    base_rows: list[list[t.Any]],
+    local_rows: list[list[t.Any]],
+    base_cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+    local_cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+    *,
+    has_style_metadata: bool,
+) -> dict[str, t.Any]:
+    service = _build_google_sheets_service(interactive=False)
+    if sheet_gid is None:
+        raise RuntimeError("Google Sheets tab id is missing.")
+    selected_sheet_id = int(sheet_gid)
+    range_name = _google_sheet_a1_sheet_name(sheet_name)
+    style_meta_range = _google_sheet_a1_sheet_name(CELL_STYLES_METADATA_SHEET_NAME)
+    requested_ranges = [range_name]
+    if has_style_metadata:
+        requested_ranges.append(style_meta_range)
+    batch_values = _google_sheet_batch_get_values(service, spreadsheet_id, requested_ranges)
+    latest_values = batch_values.get(range_name, [])
+    latest_remote_rows = _google_sheet_rows_from_dataframe(_google_sheet_values_to_dataframe(latest_values))
+    latest_remote_styles = _google_sheet_parse_style_metadata_values(
+        batch_values.get(style_meta_range, []),
+        sheet_name,
+    )
+    target_rows, remote_applied_count, conflict_count = _google_sheet_three_way_merge_rows(
+        base_rows,
+        local_rows,
+        latest_remote_rows,
+    )
+    target_styles, remote_style_applied_count, style_conflict_count = _google_sheet_merge_cell_styles(
+        base_cell_styles,
+        local_cell_styles,
+        latest_remote_styles,
+    )
+    updates = _google_sheet_build_value_updates(sheet_name, latest_remote_rows, target_rows)
+    for start in range(0, len(updates), GOOGLE_SHEETS_BATCH_UPDATE_CHUNK_SIZE):
+        chunk = updates[start : start + GOOGLE_SHEETS_BATCH_UPDATE_CHUNK_SIZE]
+        _execute_google_request(
+            service.spreadsheets().values().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={
+                    "valueInputOption": "RAW",
+                    "data": chunk,
+                },
+            )
+        )
+    display_requests = _google_sheet_build_display_requests(
+        sheet_id=selected_sheet_id,
+        base_rows=latest_remote_rows,
+        target_rows=target_rows,
+        base_styles=latest_remote_styles,
+        target_styles=target_styles,
+    )
+    for start in range(0, len(display_requests), GOOGLE_SHEETS_BATCH_UPDATE_CHUNK_SIZE):
+        chunk = display_requests[start : start + GOOGLE_SHEETS_BATCH_UPDATE_CHUNK_SIZE]
+        _execute_google_request(
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": chunk},
+            )
+        )
+    updated_has_style_metadata = bool(has_style_metadata)
+    if _google_sheet_cell_styles_hash(target_styles) != _google_sheet_cell_styles_hash(latest_remote_styles):
+        updated_has_style_metadata = _google_sheet_write_style_metadata(
+            service,
+            spreadsheet_id,
+            bool(has_style_metadata),
+            sheet_name,
+            target_styles,
+        )
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": sheet_name,
+        "sheet_gid": selected_sheet_id,
+        "rows": target_rows,
+        "cell_styles": _serialize_cell_styles(target_styles),
+        "remote_applied_count": int(remote_applied_count),
+        "conflict_count": int(conflict_count),
+        "remote_style_applied_count": int(remote_style_applied_count),
+        "style_conflict_count": int(style_conflict_count),
+        "has_style_metadata": bool(updated_has_style_metadata),
+        "remote_hash": _google_sheet_rows_hash(target_rows),
+        "style_hash": _google_sheet_cell_styles_hash(target_styles),
+    }
+
+
+def _push_google_sheet_presence(
+    spreadsheet_id: str,
+    sheet_name: str,
+    username: str,
+    selected_cell: t.Optional[tuple[int, int]],
+    *,
+    has_presence_metadata: bool,
+    row_number: t.Optional[int],
+) -> dict[str, t.Any]:
+    service = _build_google_sheets_service(interactive=False)
+    metadata_exists, updated_row_number = _google_sheet_write_presence_metadata(
+        service,
+        spreadsheet_id,
+        sheet_name,
+        username,
+        selected_cell,
+        metadata_exists=has_presence_metadata,
+        row_number=row_number,
+    )
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": sheet_name,
+        "presence": {},
+        "has_presence_metadata": bool(metadata_exists),
+        "local_presence_row": updated_row_number,
+        "selected_cell": selected_cell,
+    }
 
 
 def _parse_collab_link(raw: str) -> t.Optional[tuple[str, int, str]]:
@@ -572,6 +1746,172 @@ def _deserialize_cell_styles(payload: t.Any) -> dict[tuple[int, int], dict[str, 
         if style:
             styles[(row, col)] = style
     return styles
+
+
+def _google_sheet_metadata_tab_names() -> set[str]:
+    return {
+        QA_METADATA_SHEET_NAME,
+        EDIT_METADATA_SHEET_NAME,
+        CELL_STYLES_METADATA_SHEET_NAME,
+        PRESENCE_METADATA_SHEET_NAME,
+    }
+
+
+def _google_sheet_canonicalize_cell_styles(
+    cell_styles: t.Any,
+) -> dict[tuple[int, int], dict[str, t.Any]]:
+    canonical: dict[tuple[int, int], dict[str, t.Any]] = {}
+    if not isinstance(cell_styles, dict):
+        return canonical
+
+    for key, style in cell_styles.items():
+        if not isinstance(key, tuple) or len(key) != 2 or not isinstance(style, dict):
+            continue
+        try:
+            row = int(key[0])
+            col = int(key[1])
+        except Exception:
+            continue
+        if row < 0 or col < 0:
+            continue
+        serialized = _serialize_cell_style(style)
+        if not serialized:
+            continue
+        canonical[(row, col)] = _deserialize_cell_style(serialized)
+    return canonical
+
+
+def _google_sheet_cell_styles_hash(cell_styles: t.Any) -> str:
+    canonical = _google_sheet_canonicalize_cell_styles(cell_styles)
+    payload = sorted(
+        _serialize_cell_styles(canonical),
+        key=lambda entry: (int(entry.get("row", -1)), int(entry.get("col", -1))),
+    )
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _google_sheet_style_signature(style: dict[str, t.Any]) -> str:
+    serialized = _serialize_cell_style(style)
+    if not serialized:
+        return ""
+    return json.dumps(serialized, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _google_sheet_merge_cell_styles(
+    base_styles: dict[tuple[int, int], dict[str, t.Any]],
+    local_styles: dict[tuple[int, int], dict[str, t.Any]],
+    remote_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> tuple[dict[tuple[int, int], dict[str, t.Any]], int, int]:
+    base = _google_sheet_canonicalize_cell_styles(base_styles)
+    local = _google_sheet_canonicalize_cell_styles(local_styles)
+    remote = _google_sheet_canonicalize_cell_styles(remote_styles)
+    merged: dict[tuple[int, int], dict[str, t.Any]] = {}
+    remote_applied_count = 0
+    conflict_count = 0
+
+    for key in sorted(set(base) | set(local) | set(remote)):
+        base_style = base.get(key, {})
+        local_style = local.get(key, {})
+        remote_style = remote.get(key, {})
+        base_sig = _google_sheet_style_signature(base_style)
+        local_sig = _google_sheet_style_signature(local_style)
+        remote_sig = _google_sheet_style_signature(remote_style)
+
+        if remote_sig == base_sig or local_sig == remote_sig:
+            chosen = local_style
+        elif local_sig == base_sig:
+            chosen = remote_style
+            if remote_sig != local_sig:
+                remote_applied_count += 1
+        else:
+            chosen = remote_style
+            if remote_sig != local_sig:
+                remote_applied_count += 1
+                conflict_count += 1
+
+        serialized = _serialize_cell_style(chosen)
+        if serialized:
+            merged[key] = _deserialize_cell_style(serialized)
+
+    return merged, remote_applied_count, conflict_count
+
+
+def _google_sheet_style_metadata_values(
+    target_sheet_name: str,
+    cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+) -> list[list[t.Any]]:
+    rows: list[list[t.Any]] = [["sheet", "row", "col", "style_json"]]
+    canonical = _google_sheet_canonicalize_cell_styles(cell_styles)
+    for entry in sorted(
+        _serialize_cell_styles(canonical),
+        key=lambda item: (int(item.get("row", -1)), int(item.get("col", -1))),
+    ):
+        style_json = json.dumps(entry.get("style", {}), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        rows.append([
+            str(target_sheet_name),
+            int(entry.get("row", 0)),
+            int(entry.get("col", 0)),
+            style_json,
+        ])
+    return rows
+
+
+def _google_sheet_parse_style_metadata_values(
+    values: t.Any,
+    target_sheet_name: str,
+) -> dict[tuple[int, int], dict[str, t.Any]]:
+    styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+    if not isinstance(values, list):
+        return styles
+
+    for raw_row in values[1:]:
+        row_values = list(raw_row) if isinstance(raw_row, list) else []
+        if len(row_values) < 4:
+            continue
+        sheet_name, row_idx, col_idx, style_json = row_values[:4]
+        if str(sheet_name or "") != str(target_sheet_name):
+            continue
+        try:
+            row = int(row_idx)
+            col = int(col_idx)
+            payload = json.loads(str(style_json or ""))
+        except Exception:
+            continue
+        if row < 0 or col < 0:
+            continue
+        style = _deserialize_cell_style(payload)
+        if style:
+            styles[(row, col)] = style
+    return styles
+
+
+class _GoogleSheetsTaskSignals(QtCore.QObject):
+    completed = QtCore.pyqtSignal(str, int, object)
+    failed = QtCore.pyqtSignal(str, int, str)
+
+
+class _GoogleSheetsTask(QtCore.QRunnable):
+    def __init__(
+        self,
+        *,
+        action: str,
+        generation: int,
+        fn: t.Callable[[], t.Any],
+    ):
+        super().__init__()
+        self.action = str(action)
+        self.generation = int(generation)
+        self.fn = fn
+        self.signals = _GoogleSheetsTaskSignals()
+
+    def run(self):
+        try:
+            payload = self.fn()
+        except Exception as exc:
+            self.signals.failed.emit(self.action, int(self.generation), str(exc))
+            return
+        self.signals.completed.emit(self.action, int(self.generation), payload)
 
 
 class CollaborationServer(QtCore.QObject):
@@ -1663,7 +3003,12 @@ def load_xlsx_dataframe_with_styles(
         return df, {}, resolved_name, [resolved_name], None
 
     wb = _load_workbook_with_rich_text(path)
-    hidden_meta_sheets = {QA_METADATA_SHEET_NAME, EDIT_METADATA_SHEET_NAME}
+    hidden_meta_sheets = {
+        QA_METADATA_SHEET_NAME,
+        EDIT_METADATA_SHEET_NAME,
+        CELL_STYLES_METADATA_SHEET_NAME,
+        PRESENCE_METADATA_SHEET_NAME,
+    }
     sheet_names = [name for name in wb.sheetnames if name not in hidden_meta_sheets]
     if not sheet_names:
         return pd.DataFrame(), {}, "Sheet1", [], None
@@ -1851,6 +3196,31 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     @df.setter
     def df(self, value: pd.DataFrame):
         self._df = value
+
+    def replace_dataframe(
+        self,
+        df: pd.DataFrame,
+        *,
+        cell_styles: t.Optional[dict[tuple[int, int], dict[str, t.Any]]] = None,
+        source_format: t.Optional[str] = None,
+        xlsx_sheet_name: t.Optional[str] = None,
+        xlsx_base_font = None,
+        update_xlsx_base_font: bool = False,
+    ):
+        self.beginResetModel()
+        self._df = df
+        if cell_styles is not None:
+            self._cell_styles = cell_styles
+        if source_format is not None:
+            self.source_format = str(source_format)
+        if xlsx_sheet_name is not None:
+            self.xlsx_sheet_name = str(xlsx_sheet_name or "Sheet1")
+        if update_xlsx_base_font:
+            self.xlsx_base_font = xlsx_base_font
+        self.endResetModel()
+        self._rebuild_matches()
+        self.matchesChanged.emit(len(self._matches))
+        self.dataChangedHard.emit()
 
     @property
     def is_dirty(self) -> bool:
@@ -2900,6 +4270,7 @@ class WindowControls(QtWidgets.QWidget):
         self.title_lbl = QtWidgets.QLabel(title)
         self.title_lbl.setStyleSheet("font-weight: 600;")
         self.title_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.title_lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self.summarize_btn = QtWidgets.QToolButton()
         self.summarize_btn.setText("QA Summarize")
@@ -2940,12 +4311,14 @@ class WindowControls(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
+        self._left_balance.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._right_balance = QtWidgets.QWidget()
         self._right_balance.setFixedWidth(0)
         self._right_balance.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
+        self._right_balance.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         # Left side: back button
         layout.addWidget(self.back_btn)
@@ -4386,6 +5759,49 @@ class DataViewerPage(QtWidgets.QWidget):
         self._collab_broadcast_timer.setSingleShot(True)
         self._collab_broadcast_timer.setInterval(COLLAB_BROADCAST_DEBOUNCE_MS)
         self._collab_broadcast_timer.timeout.connect(self._broadcast_current_snapshot)
+        self._google_sheet_spreadsheet_id = ""
+        self._google_sheet_link = ""
+        self._google_sheet_title = ""
+        self._google_sheet_current_gid: t.Optional[int] = None
+        self._google_sheet_remote_hash = ""
+        self._google_sheet_remote_rows: list[list[t.Any]] = []
+        self._google_sheet_remote_cell_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
+        self._google_sheet_remote_selections: dict[str, tuple[int, int]] = {}
+        self._google_sheet_online_users: list[str] = []
+        self._google_sheet_has_style_metadata = False
+        self._google_sheet_has_presence_metadata = False
+        self._google_sheet_last_metadata_refresh_ts = 0.0
+        self._google_sheet_local_presence_row: t.Optional[int] = None
+        self._google_sheet_last_published_selection: t.Optional[tuple[int, int]] = None
+        self._google_sheet_pending_presence_selection: t.Optional[tuple[int, int]] = None
+        self._google_sheet_fetch_generation = 0
+        self._google_sheet_push_generation = 0
+        self._google_sheet_presence_generation = 0
+        self._google_sheet_load_in_flight = False
+        self._google_sheet_push_in_flight = False
+        self._google_sheet_presence_in_flight = False
+        self._google_sheet_resync_requested = False
+        self._google_sheet_presence_resync_requested = False
+        self._google_sheet_presence_force_pending = False
+        self._google_sheet_applying_remote = False
+        self._google_sheet_task_pool = QtCore.QThreadPool(self)
+        self._google_sheet_task_pool.setMaxThreadCount(1)
+        self._google_sheet_sync_timer = QtCore.QTimer(self)
+        self._google_sheet_sync_timer.setSingleShot(True)
+        self._google_sheet_sync_timer.setInterval(GOOGLE_SHEETS_SYNC_DEBOUNCE_MS)
+        self._google_sheet_sync_timer.timeout.connect(self._flush_google_sheet_sync)
+        self._google_sheet_presence_timer = QtCore.QTimer(self)
+        self._google_sheet_presence_timer.setSingleShot(True)
+        self._google_sheet_presence_timer.setInterval(GOOGLE_SHEETS_PRESENCE_DEBOUNCE_MS)
+        self._google_sheet_presence_timer.timeout.connect(self._flush_google_sheet_presence_sync)
+        self._google_sheet_presence_heartbeat_timer = QtCore.QTimer(self)
+        self._google_sheet_presence_heartbeat_timer.setInterval(GOOGLE_SHEETS_PRESENCE_HEARTBEAT_MS)
+        self._google_sheet_presence_heartbeat_timer.timeout.connect(
+            lambda: self._queue_google_sheet_presence_sync(force=True)
+        )
+        self._google_sheet_poll_timer = QtCore.QTimer(self)
+        self._google_sheet_poll_timer.setInterval(GOOGLE_SHEETS_POLL_INTERVAL_MS)
+        self._google_sheet_poll_timer.timeout.connect(self._start_google_sheet_poll)
         self._search_width_ratio = 0.85
         self._search_width_adjusted_once = False
         self._corner_toggle_btn: t.Optional[QtWidgets.QAbstractButton] = None
@@ -4448,9 +5864,14 @@ class DataViewerPage(QtWidgets.QWidget):
 
         self.sheet_selector_separator_before = toolbar.addSeparator()
 
+        self.sheet_selector_widget = QtWidgets.QWidget()
+        self.sheet_selector_layout = QtWidgets.QHBoxLayout(self.sheet_selector_widget)
+        self.sheet_selector_layout.setContentsMargins(0, 0, 0, 0)
+        self.sheet_selector_layout.setSpacing(6)
+
         self.sheet_label = QtWidgets.QLabel("Sheet:")
         self.sheet_label.setVisible(False)
-        toolbar.addWidget(self.sheet_label)
+        self.sheet_selector_layout.addWidget(self.sheet_label)
 
         self.sheet_combo = QtWidgets.QComboBox()
         self.sheet_combo.setMinimumWidth(120)
@@ -4460,7 +5881,9 @@ class DataViewerPage(QtWidgets.QWidget):
         self.sheet_combo.addItem("(No sheet)")
         self.sheet_combo.setEnabled(False)
         self.sheet_combo.currentTextChanged.connect(self._on_sheet_changed)
-        toolbar.addWidget(self.sheet_combo)
+        self.sheet_selector_layout.addWidget(self.sheet_combo)
+        self.sheet_selector_widget.setVisible(False)
+        self.sheet_selector_action = toolbar.addWidget(self.sheet_selector_widget)
 
         self.sheet_selector_separator_after = toolbar.addSeparator()
         self._set_sheet_selector_visible(False)
@@ -4675,6 +6098,7 @@ class DataViewerPage(QtWidgets.QWidget):
         # --- Drop Zone ---
         self.dd = DragDropWidget()
         self.dd.fileDropped.connect(self.load_path)
+        self.dd.setMinimumHeight(104)
         
         # Style the drop zone better
         self.dd.setStyleSheet("""
@@ -4690,12 +6114,21 @@ class DataViewerPage(QtWidgets.QWidget):
         """)
 
         self.dd_outer_container = QtWidgets.QWidget()
+        self.dd_outer_container.setMinimumHeight(120)
+        self.dd_outer_container.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
         dd_outer_layout = QtWidgets.QVBoxLayout(self.dd_outer_container)
         dd_outer_layout.setContentsMargins(8, 0, 8, 0)
         dd_outer_layout.setSpacing(0)
         dd_outer_layout.addWidget(self.dd)
 
         self.connect_container = QtWidgets.QWidget()
+        self.connect_container.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         connect_outer = QtWidgets.QVBoxLayout(self.connect_container)
         connect_outer.setContentsMargins(12, 8, 12, 10)
         connect_outer.setSpacing(8)
@@ -4722,6 +6155,77 @@ class DataViewerPage(QtWidgets.QWidget):
         connect_layout.addWidget(self.connect_input, 1)
         connect_layout.addWidget(self.connect_btn)
         connect_outer.addWidget(connect_row)
+
+        self.sheets_separator = QtWidgets.QFrame()
+        self.sheets_separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.sheets_separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        connect_outer.addWidget(self.sheets_separator)
+
+        self.google_sheets_label = QtWidgets.QLabel("Connect to Sheets")
+        self.google_sheets_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.google_sheets_label.setStyleSheet("font-size: 14px; color: rgb(190, 190, 190);")
+        connect_outer.addWidget(self.google_sheets_label)
+
+        sheets_row = QtWidgets.QWidget()
+        sheets_layout = QtWidgets.QHBoxLayout(sheets_row)
+        sheets_layout.setContentsMargins(0, 0, 0, 0)
+        sheets_layout.setSpacing(6)
+
+        self.google_sheets_input = QtWidgets.QLineEdit()
+        self.google_sheets_input.setPlaceholderText("https://docs.google.com/spreadsheets/d/.../edit#gid=0")
+        self.google_sheets_input.setMinimumWidth(320)
+        self.google_sheets_input.returnPressed.connect(self._on_google_sheet_connect_submit)
+
+        self.google_sheets_connect_btn = QtWidgets.QPushButton("Connect")
+        self.google_sheets_connect_btn.clicked.connect(self._on_google_sheet_connect_submit)
+
+        sheets_layout.addWidget(self.google_sheets_input, 1)
+        sheets_layout.addWidget(self.google_sheets_connect_btn)
+        connect_outer.addWidget(sheets_row)
+
+        self.google_sheets_setup_row = QtWidgets.QWidget()
+        oauth_layout = QtWidgets.QHBoxLayout(self.google_sheets_setup_row)
+        oauth_layout.setContentsMargins(0, 0, 0, 0)
+        oauth_layout.setSpacing(6)
+
+        self.google_sheets_import_btn = QtWidgets.QPushButton("Import OAuth JSON")
+        self.google_sheets_import_btn.clicked.connect(self._on_google_sheets_import_credentials)
+
+        self.google_sheets_authorize_btn = QtWidgets.QPushButton("Authorize Google")
+        self.google_sheets_authorize_btn.clicked.connect(self._on_google_sheets_authorize)
+
+        self.google_sheets_guide_btn = QtWidgets.QPushButton("Setup Guide")
+        self.google_sheets_guide_btn.setCheckable(True)
+        self.google_sheets_guide_btn.toggled.connect(self._toggle_google_sheets_guide)
+
+        oauth_layout.addWidget(self.google_sheets_import_btn)
+        oauth_layout.addWidget(self.google_sheets_authorize_btn)
+        oauth_layout.addWidget(self.google_sheets_guide_btn)
+        connect_outer.addWidget(self.google_sheets_setup_row)
+
+        self.google_sheets_status_label = QtWidgets.QLabel("")
+        self.google_sheets_status_label.setWordWrap(True)
+        self.google_sheets_status_label.setStyleSheet("color: rgb(165, 165, 165); padding: 2px 2px 0px 2px;")
+        connect_outer.addWidget(self.google_sheets_status_label)
+
+        self.google_sheets_guide_label = QtWidgets.QLabel(
+            "1. In Google Cloud, enable the Google Sheets API.<br/>"
+            "2. Create a <b>Desktop</b> OAuth client and download its JSON file.<br/>"
+            "3. Click <b>Import OAuth JSON</b>, then <b>Authorize Google</b> once.<br/>"
+            "4. Paste a docs.google.com/spreadsheets link above and connect.<br/><br/>"
+            f"Docs: <a href=\"{GOOGLE_SHEETS_SETUP_GUIDE_URL}\">Python quickstart</a> | "
+            f"<a href=\"{GOOGLE_SHEETS_CLIENTS_URL}\">OAuth clients</a> | "
+            f"<a href=\"{GOOGLE_SHEETS_BRANDING_URL}\">OAuth branding</a><br/><br/>"
+            "Your login token is cached locally, so reopening the app should not ask again."
+        )
+        self.google_sheets_guide_label.setWordWrap(True)
+        self.google_sheets_guide_label.setVisible(False)
+        self.google_sheets_guide_label.setOpenExternalLinks(True)
+        self.google_sheets_guide_label.setStyleSheet(
+            "color: rgb(185, 185, 185); background-color: rgba(255, 255, 255, 0.04);"
+            " border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;"
+        )
+        connect_outer.addWidget(self.google_sheets_guide_label)
 
         # Status bar
         self.status = QtWidgets.QStatusBar()
@@ -4800,6 +6304,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self._select_all_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.SelectAll, self.table)
         self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._select_all_shortcut.activated.connect(self._select_all_data_cells)
+        self._update_google_sheets_setup_status()
         self._apply_session_mode_ui()
         QtCore.QTimer.singleShot(0, self._ensure_corner_toggle_button)
 
@@ -4857,6 +6362,809 @@ class DataViewerPage(QtWidgets.QWidget):
     def _set_connect_controls_enabled(self, enabled: bool):
         self.connect_input.setEnabled(enabled)
         self.connect_btn.setEnabled(enabled)
+        google_enabled = bool(enabled) and GOOGLE_SHEETS_AVAILABLE
+        self.google_sheets_input.setEnabled(google_enabled)
+        self.google_sheets_connect_btn.setEnabled(google_enabled)
+        self.google_sheets_import_btn.setEnabled(google_enabled)
+        self.google_sheets_authorize_btn.setEnabled(google_enabled)
+        self.google_sheets_guide_btn.setEnabled(True)
+        self._update_google_sheets_setup_status()
+
+    def _is_google_sheets_mode(self) -> bool:
+        return bool(
+            self.model is not None
+            and self.model.source_format == GOOGLE_SHEETS_SOURCE_FORMAT
+            and self._google_sheet_spreadsheet_id
+        )
+
+    def _update_google_sheets_setup_status(self):
+        setup_complete = _google_sheets_token_cached()
+        self.google_sheets_setup_row.setVisible(not setup_complete)
+        if setup_complete:
+            if self.google_sheets_guide_btn.isChecked():
+                self.google_sheets_guide_btn.setChecked(False)
+            else:
+                self.google_sheets_guide_label.setVisible(False)
+        else:
+            self.google_sheets_guide_label.setVisible(bool(self.google_sheets_guide_btn.isChecked()))
+
+        status_parts = []
+        if not setup_complete:
+            status_parts.append(_google_sheets_status_text())
+        if self._is_google_sheets_mode() and self.model is not None:
+            status_parts.append(
+                f"Connected to {self._google_sheet_title or 'Google Sheet'} / {self.model.xlsx_sheet_name}."
+            )
+        status_text = " ".join(part for part in status_parts if part)
+        self.google_sheets_status_label.setText(status_text)
+        self.google_sheets_status_label.setVisible(bool(status_text))
+
+    def _toggle_google_sheets_guide(self, checked: bool):
+        if _google_sheets_token_cached():
+            self.google_sheets_guide_label.setVisible(False)
+            return
+        self.google_sheets_guide_label.setVisible(bool(checked))
+
+    def _ensure_google_sheets_authorized(self, interactive: bool, *, show_errors: bool = True) -> bool:
+        try:
+            _load_google_sheets_credentials(interactive=interactive)
+        except Exception as exc:
+            self._update_google_sheets_setup_status()
+            if show_errors:
+                QtWidgets.QMessageBox.warning(self, "Google Sheets", str(exc))
+            return False
+
+        self._update_google_sheets_setup_status()
+        return True
+
+    def _on_google_sheets_import_credentials(self):
+        if not GOOGLE_SHEETS_AVAILABLE:
+            QtWidgets.QMessageBox.warning(self, "Google Sheets", _google_sheets_dependencies_error())
+            return
+
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Import Google OAuth Client JSON",
+            str(Path.home()),
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+
+        try:
+            _import_google_sheets_client_secret(Path(path))
+            token_path = _google_sheets_token_path()
+            if token_path.is_file():
+                token_path.unlink()
+        except Exception as exc:
+            self._update_google_sheets_setup_status()
+            QtWidgets.QMessageBox.warning(self, "Google Sheets", str(exc))
+            return
+
+        self._update_google_sheets_setup_status()
+        QtWidgets.QMessageBox.information(
+            self,
+            "Google Sheets",
+            "OAuth client imported. Click Authorize Google once to cache your login.",
+        )
+
+    def _on_google_sheets_authorize(self):
+        if self._ensure_google_sheets_authorized(interactive=True):
+            QtWidgets.QMessageBox.information(
+                self,
+                "Google Sheets",
+                "Google login cached. You can connect to spreadsheets directly now.",
+            )
+
+    def _on_google_sheet_connect_submit(self):
+        self._on_google_sheet_requested(self.google_sheets_input.text().strip())
+
+    def _run_google_sheet_task(self, action: str, generation: int, fn: t.Callable[[], t.Any]):
+        task = _GoogleSheetsTask(action=action, generation=generation, fn=fn)
+        task.signals.completed.connect(self._on_google_sheet_task_completed)
+        task.signals.failed.connect(self._on_google_sheet_task_failed)
+        self._google_sheet_task_pool.start(task)
+
+    def _is_table_editor_active(self) -> bool:
+        try:
+            return self.table.state() == QtWidgets.QAbstractItemView.State.EditingState
+        except Exception:
+            return False
+
+    def _on_google_sheet_requested(self, raw_link: str):
+        if self._is_guest_mode():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Guest Session",
+                "Guests cannot open Google Sheets while connected to a host.",
+            )
+            return
+
+        parsed = _parse_google_sheet_link(raw_link)
+        if parsed is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Google Sheets Link",
+                "Paste a valid docs.google.com/spreadsheets link.",
+            )
+            return
+
+        if self.model and self.model.is_dirty:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Save before connecting to Google Sheets?",
+                (
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No
+                    | QtWidgets.QMessageBox.StandardButton.Cancel
+                ),
+            )
+            if reply == QtWidgets.QMessageBox.StandardButton.Cancel:
+                return
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes and not self.save_file():
+                return
+
+        if not GOOGLE_SHEETS_AVAILABLE:
+            QtWidgets.QMessageBox.warning(self, "Google Sheets", _google_sheets_dependencies_error())
+            return
+        if not _google_sheets_client_configured():
+            self.google_sheets_guide_btn.setChecked(True)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Google Sheets",
+                "Import a Desktop OAuth JSON file first, then authorize Google once.",
+            )
+            return
+
+        if not self._ensure_google_sheets_authorized(interactive=False, show_errors=False):
+            prompt = QtWidgets.QMessageBox.question(
+                self,
+                "Google Login",
+                "Google Sheets needs a one-time browser login. Start that now?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if prompt != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            if not self._ensure_google_sheets_authorized(interactive=True):
+                return
+
+        spreadsheet_id, sheet_gid, canonical_link = parsed
+        self._stop_collaboration()
+        self._stop_google_sheets_session()
+        self.google_sheets_input.setText(canonical_link)
+        self._set_connect_controls_enabled(False)
+        if self.model is None:
+            self.dd.icon.setText("Connecting to Google Sheet...")
+        else:
+            self.status.showMessage("Connecting to Google Sheet...")
+
+        generation = int(self._google_sheet_fetch_generation) + 1
+        self._google_sheet_fetch_generation = generation
+        self._google_sheet_load_in_flight = True
+        self._run_google_sheet_task(
+            "google_load",
+            generation,
+            lambda sid=spreadsheet_id, gid=sheet_gid, username=self._local_username: _fetch_google_sheet_snapshot(
+                sid,
+                preferred_sheet_gid=gid,
+                interactive_auth=False,
+                local_username=username,
+            ),
+        )
+
+    def _google_sheet_rows_from_snapshot(self, snapshot: dict[str, t.Any]) -> list[list[t.Any]]:
+        if not isinstance(snapshot, dict):
+            return []
+        raw_rows = snapshot.get("rows")
+        if isinstance(raw_rows, list):
+            return _google_sheet_canonicalize_rows(raw_rows)
+        df = snapshot.get("df")
+        if isinstance(df, pd.DataFrame):
+            return _google_sheet_rows_from_dataframe(df)
+        return []
+
+    def _google_sheet_styles_from_snapshot(
+        self,
+        snapshot: dict[str, t.Any],
+    ) -> dict[tuple[int, int], dict[str, t.Any]]:
+        if not isinstance(snapshot, dict):
+            return {}
+        return _google_sheet_canonicalize_cell_styles(
+            _deserialize_cell_styles(snapshot.get("cell_styles"))
+        )
+
+    def _google_sheet_presence_from_snapshot(
+        self,
+        snapshot: dict[str, t.Any],
+    ) -> tuple[dict[str, tuple[int, int]], t.Optional[int], list[str]]:
+        if not isinstance(snapshot, dict):
+            return {}, None, []
+
+        raw_presence = snapshot.get("presence")
+        selections: dict[str, tuple[int, int]] = {}
+        if isinstance(raw_presence, dict):
+            for raw_name, raw_pos in raw_presence.items():
+                username = _normalize_username(raw_name)
+                if not username or not isinstance(raw_pos, (tuple, list)) or len(raw_pos) != 2:
+                    continue
+                try:
+                    row = int(raw_pos[0])
+                    col = int(raw_pos[1])
+                except Exception:
+                    continue
+                if row < 0 or col < 0:
+                    continue
+                selections[username] = (row, col)
+
+        local_presence_row = snapshot.get("local_presence_row")
+        try:
+            row_number = int(local_presence_row) if local_presence_row is not None else None
+        except Exception:
+            row_number = None
+
+        online_users: list[str] = []
+        seen_online: set[str] = set()
+        for raw_name in list(snapshot.get("online_users") or []):
+            username = _normalize_username(raw_name)
+            key = username.casefold()
+            if not username or key in seen_online:
+                continue
+            seen_online.add(key)
+            online_users.append(username)
+        return selections, row_number, online_users
+
+    def _apply_google_sheet_presence_state(self, snapshot: dict[str, t.Any]):
+        if not isinstance(snapshot, dict):
+            return
+        self._google_sheet_has_style_metadata = bool(snapshot.get("has_style_metadata") or False)
+        self._google_sheet_has_presence_metadata = bool(snapshot.get("has_presence_metadata") or False)
+        selections, local_row_number, online_users = self._google_sheet_presence_from_snapshot(snapshot)
+        self._google_sheet_remote_selections = selections
+        self._google_sheet_online_users = online_users
+        if local_row_number is not None:
+            self._google_sheet_local_presence_row = local_row_number
+        self._sync_remote_selection_overlay()
+        if self._is_google_sheets_mode():
+            self._apply_session_mode_ui()
+
+    def _set_google_sheet_remote_state(self, snapshot: dict[str, t.Any]) -> list[list[t.Any]]:
+        rows = self._google_sheet_rows_from_snapshot(snapshot)
+        cell_styles = self._google_sheet_styles_from_snapshot(snapshot)
+        self._google_sheet_spreadsheet_id = str(snapshot.get("spreadsheet_id") or "")
+        self._google_sheet_title = str(snapshot.get("spreadsheet_title") or "Google Sheet")
+        self._google_sheet_current_gid = snapshot.get("sheet_gid")
+        self._google_sheet_link = str(snapshot.get("spreadsheet_link") or "")
+        self._google_sheet_remote_rows = rows
+        self._google_sheet_remote_cell_styles = cell_styles
+        self._google_sheet_remote_hash = str(snapshot.get("remote_hash") or _google_sheet_rows_hash(rows))
+        self._google_sheet_last_metadata_refresh_ts = time.time()
+        self.google_sheets_input.setText(self._google_sheet_link)
+        self._apply_google_sheet_presence_state(snapshot)
+        return rows
+
+    def _apply_google_sheet_rows_to_model(
+        self,
+        rows: list[list[t.Any]],
+        *,
+        cell_styles: dict[tuple[int, int], dict[str, t.Any]],
+        sheet_name: str,
+        loaded_sheet_names: list[str],
+        status_message: str,
+        mark_dirty: bool,
+        keep_selection: bool = False,
+    ):
+        df = _google_sheet_values_to_dataframe(rows)
+        current_cell = self._local_selected_cell() if keep_selection else None
+        old_columns = list(self.model.df.columns) if self.model is not None else []
+        old_col_count = int(self.model.data_column_count()) if self.model is not None else -1
+
+        self._google_sheet_load_in_flight = False
+        self._google_sheet_applying_remote = True
+        try:
+            if self.model is None or self.model.source_format != GOOGLE_SHEETS_SOURCE_FORMAT:
+                self._install_dataframe_model(
+                    df,
+                    cell_styles=cell_styles,
+                    source_format=GOOGLE_SHEETS_SOURCE_FORMAT,
+                    xlsx_sheet_name=sheet_name,
+                    xlsx_base_font=None,
+                    loaded_sheet_names=loaded_sheet_names,
+                    title=self._google_sheet_title,
+                    status_message=status_message,
+                    current_path=None,
+                    mark_dirty=mark_dirty,
+                )
+            else:
+                self.current_path = None
+                self.controls.title_lbl.setText(self._google_sheet_title)
+                self.window().setWindowTitle(self._google_sheet_title)
+                self.model.replace_dataframe(
+                    df,
+                    cell_styles=cell_styles,
+                    source_format=GOOGLE_SHEETS_SOURCE_FORMAT,
+                    xlsx_sheet_name=sheet_name,
+                    xlsx_base_font=None,
+                    update_xlsx_base_font=True,
+                )
+                self.model.set_edit_actor(self._local_username)
+                self._set_sheet_selector(loaded_sheet_names, sheet_name)
+                self.refresh_dims_display()
+                self.status.showMessage(status_message)
+                self.model.is_dirty = bool(mark_dirty)
+                self.update_dirty_indicator()
+                self._update_edit_meta_indicator()
+                self._apply_session_mode_ui()
+        finally:
+            self._google_sheet_applying_remote = False
+
+        if keep_selection and current_cell is not None and self.model is not None:
+            row, col = current_cell
+            if 0 <= row < self.model.data_row_count() and 0 <= col < self.model.data_column_count():
+                self.table.setCurrentIndex(self.model.index(row, col))
+
+        if self.model is not None:
+            new_columns = list(self.model.df.columns)
+            column_shape_changed = old_col_count != int(self.model.data_column_count()) or old_columns != new_columns
+            if column_shape_changed:
+                self._suspend_row_resize_reactions = True
+                try:
+                    self.autosize_columns(force=True)
+                finally:
+                    self._suspend_row_resize_reactions = False
+            QtCore.QTimer.singleShot(0, self._autosize_all_rows)
+
+    def _apply_google_sheet_snapshot(
+        self,
+        snapshot: dict[str, t.Any],
+        *,
+        status_message: str,
+        keep_selection: bool = False,
+    ):
+        if not isinstance(snapshot, dict):
+            return
+
+        rows = self._set_google_sheet_remote_state(snapshot)
+        sheet_name = str(snapshot.get("sheet_name") or "Sheet1")
+        loaded_sheet_names = [str(name) for name in list(snapshot.get("sheet_names") or []) if str(name).strip()]
+        if not loaded_sheet_names:
+            loaded_sheet_names = [sheet_name]
+        self._apply_google_sheet_rows_to_model(
+            rows,
+            cell_styles=self._google_sheet_styles_from_snapshot(snapshot),
+            sheet_name=sheet_name,
+            loaded_sheet_names=loaded_sheet_names,
+            status_message=status_message,
+            mark_dirty=False,
+            keep_selection=keep_selection,
+        )
+        self._update_google_sheets_setup_status()
+        self._google_sheet_poll_timer.start()
+        self._google_sheet_presence_heartbeat_timer.start()
+        QtCore.QTimer.singleShot(0, lambda: self._queue_google_sheet_presence_sync(force=True))
+
+    def _stop_google_sheets_session(self):
+        self._google_sheet_sync_timer.stop()
+        self._google_sheet_presence_timer.stop()
+        self._google_sheet_presence_heartbeat_timer.stop()
+        self._google_sheet_poll_timer.stop()
+        self._sheet_reload_in_progress = False
+        self._google_sheet_fetch_generation += 1
+        self._google_sheet_push_generation += 1
+        self._google_sheet_presence_generation += 1
+        self._google_sheet_load_in_flight = False
+        self._google_sheet_push_in_flight = False
+        self._google_sheet_presence_in_flight = False
+        self._google_sheet_resync_requested = False
+        self._google_sheet_presence_resync_requested = False
+        self._google_sheet_presence_force_pending = False
+        self._google_sheet_spreadsheet_id = ""
+        self._google_sheet_title = ""
+        self._google_sheet_link = ""
+        self._google_sheet_current_gid = None
+        self._google_sheet_remote_hash = ""
+        self._google_sheet_remote_rows = []
+        self._google_sheet_remote_cell_styles = {}
+        self._google_sheet_remote_selections = {}
+        self._google_sheet_online_users = []
+        self._google_sheet_has_style_metadata = False
+        self._google_sheet_has_presence_metadata = False
+        self._google_sheet_last_metadata_refresh_ts = 0.0
+        self._google_sheet_local_presence_row = None
+        self._google_sheet_last_published_selection = None
+        self._google_sheet_pending_presence_selection = None
+        self._sync_remote_selection_overlay()
+        self._update_google_sheets_setup_status()
+
+    def _queue_google_sheet_sync(self, immediate: bool = False):
+        if not self._is_google_sheets_mode() or self.model is None:
+            return
+        if self._google_sheet_applying_remote or self._collab_is_applying_remote_snapshot:
+            return
+        if immediate:
+            self._google_sheet_sync_timer.stop()
+            self._flush_google_sheet_sync()
+            return
+        self._google_sheet_sync_timer.start()
+
+    def _queue_google_sheet_presence_sync(self, force: bool = False):
+        if not self._is_google_sheets_mode() or self.model is None:
+            return
+        if not str(self._google_sheet_spreadsheet_id or "").strip():
+            return
+        if self._google_sheet_applying_remote or self._collab_is_applying_remote_snapshot:
+            return
+        selected_cell = self._local_selected_cell()
+        self._google_sheet_pending_presence_selection = selected_cell
+        if (
+            not force
+            and not self._google_sheet_presence_in_flight
+            and selected_cell == self._google_sheet_last_published_selection
+        ):
+            return
+
+        self._google_sheet_presence_force_pending = self._google_sheet_presence_force_pending or bool(force)
+        if force:
+            self._google_sheet_presence_timer.stop()
+            self._flush_google_sheet_presence_sync()
+            return
+        self._google_sheet_presence_timer.start()
+
+    def _flush_google_sheet_sync(self):
+        if not self._is_google_sheets_mode() or self.model is None:
+            return
+        if self._google_sheet_applying_remote or self._collab_is_applying_remote_snapshot:
+            return
+        if self._google_sheet_push_in_flight:
+            self._google_sheet_resync_requested = True
+            return
+
+        spreadsheet_id = str(self._google_sheet_spreadsheet_id)
+        sheet_name = str(self.model.xlsx_sheet_name or "Sheet1")
+        local_rows = _google_sheet_rows_from_dataframe(self.model.df.copy(deep=True))
+        base_rows = _google_sheet_canonicalize_rows(self._google_sheet_remote_rows)
+        submitted_rows = _google_sheet_canonicalize_rows(local_rows)
+        local_styles = _google_sheet_canonicalize_cell_styles(self.model.cell_styles())
+        base_styles = _google_sheet_canonicalize_cell_styles(self._google_sheet_remote_cell_styles)
+        if submitted_rows == base_rows and _google_sheet_cell_styles_hash(local_styles) == _google_sheet_cell_styles_hash(base_styles):
+            self.model.is_dirty = False
+            self.status.showMessage("Google Sheets synced.", 1200)
+            return
+
+        submitted_hash = _google_sheet_rows_hash(submitted_rows)
+        submitted_style_hash = _google_sheet_cell_styles_hash(local_styles)
+        generation = int(self._google_sheet_push_generation) + 1
+        self._google_sheet_push_generation = generation
+        self._google_sheet_push_in_flight = True
+        self._google_sheet_resync_requested = False
+        self.status.showMessage("Syncing to Google Sheets...")
+        self._run_google_sheet_task(
+            "google_push",
+            generation,
+            lambda sid=spreadsheet_id, sn=sheet_name, gid=self._google_sheet_current_gid, base=base_rows, local=submitted_rows, base_styles=base_styles, local_styles=local_styles, submitted_hash=submitted_hash, submitted_style_hash=submitted_style_hash, has_style_metadata=bool(self._google_sheet_has_style_metadata): {
+                **_push_google_sheet_snapshot(
+                    sid,
+                    sn,
+                    gid,
+                    base,
+                    local,
+                    base_styles,
+                    local_styles,
+                    has_style_metadata=has_style_metadata,
+                ),
+                "submitted_hash": submitted_hash,
+                "submitted_style_hash": submitted_style_hash,
+            },
+        )
+
+    def _flush_google_sheet_presence_sync(self):
+        if not self._is_google_sheets_mode() or self.model is None:
+            return
+        if self._google_sheet_applying_remote or self._collab_is_applying_remote_snapshot:
+            return
+        if self._google_sheet_presence_in_flight:
+            self._google_sheet_presence_resync_requested = True
+            return
+
+        selected_cell = self._google_sheet_pending_presence_selection
+        force = bool(self._google_sheet_presence_force_pending)
+        self._google_sheet_presence_force_pending = False
+        if not force and selected_cell == self._google_sheet_last_published_selection:
+            return
+
+        spreadsheet_id = str(self._google_sheet_spreadsheet_id)
+        sheet_name = str(self.model.xlsx_sheet_name or "Sheet1")
+        generation = int(self._google_sheet_presence_generation) + 1
+        self._google_sheet_presence_generation = generation
+        self._google_sheet_presence_in_flight = True
+        self._google_sheet_presence_resync_requested = False
+        self._run_google_sheet_task(
+            "google_presence",
+            generation,
+            lambda sid=spreadsheet_id, sn=sheet_name, username=self._local_username, selection=selected_cell, has_presence_metadata=bool(self._google_sheet_has_presence_metadata), row_number=self._google_sheet_local_presence_row: {
+                **_push_google_sheet_presence(
+                    sid,
+                    sn,
+                    username,
+                    selection,
+                    has_presence_metadata=has_presence_metadata,
+                    row_number=row_number,
+                ),
+                "submitted_selection": selection,
+            },
+        )
+
+    def _start_google_sheet_poll(self):
+        if not self._is_google_sheets_mode() or self.model is None:
+            return
+        if self._google_sheet_load_in_flight or self._google_sheet_push_in_flight:
+            return
+        if self._is_table_editor_active():
+            return
+
+        spreadsheet_id = str(self._google_sheet_spreadsheet_id)
+        preferred_sheet_name = str(self.model.xlsx_sheet_name or "Sheet1")
+        preferred_gid = self._google_sheet_current_gid
+        generation = int(self._google_sheet_fetch_generation) + 1
+        self._google_sheet_fetch_generation = generation
+        self._google_sheet_load_in_flight = True
+        now_ts = time.time()
+        needs_metadata_refresh = (
+            ((not self._google_sheet_has_style_metadata) or (not self._google_sheet_has_presence_metadata))
+            and (now_ts - float(self._google_sheet_last_metadata_refresh_ts) >= 10.0)
+        )
+        if needs_metadata_refresh:
+            self._google_sheet_last_metadata_refresh_ts = now_ts
+            task_fn = lambda sid=spreadsheet_id, sn=preferred_sheet_name, gid=preferred_gid, username=self._local_username: _fetch_google_sheet_snapshot(
+                sid,
+                preferred_sheet_name=sn,
+                preferred_sheet_gid=gid,
+                interactive_auth=False,
+                local_username=username,
+            )
+        else:
+            task_fn = lambda sid=spreadsheet_id, sn=preferred_sheet_name, gid=preferred_gid, title=self._google_sheet_title, sheet_names=list(self._xlsx_sheet_names), has_style_metadata=bool(self._google_sheet_has_style_metadata), has_presence_metadata=bool(self._google_sheet_has_presence_metadata), username=self._local_username: _poll_google_sheet_snapshot(
+                sid,
+                sheet_name=sn,
+                sheet_gid=gid,
+                spreadsheet_title=title,
+                sheet_names=sheet_names,
+                has_style_metadata=has_style_metadata,
+                has_presence_metadata=has_presence_metadata,
+                local_username=username,
+            )
+        self._run_google_sheet_task(
+            "google_poll",
+            generation,
+            task_fn,
+        )
+
+    def _on_google_sheet_task_completed(self, action: str, generation: int, payload: t.Any):
+        if action == "google_load":
+            if int(generation) != int(self._google_sheet_fetch_generation):
+                return
+            self._google_sheet_load_in_flight = False
+            self._sheet_reload_in_progress = False
+            self._set_connect_controls_enabled(True)
+            self._apply_google_sheet_snapshot(payload, status_message="Connected to Google Sheets.")
+            return
+
+        if action == "google_switch":
+            if int(generation) != int(self._google_sheet_fetch_generation):
+                return
+            self._google_sheet_load_in_flight = False
+            self._sheet_reload_in_progress = False
+            self._set_connect_controls_enabled(True)
+            target_name = str((payload or {}).get("sheet_name") or "Sheet1")
+            self._apply_google_sheet_snapshot(
+                payload,
+                status_message=f"Loaded Google sheet tab: {target_name}",
+                keep_selection=False,
+            )
+            return
+
+        if action == "google_poll":
+            if int(generation) != int(self._google_sheet_fetch_generation):
+                return
+            self._google_sheet_load_in_flight = False
+            if not self._is_google_sheets_mode() or self.model is None:
+                return
+            remote_rows = self._google_sheet_rows_from_snapshot(payload)
+            remote_hash = str((payload or {}).get("remote_hash") or _google_sheet_rows_hash(remote_rows))
+            remote_styles = self._google_sheet_styles_from_snapshot(payload)
+            remote_style_hash = str((payload or {}).get("style_hash") or _google_sheet_cell_styles_hash(remote_styles))
+            self._apply_google_sheet_presence_state(payload)
+            if (
+                remote_hash
+                and remote_hash == self._google_sheet_remote_hash
+                and remote_style_hash == _google_sheet_cell_styles_hash(self._google_sheet_remote_cell_styles)
+            ):
+                return
+
+            base_rows = _google_sheet_canonicalize_rows(self._google_sheet_remote_rows)
+            local_rows = _google_sheet_rows_from_dataframe(self.model.df)
+            merged_rows, remote_applied_count, conflict_count = _google_sheet_three_way_merge_rows(
+                base_rows,
+                local_rows,
+                remote_rows,
+            )
+            base_styles = _google_sheet_canonicalize_cell_styles(self._google_sheet_remote_cell_styles)
+            local_styles = _google_sheet_canonicalize_cell_styles(self.model.cell_styles())
+            merged_styles, remote_style_applied_count, style_conflict_count = _google_sheet_merge_cell_styles(
+                base_styles,
+                local_styles,
+                remote_styles,
+            )
+            self._google_sheet_remote_rows = remote_rows
+            self._google_sheet_remote_cell_styles = remote_styles
+            self._google_sheet_remote_hash = remote_hash
+            merged_hash = _google_sheet_rows_hash(merged_rows)
+            merged_style_hash = _google_sheet_cell_styles_hash(merged_styles)
+            local_style_hash = _google_sheet_cell_styles_hash(local_styles)
+            mark_dirty = merged_hash != remote_hash or merged_style_hash != remote_style_hash
+
+            if merged_hash != _google_sheet_rows_hash(local_rows) or merged_style_hash != local_style_hash:
+                sheet_name = str((payload or {}).get("sheet_name") or self.model.xlsx_sheet_name or "Sheet1")
+                loaded_sheet_names = [str(name) for name in list((payload or {}).get("sheet_names") or self._xlsx_sheet_names) if str(name).strip()]
+                if not loaded_sheet_names:
+                    loaded_sheet_names = [sheet_name]
+                status_message = "Updated from Google Sheets."
+                total_conflicts = int(conflict_count) + int(style_conflict_count)
+                if total_conflicts > 0:
+                    status_message = f"Updated from Google Sheets. Remote kept {total_conflicts} concurrent change(s)."
+                self._apply_google_sheet_rows_to_model(
+                    merged_rows,
+                    cell_styles=merged_styles,
+                    sheet_name=sheet_name,
+                    loaded_sheet_names=loaded_sheet_names,
+                    status_message=status_message,
+                    mark_dirty=mark_dirty,
+                    keep_selection=True,
+                )
+            elif (
+                remote_applied_count > 0
+                or remote_style_applied_count > 0
+            ) and conflict_count <= 0 and style_conflict_count <= 0:
+                self.status.showMessage("Updated from Google Sheets.", 1600)
+            self.model.is_dirty = bool(mark_dirty)
+            return
+
+        if action == "google_push":
+            if int(generation) != int(self._google_sheet_push_generation):
+                return
+            self._google_sheet_push_in_flight = False
+            remote_rows = self._google_sheet_rows_from_snapshot(payload)
+            remote_hash = str((payload or {}).get("remote_hash") or _google_sheet_rows_hash(remote_rows))
+            remote_styles = self._google_sheet_styles_from_snapshot(payload)
+            remote_style_hash = str((payload or {}).get("style_hash") or _google_sheet_cell_styles_hash(remote_styles))
+            if isinstance(payload, dict) and "has_style_metadata" in payload:
+                self._google_sheet_has_style_metadata = bool(payload.get("has_style_metadata"))
+            if remote_hash:
+                self._google_sheet_remote_hash = remote_hash
+                self._google_sheet_remote_rows = remote_rows
+                self._google_sheet_remote_cell_styles = remote_styles
+
+            if self._is_google_sheets_mode() and self.model is not None:
+                current_rows = _google_sheet_rows_from_dataframe(self.model.df)
+                current_hash = _google_sheet_rows_hash(current_rows)
+                current_styles = _google_sheet_canonicalize_cell_styles(self.model.cell_styles())
+                current_style_hash = _google_sheet_cell_styles_hash(current_styles)
+                submitted_hash = str((payload or {}).get("submitted_hash") or "")
+                submitted_style_hash = str((payload or {}).get("submitted_style_hash") or "")
+                conflict_count = int((payload or {}).get("conflict_count") or 0)
+                remote_applied_count = int((payload or {}).get("remote_applied_count") or 0)
+                style_conflict_count = int((payload or {}).get("style_conflict_count") or 0)
+                remote_style_applied_count = int((payload or {}).get("remote_style_applied_count") or 0)
+
+                if submitted_hash and current_hash == submitted_hash and current_style_hash == submitted_style_hash:
+                    if current_hash != remote_hash or current_style_hash != remote_style_hash:
+                        sheet_name = str((payload or {}).get("sheet_name") or self.model.xlsx_sheet_name or "Sheet1")
+                        loaded_sheet_names = list(self._xlsx_sheet_names) or [sheet_name]
+                        status_message = "Google Sheets synced."
+                        total_conflicts = int(conflict_count) + int(style_conflict_count)
+                        if total_conflicts > 0:
+                            status_message = f"Google Sheets synced. Remote kept {total_conflicts} concurrent change(s)."
+                        elif remote_applied_count > 0 or remote_style_applied_count > 0:
+                            status_message = "Google Sheets synced with remote updates."
+                        self._apply_google_sheet_rows_to_model(
+                            remote_rows,
+                            cell_styles=remote_styles,
+                            sheet_name=sheet_name,
+                            loaded_sheet_names=loaded_sheet_names,
+                            status_message=status_message,
+                            mark_dirty=False,
+                            keep_selection=True,
+                        )
+                    if self.model is not None:
+                        self.model.is_dirty = False
+                    if (
+                        conflict_count <= 0
+                        and remote_applied_count <= 0
+                        and style_conflict_count <= 0
+                        and remote_style_applied_count <= 0
+                    ):
+                        self.status.showMessage("Google Sheets synced.", 1800)
+                else:
+                    self._google_sheet_resync_requested = True
+
+            if self._google_sheet_resync_requested:
+                self._google_sheet_resync_requested = False
+                self._queue_google_sheet_sync(immediate=True)
+            return
+
+        if action == "google_presence":
+            if int(generation) != int(self._google_sheet_presence_generation):
+                return
+            self._google_sheet_presence_in_flight = False
+            if isinstance(payload, dict):
+                if "has_presence_metadata" in payload:
+                    self._google_sheet_has_presence_metadata = bool(payload.get("has_presence_metadata"))
+                local_row = payload.get("local_presence_row")
+                try:
+                    self._google_sheet_local_presence_row = int(local_row) if local_row is not None else None
+                except Exception:
+                    self._google_sheet_local_presence_row = None
+                submitted_selection = payload.get("submitted_selection")
+                if isinstance(submitted_selection, (tuple, list)) and len(submitted_selection) == 2:
+                    try:
+                        self._google_sheet_last_published_selection = (
+                            int(submitted_selection[0]),
+                            int(submitted_selection[1]),
+                        )
+                    except Exception:
+                        self._google_sheet_last_published_selection = None
+                else:
+                    self._google_sheet_last_published_selection = None
+            if self._google_sheet_presence_resync_requested:
+                self._google_sheet_presence_resync_requested = False
+                self._queue_google_sheet_presence_sync(force=True)
+            return
+
+    def _on_google_sheet_task_failed(self, action: str, generation: int, error_message: str):
+        if action in ("google_load", "google_switch", "google_poll") and int(generation) != int(self._google_sheet_fetch_generation):
+            return
+        if action == "google_push" and int(generation) != int(self._google_sheet_push_generation):
+            return
+        if action == "google_presence" and int(generation) != int(self._google_sheet_presence_generation):
+            return
+
+        if action in ("google_load", "google_switch", "google_poll"):
+            self._google_sheet_load_in_flight = False
+            self._sheet_reload_in_progress = False
+        if action == "google_push":
+            self._google_sheet_push_in_flight = False
+        if action == "google_presence":
+            self._google_sheet_presence_in_flight = False
+
+        self._set_connect_controls_enabled(True)
+        if action == "google_load" and self.model is None:
+            self.dd.icon.setText("Google Sheets connection failed. Check auth or link and retry.")
+        if action == "google_switch" and self.model is not None:
+            self.sheet_combo.blockSignals(True)
+            self.sheet_combo.setCurrentText(self.model.xlsx_sheet_name if self.model else "")
+            self.sheet_combo.blockSignals(False)
+        if error_message:
+            self.status.showMessage(error_message, 5000)
+
+    def _flush_google_sheet_sync_before_navigation(self) -> bool:
+        if not self._is_google_sheets_mode():
+            return True
+        if (
+            self.model is not None
+            and not self.model.is_dirty
+            and not self._google_sheet_sync_timer.isActive()
+            and not self._google_sheet_push_in_flight
+        ):
+            return True
+        self._queue_google_sheet_sync(immediate=True)
+        deadline = time.time() + 6.0
+        while self._google_sheet_push_in_flight and time.time() < deadline:
+            QtWidgets.QApplication.processEvents(
+                QtCore.QEventLoop.ProcessEventsFlag.AllEvents,
+                50,
+            )
+            time.sleep(0.02)
+        return not self._google_sheet_push_in_flight
 
     @staticmethod
     def _tsv_escape_cell(text: str) -> str:
@@ -5361,6 +7669,25 @@ class DataViewerPage(QtWidgets.QWidget):
 
         return 0
 
+    def _google_online_usernames_for_ui(self) -> list[str]:
+        if not self._is_google_sheets_mode() or self.model is None:
+            return []
+
+        names: list[str] = []
+        seen: set[str] = set()
+
+        for raw_name in [self._local_username, *self._google_sheet_online_users, *sorted(self._google_sheet_remote_selections.keys())]:
+            username = _normalize_username(raw_name)
+            key = username.casefold()
+            if not username or key in seen:
+                continue
+            seen.add(key)
+            names.append(username)
+        return names
+
+    def _google_online_total_for_ui(self) -> int:
+        return len(self._google_online_usernames_for_ui())
+
     def _username_tooltip_html(self, username: str) -> str:
         safe_username = _normalize_username(username)
         text = html.escape(safe_username)
@@ -5369,6 +7696,20 @@ class DataViewerPage(QtWidgets.QWidget):
         return f'<span style="color: {color_hex}; font-weight: 600;">{text}</span>'
 
     def _build_share_people_tooltip_html(self) -> str:
+        if self._is_google_sheets_mode():
+            online_names = self._google_online_usernames_for_ui()
+            total_people = len(online_names)
+            if total_people <= 0:
+                return ""
+            names_html = ", ".join(self._username_tooltip_html(name) for name in online_names)
+            return (
+                "<div style='white-space: nowrap;'>"
+                f"<b>{total_people} online</b><br/>"
+                f"Connected: {names_html}<br/>"
+                "Click to copy the Google Sheets link"
+                "</div>"
+            )
+
         if self._session_role not in ("host", "guest"):
             return ""
         if self._session_role == "guest" and not self._collab_client_connected:
@@ -5422,10 +7763,12 @@ class DataViewerPage(QtWidgets.QWidget):
     def _on_table_current_changed(self, _current: QtCore.QModelIndex, _previous: QtCore.QModelIndex):
         self._update_edit_meta_indicator()
         self._queue_collab_presence_broadcast()
+        self._queue_google_sheet_presence_sync()
 
     def _on_table_selection_changed(self, _selected: QtCore.QItemSelection, _deselected: QtCore.QItemSelection):
         self._update_edit_meta_indicator()
         self._queue_collab_presence_broadcast()
+        self._queue_google_sheet_presence_sync()
 
     def _local_selected_cell(self) -> t.Optional[tuple[int, int]]:
         if not self.model:
@@ -5471,10 +7814,13 @@ class DataViewerPage(QtWidgets.QWidget):
             self.edit_meta_indicator.hide()
 
     def _sync_remote_selection_overlay(self):
-        self.table.set_remote_selections(dict(self._collab_remote_selections))
+        combined = dict(self._collab_remote_selections)
+        combined.update(self._google_sheet_remote_selections)
+        self.table.set_remote_selections(combined)
 
     def _clear_remote_selections(self):
         self._collab_remote_selections.clear()
+        self._google_sheet_remote_selections.clear()
         self.table.clear_remote_selections()
 
     def _queue_collab_presence_broadcast(self, force: bool = False):
@@ -5567,6 +7913,7 @@ class DataViewerPage(QtWidgets.QWidget):
     def _apply_session_mode_ui(self):
         has_model = self.model is not None
         is_guest = self._is_guest_mode()
+        is_google = self._is_google_sheets_mode()
 
         self.controls.back_btn.setVisible(has_model)
         self.controls.back_btn.setEnabled(has_model)
@@ -5585,6 +7932,12 @@ class DataViewerPage(QtWidgets.QWidget):
                 self.controls.share_btn.setText(f"Connected to {host_name} \u2022 {total_people} online")
             else:
                 self.controls.share_btn.setText(f"Connected to {host_name}")
+        elif is_google:
+            total_people = self._google_online_total_for_ui()
+            if total_people > 0:
+                self.controls.share_btn.setText(f"\u2197 Share \u2022 {total_people} online")
+            else:
+                self.controls.share_btn.setText("\u2197 Share")
         else:
             self.controls.share_btn.setText("\u2197 Share")
 
@@ -5600,6 +7953,8 @@ class DataViewerPage(QtWidgets.QWidget):
             self.controls.share_btn.setToolTip("Connected session participants")
         elif is_guest:
             self.controls.share_btn.setToolTip("Connecting to host")
+        elif is_google:
+            self.controls.share_btn.setToolTip("Google Sheets collaborators")
         else:
             self.controls.share_btn.setToolTip("Start hosting and copy share link")
         self._update_share_button_visual_state()
@@ -5607,8 +7962,23 @@ class DataViewerPage(QtWidgets.QWidget):
         self.btn_open.setEnabled(not is_guest)
         self.dd.set_drop_enabled(not is_guest)
         self.connect_container.setVisible(not has_model)
-        self._set_connect_controls_enabled((not self._collab_connecting) and (not self._collab_client_connected))
-        self.sheet_combo.setEnabled((not is_guest) and len(self._xlsx_sheet_names) > 1)
+        self._set_connect_controls_enabled(
+            (not self._collab_connecting)
+            and (not self._collab_client_connected)
+            and (not self._google_sheet_load_in_flight)
+        )
+        if has_model and self.model.source_format in [".xlsx", ".xls", GOOGLE_SHEETS_SOURCE_FORMAT]:
+            current_sheet = str(self.model.xlsx_sheet_name or "").strip()
+            normalized_names = self._normalized_sheet_selector_names(self._xlsx_sheet_names, current_sheet)
+            if normalized_names != self._xlsx_sheet_names:
+                self._set_sheet_selector(normalized_names, current_sheet)
+            elif is_google and current_sheet and not self.sheet_selector_widget.isVisible():
+                self._set_sheet_selector(normalized_names, current_sheet)
+        self.sheet_combo.setEnabled(
+            (not is_guest)
+            and bool(self._xlsx_sheet_names)
+            and (is_google or len(self._xlsx_sheet_names) > 1)
+        )
         if not has_model:
             self.edit_meta_indicator.hide()
         self.controls.sync_title_balance()
@@ -5626,6 +7996,7 @@ class DataViewerPage(QtWidgets.QWidget):
         if self._collab_is_applying_remote_snapshot:
             return
         self._queue_collab_snapshot_broadcast(immediate=False)
+        self._queue_google_sheet_sync(immediate=False)
 
     def _queue_collab_snapshot_broadcast(self, immediate: bool = False):
         if self._collab_is_applying_remote_snapshot:
@@ -5758,7 +8129,7 @@ class DataViewerPage(QtWidgets.QWidget):
         self.refresh_dims_display()
         self.table.setItemDelegate(HighlightDelegate(self.model))
 
-        if source_format in [".xlsx", ".xls"]:
+        if source_format in [".xlsx", ".xls", GOOGLE_SHEETS_SOURCE_FORMAT]:
             self._set_sheet_selector(loaded_sheet_names, xlsx_sheet_name)
         else:
             self._set_sheet_selector([], None)
@@ -5928,6 +8299,18 @@ class DataViewerPage(QtWidgets.QWidget):
         if not self.model:
             QtWidgets.QMessageBox.information(self, "Nothing to Share", "Open a file before sharing.")
             return
+        if self._is_google_sheets_mode():
+            if not self._google_sheet_link:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Nothing to Share",
+                    "No Google Sheets link is associated with this session yet.",
+                )
+                return
+            clipboard = QtWidgets.QApplication.clipboard()
+            clipboard.setText(self._google_sheet_link)
+            self.status.showMessage("Google Sheets link copied to clipboard.", 3500)
+            return
         if not self._start_host_session():
             QtWidgets.QMessageBox.warning(self, "Share Error", "Could not start host session.")
             return
@@ -6002,6 +8385,7 @@ class DataViewerPage(QtWidgets.QWidget):
                 return
 
         self._stop_collaboration()
+        self._stop_google_sheets_session()
         if self.model is not None:
             self.table.setModel(None)
             self._bind_table_selection_model()
@@ -6046,7 +8430,7 @@ class DataViewerPage(QtWidgets.QWidget):
                 self._session_role = "local"
                 self._set_connect_controls_enabled(True)
                 if self.model is None:
-                    self.dd.icon.setText("Drop a file or connect to a host")
+                    self.dd.icon.setText("Drop a file or connect below")
             if self._collab_client is not None and not self._collab_client.is_connected():
                 self._collab_client = None
             self._collab_last_sent_selection = None
@@ -6061,7 +8445,7 @@ class DataViewerPage(QtWidgets.QWidget):
         if message:
             self.status.showMessage(message, 5000)
         if self._session_role == "guest" and self.model is None:
-            self.dd.icon.setText("Connection failed. Paste a host link and retry.")
+            self.dd.icon.setText("Connection failed. Paste a host link below and retry.")
             self._set_connect_controls_enabled(True)
         self._apply_session_mode_ui()
 
@@ -6219,19 +8603,44 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def shutdown(self):
         self._stop_collaboration()
+        self._stop_google_sheets_session()
+
+    @staticmethod
+    def _normalized_sheet_selector_names(
+        sheet_names: list[str],
+        selected_sheet: t.Optional[str],
+    ) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for raw_name in list(sheet_names or []):
+            name = str(raw_name or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        selected = str(selected_sheet or "").strip()
+        if selected and selected not in seen:
+            names.append(selected)
+        return names
 
     def _set_sheet_selector(self, sheet_names: list[str], selected_sheet: t.Optional[str]):
-        self._xlsx_sheet_names = list(sheet_names)
+        current_sheet = str(selected_sheet or (self.model.xlsx_sheet_name if self.model else "") or "").strip()
+        self._xlsx_sheet_names = self._normalized_sheet_selector_names(sheet_names, current_sheet)
         has_any = len(self._xlsx_sheet_names) > 0
+        is_google = self._is_google_sheets_mode()
         self._set_sheet_selector_visible(has_any)
-        self.sheet_combo.setEnabled((not self._is_guest_mode()) and has_any and len(self._xlsx_sheet_names) > 1)
+        self.sheet_combo.setEnabled(
+            (not self._is_guest_mode())
+            and has_any
+            and (is_google or len(self._xlsx_sheet_names) > 1)
+        )
 
         self.sheet_combo.blockSignals(True)
         self.sheet_combo.clear()
         if has_any:
             self.sheet_combo.addItems(self._xlsx_sheet_names)
-            if selected_sheet and selected_sheet in self._xlsx_sheet_names:
-                self.sheet_combo.setCurrentText(selected_sheet)
+            if current_sheet and current_sheet in self._xlsx_sheet_names:
+                self.sheet_combo.setCurrentText(current_sheet)
             elif self._xlsx_sheet_names:
                 self.sheet_combo.setCurrentIndex(0)
         else:
@@ -6241,6 +8650,14 @@ class DataViewerPage(QtWidgets.QWidget):
 
     def _set_sheet_selector_visible(self, visible: bool):
         value = bool(visible)
+        try:
+            self.sheet_selector_action.setVisible(value)
+        except Exception:
+            pass
+        try:
+            self.sheet_selector_widget.setVisible(value)
+        except Exception:
+            pass
         self.sheet_label.setVisible(value)
         self.sheet_combo.setVisible(value)
         try:
@@ -6251,15 +8668,53 @@ class DataViewerPage(QtWidgets.QWidget):
             self.sheet_selector_separator_after.setVisible(value)
         except Exception:
             pass
+        try:
+            self.toolbar.updateGeometry()
+            self.toolbar.adjustSize()
+        except Exception:
+            pass
 
     def _on_sheet_changed(self, sheet_name: str):
         if self._is_guest_mode():
             return
         if self._sheet_reload_in_progress:
             return
-        if not sheet_name or not self.current_path or self.current_path.suffix.lower() not in [".xlsx", ".xls"]:
+        if not sheet_name:
             return
         if self.model and self.model.xlsx_sheet_name == sheet_name:
+            return
+
+        if self._is_google_sheets_mode():
+            if not self._flush_google_sheet_sync_before_navigation():
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Google Sheets",
+                    "Could not finish syncing the current tab before switching sheets.",
+                )
+                self.sheet_combo.blockSignals(True)
+                self.sheet_combo.setCurrentText(self.model.xlsx_sheet_name if self.model else "")
+                self.sheet_combo.blockSignals(False)
+                return
+
+            self._sheet_reload_in_progress = True
+            self._set_connect_controls_enabled(False)
+            self.status.showMessage(f"Loading Google sheet tab '{sheet_name}'...")
+            generation = int(self._google_sheet_fetch_generation) + 1
+            self._google_sheet_fetch_generation = generation
+            self._google_sheet_load_in_flight = True
+            self._run_google_sheet_task(
+                "google_switch",
+                generation,
+                lambda sid=str(self._google_sheet_spreadsheet_id), sn=sheet_name, username=self._local_username: _fetch_google_sheet_snapshot(
+                    sid,
+                    preferred_sheet_name=sn,
+                    interactive_auth=False,
+                    local_username=username,
+                ),
+            )
+            return
+
+        if not self.current_path or self.current_path.suffix.lower() not in [".xlsx", ".xls"]:
             return
 
         if self.model and self.model.is_dirty:
@@ -6306,6 +8761,7 @@ class DataViewerPage(QtWidgets.QWidget):
     def reset_viewer(self):
         """Clear all loaded data and return to drag-and-drop screen"""
         self._stop_collaboration()
+        self._stop_google_sheets_session()
         # Clear the model
         if self.model:
             self.table.setModel(None)
@@ -6819,6 +9275,8 @@ class DataViewerPage(QtWidgets.QWidget):
                 "Guests cannot open local files while connected to a host.",
             )
             return
+        if self._is_google_sheets_mode():
+            self._stop_google_sheets_session()
 
         self._hide_background_indicator()
         self.dd.icon.setText("Loading...")
@@ -6950,6 +9408,19 @@ class DataViewerPage(QtWidgets.QWidget):
             QtWidgets.QMessageBox.information(self, "Nothing to save", "Open a file first.")
             return False
 
+        if self._is_google_sheets_mode():
+            if not self._flush_google_sheet_sync_before_navigation():
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Google Sheets",
+                    "Sync is still in progress or failed. Try saving again in a moment.",
+                )
+                return False
+            if self.model is not None:
+                self.model.is_dirty = False
+            self.status.showMessage("Synced to Google Sheets.", 2500)
+            return True
+
         target_path = self.current_path
         if target_path is None:
             base_name = self.controls.title_lbl.text().strip() or "shared_data"
@@ -6981,9 +9452,13 @@ class DataViewerPage(QtWidgets.QWidget):
             return
         prefer_xlsx = (
             self.model.source_format == ".xlsx"
-            or (self.model.source_format in [".csv", ".jsonl"] and self.model.has_cell_styles())
+            or (
+                self.model.source_format in [".csv", ".jsonl", GOOGLE_SHEETS_SOURCE_FORMAT]
+                and self.model.has_cell_styles()
+            )
         )
-        default_path = self.current_path or (Path.home() / "data.csv")
+        default_stem = Path(self.controls.title_lbl.text().strip() or "data").stem or "data"
+        default_path = self.current_path or (Path.home() / f"{default_stem}.csv")
         if prefer_xlsx:
             default_path = default_path.with_suffix(".xlsx")
             file_filter = "Excel (*.xlsx);;CSV (*.csv);;JSON Lines (*.jsonl)"
@@ -8021,7 +10496,10 @@ class DataViewerPage(QtWidgets.QWidget):
             is_dirty = self.model.is_dirty
         
         if is_dirty:
-            self.dirty_indicator.setText("⚠️ Unsaved changes")
+            if self._is_google_sheets_mode():
+                self.dirty_indicator.setText("Sync pending")
+            else:
+                self.dirty_indicator.setText("⚠️ Unsaved changes")
             self.dirty_indicator.show()
         else:
             self.dirty_indicator.hide()

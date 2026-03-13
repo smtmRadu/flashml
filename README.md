@@ -196,7 +196,7 @@ ENV_NAME="ml"
 
 echo "==== 1. Installing essential system packages ===="
 apt-get update
-apt-get install -y build-essential curl git bzip2 wget nvtop
+apt-get install -y build-essential nano curl git bzip2 wget nvtop
 
 echo "==== 2. Checking if Anaconda is installed ===="
 # Logic Fix: Check if the DIRECTORY exists to determine if we need to install

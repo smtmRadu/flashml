@@ -33,6 +33,11 @@ def sample_elementwise(*sequences: Sequence, num_samples: int, with_replacement:
     return sampled_lists
 
 
+def shuffle_list(lst: list) -> list:
+    import random
+    shuffled = lst.copy()
+    random.shuffle(shuffled)
+    return shuffled
 
 def sample_from(items: Sequence, num_samples, probs: Sequence = None, with_replacement=False):
     """

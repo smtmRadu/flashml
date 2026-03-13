@@ -35,6 +35,9 @@ dependencies = [
     "spacy",
     "openai",
     "google-genai",
+    "google-api-python-client",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
     "nbformat",
     "thefuzz", # used for fuzzy matching 
     "kneed", # used to find the best number of clusters for K-means clustering
@@ -46,7 +49,7 @@ dependencies = [
     "evaluate",
     "fuzzywuzzy",
     "python-Levenshtein",
-
+    "optimum", # for gptq quantization
    
 
     # do not add flash_attn, xformers etc.

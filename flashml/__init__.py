@@ -13,6 +13,7 @@ from .main_tools.lorem_ipsum import lorem_ipsum, lorem_ipsum_en
 from .main_tools.manipulation import (
     sample_from,
     sample_elementwise,
+    shuffle_list,
     shuffle_df,
     shuffle_tensor,
     reorder_df_columns,
@@ -78,7 +79,9 @@ __all__ = [
     "sample_elementwise",
     "sample_from",
     "send_telegram_notification",
+    
     "shuffle_df",
+    "shuffle_list",
     "shuffle_tensor",
     "stress_cpu",
     "stress_gpu",
