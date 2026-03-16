@@ -260,3 +260,18 @@ MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
 }
 
 
+NVIDIA_NEMOTRON_3_SUPER_VLLM_CONFIG = {
+    "model": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
+    "temperature": 1,
+    "top_p": 0.95,
+    "max_model_len": 81_920,
+    "max_completion_tokens": 61_440,
+    
+    "gpu-memory-utilization": 0.9,
+    "data-parallel-size": 1,
+    "pileline-parallel=size": 1,
+    "tensor-parallel-size": 1,
+    "async-scheduling": "",
+    "kv-cache-dtype": "fp8"
+    
+}

@@ -63,7 +63,7 @@ except Exception:
     GoogleHttpError = Exception
     GOOGLE_SHEETS_AVAILABLE = False
 
-APP_NAME = "Better Excel v2.0 beta2"
+APP_NAME = "Better Excel v2.0 beta3"
 WINDOWS_APP_ID = "flashml.BetterExcel"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 430
@@ -3473,8 +3473,8 @@ class DataFrameModel(QtCore.QAbstractTableModel):
                         if r % 2 == 1:
                             base_color = base_color.darker(150)
 
-            text = "" if _is_missing_value(val) else str(val).lower()
-            if self.search_term and self.search_term.lower() in text:
+            text = "" if _is_missing_value(val) else str(val)
+            if self._search_occurrence_count(text) > 0:
                 highlight = QtGui.QColor(255, 255, 150, 120)
                 if base_color.alpha() == 0:
                     base_color = highlight
@@ -3538,6 +3538,15 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     # --------------------------------------------------------------------- #
     #  SEARCH & MATCH LOGIC
     # --------------------------------------------------------------------- #
+    def _search_occurrence_count(self, text: str) -> int:
+        if not self.search_term:
+            return 0
+        haystack = str(text)
+        needle = str(self.search_term)
+        if self.case_sensitive:
+            return int(haystack.count(needle))
+        return int(haystack.lower().count(needle.lower()))
+
     def set_search_term(self, term: str):
         # Allow spaces, but treat empty or whitespace-only as empty search
         if not term:  # if term is empty string
@@ -3557,31 +3566,16 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._match_occurrence_total = 0
         if not self.search_term:
             return
-        
-        if self.case_sensitive:
-            st = self.search_term
-            for r in range(self.data_row_count()):
-                for c in range(self.columnCount() - 1):  # Exclude "+" column
-                    val = self._df.iat[r, c]
-                    if _is_missing_value(val):
-                        continue
-                    text = str(val)
-                    occ = int(text.count(st))
-                    if occ > 0:
-                        self._matches.append(self.index(r, c))
-                        self._match_occurrence_total += occ
-        else:
-            st = self.search_term.lower()
-            for r in range(self.data_row_count()):
-                for c in range(self.columnCount() - 1):  # Exclude "+" column
-                    val = self._df.iat[r, c]
-                    if _is_missing_value(val):
-                        continue
-                    text = str(val)
-                    occ = int(text.lower().count(st))
-                    if occ > 0:
-                        self._matches.append(self.index(r, c))
-                        self._match_occurrence_total += int(occ)
+
+        for r in range(self.data_row_count()):
+            for c in range(self.columnCount() - 1):  # Exclude "+" column
+                val = self._df.iat[r, c]
+                if _is_missing_value(val):
+                    continue
+                occ = self._search_occurrence_count(str(val))
+                if occ > 0:
+                    self._matches.append(self.index(r, c))
+                    self._match_occurrence_total += occ
 
     def match_at(self, pos: int) -> t.Optional[QtCore.QModelIndex]:
         if 0 <= pos < len(self._matches):
