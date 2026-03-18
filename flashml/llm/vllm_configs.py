@@ -272,6 +272,4 @@ NVIDIA_NEMOTRON_3_SUPER_VLLM_CONFIG = {
     "tensor-parallel-size": 1,
     "async-scheduling": "",
     "kv-cache-dtype": "fp8"
-    
 } 
-}

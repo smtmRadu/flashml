@@ -2,10 +2,63 @@ from typing import Literal
 import os 
 import shutil
 import json
+from importlib.metadata import PackageNotFoundError, version
+
+from packaging.version import parse as parse_version
 GREEN = '\033[32m'
 RESET = '\033[0m'
 BLUE = '\033[34m'
 RED = "\033[31m"
+
+
+def _package_version_or_none(package_name: str):
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return None
+
+
+def _uses_cpu_only(device_map) -> bool:
+    if device_map == "cpu":
+        return True
+    if isinstance(device_map, dict):
+        return all(str(value).lower() == "cpu" for value in device_map.values())
+    return False
+
+
+def _ensure_gptq_backend_available(device_map) -> None:
+    optimum_version = _package_version_or_none("optimum")
+    gptqmodel_version = _package_version_or_none("gptqmodel")
+    auto_gptq_version = _package_version_or_none("auto-gptq")
+
+    if optimum_version is None:
+        raise ImportError(
+            "GPTQ quantization requires `optimum`. Install it with "
+            "`python -m pip install 'optimum>=1.24.0'`."
+        )
+
+    if gptqmodel_version is None and auto_gptq_version is None:
+        raise ImportError(
+            "GPTQ quantization requires `gptqmodel` or `auto-gptq`, but neither is installed. "
+            "Install a backend first, for example "
+            "`python -m pip install 'gptqmodel>=1.4.3' 'transformers>=4.57.1,<5'`."
+        )
+
+    if gptqmodel_version is not None and parse_version(optimum_version) < parse_version("1.24.0"):
+        raise ImportError(
+            f"`gptqmodel` requires `optimum>=1.24.0`, found {optimum_version}."
+        )
+
+    if (
+        _uses_cpu_only(device_map)
+        and gptqmodel_version is None
+        and auto_gptq_version is not None
+        and parse_version(auto_gptq_version) < parse_version("0.4.2")
+    ):
+        raise ImportError(
+            f"CPU GPTQ quantization requires `gptqmodel` or `auto-gptq>=0.4.2`, found auto-gptq "
+            f"{auto_gptq_version}."
+        )
 
 
 def quantize_model(model_path, device_map="auto", quantization:Literal["bnb_4bit", "gptq_2bit", "gptq_3bit","gptq_4bit","gptq_8bit"]="bnb_4bit", calibration_set:list[str]=None):
@@ -75,6 +128,7 @@ def quantize_model(model_path, device_map="auto", quantization:Literal["bnb_4bit
     elif quantization.startswith("gptq_"):
         if calibration_set is None:
             raise ValueError("GPTQ quantization requires a calibration dataset")
+        _ensure_gptq_backend_available(device_map)
 
         from transformers import AutoTokenizer, GPTQConfig
         from transformers import AutoModelForCausalLM
@@ -158,6 +212,7 @@ def _quantize_mistral_model(model_path, device_map, quantization:Literal["bnb_4b
         if os.path.exists(tokenizer_config_path):
             shutil.copy(tokenizer_config_path, new_folder + "/tokenizer_config.json")
     elif quantization.startswith("gptq_"):
+        _ensure_gptq_backend_available(device_map)
         from transformers import GPTQConfig
         print(f"{BLUE}[Step 1] Loading {RED}(model) {model_path}{RESET} ...")
         

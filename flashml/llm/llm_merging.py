@@ -147,6 +147,6 @@ def _merge_unsloth_model(adapter_path: str, device_map="auto", save_method:Liter
     
     
     if "ministral" in base_model_path_or_path.lower():
-        print("✅ Merge complete! Remember to add .json files to the merge of ministral 3b model!!!")
+        print("✅ Merge complete! Remember to replace all .json files to the merge (fp16) of ministral 3b model!!!")
     else:
         print("✅ Merge complete!")

@@ -37,6 +37,7 @@ from .main_tools.plot_tsne import plot_tsne
 from .main_tools.resource_monitor import resource_monitor
 from .main_tools.sound_effects import bell
 from .main_tools.load_yaml_configs import load_yaml_configs
+from .main_tools.load_args import load_args
 from .main_tools.send_telegram_notification import send_telegram_notification
 from .main_tools.printing import print_info, print_warning, print_error
 
@@ -51,6 +52,7 @@ __all__ = [
     "hex_of",
     "hex_to_ansi",
     "host_mlflow",
+    "load_args",
     "load_checkpoint",
     "load_jsonl",
     "load_run_state",
