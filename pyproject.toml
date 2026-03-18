@@ -49,9 +49,10 @@ dependencies = [
     "evaluate",
     "fuzzywuzzy",
     "python-Levenshtein",
-    "optimum", # for gptq quantization
-    "gptqmodel",
 
+
+    #"optimum", # for gptq quantization
+    #"gptqmodel",
     # do not add flash_attn, xformers etc.
     #"unsloth",
     #"transformers",
