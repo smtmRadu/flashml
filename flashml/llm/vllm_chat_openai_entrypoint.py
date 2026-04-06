@@ -85,6 +85,7 @@ def vllm_chat_openai_entrypoint(
                     "type": "function",
                     "function": {
                         "name": schema["title"],
+                        "description": schema.get("description", "Structured output format"),
                         "parameters": schema
                     }
                 }]
