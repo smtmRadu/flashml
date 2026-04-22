@@ -3,9 +3,9 @@ import tempfile
 import json
 import subprocess
 import os
+import time
 from copy import deepcopy
 import platform
-import os
 import sys
 os.environ['MKL_THREADING_LAYER'] = 'GNU'
 os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
@@ -45,6 +45,10 @@ def vllm_chat_openai_entrypoint(
     ```
     
     Messages may contain None values.
+
+    An autosave JSONL file is written alongside the output file as results
+    stream in.  If the batch is interrupted, the autosave contains all
+    completed responses.  On success, the autosave is deleted automatically.
     """
     if platform.system() != 'Linux':
         raise OSError(f"vLLM is only supported on Linux. Current system: {platform.system()}")
@@ -131,18 +135,54 @@ def vllm_chat_openai_entrypoint(
                 cmd.append(str(v))
                 
                 
+        autosave_path = output_file_path + ".autosave"
         print(f"Instantiating vLLM: \033[92m{' '.join(cmd)}\033[0m")
-        _ = subprocess.run(cmd, text=True, check=True)
+        print(f"Autosave: {autosave_path}")
+
+        # Stream results — tail the output file while vLLM runs,
+        # mirror every completed response to the autosave file.
+        process = subprocess.Popen(cmd, text=True)
+        seen = 0
+        with open(output_file_path, 'r') as tail, \
+             open(autosave_path, 'w') as autosave:
+            while process.poll() is None:
+                line = tail.readline()
+                if line.strip():
+                    autosave.write(line)
+                    autosave.flush()
+                    seen += 1
+                    sys.stdout.write(
+                        f"\r  \033[96mCompleted: {seen}/{len(vllm_req)}\033[0m"
+                    )
+                    sys.stdout.flush()
+                else:
+                    time.sleep(0.5)
+            # Drain any remaining lines after process exits
+            for line in tail:
+                if line.strip():
+                    autosave.write(line)
+                    autosave.flush()
+                    seen += 1
+        sys.stdout.write(
+            f"\r  \033[96mCompleted: {seen}/{len(vllm_req)}\033[0m\n"
+        )
+        sys.stdout.flush()
+
+        if process.returncode != 0:
+            print(f"\033[93mProcess failed. Autosave with {seen}/{len(vllm_req)} "
+                  f"results at: {autosave_path}\033[0m")
+            raise subprocess.CalledProcessError(process.returncode, cmd)
+
         print(f"\033[92m============== 100% Completed | {len(vllm_req)}/{len(vllm_req)} ==============\033[0m")
-        
-        # Read results
+
+        # Read all results for return value
         without_none_responses = []
         with open(output_file_path, 'r') as f:
             for line in f:
                 if line.strip():
                     response_data = json.loads(line)
                     without_none_responses.append(response_data)
-        
+
         with_none_responses = []
         index_in_outp = 0
         for m in messages:
@@ -151,19 +191,28 @@ def vllm_chat_openai_entrypoint(
             else:
                 with_none_responses.append(without_none_responses[index_in_outp])
                 index_in_outp += 1
-                
+
+        # Success — autosave no longer needed
+        try:
+            os.unlink(autosave_path)
+        except OSError:
+            pass
+
         return with_none_responses
-        
+
     except subprocess.CalledProcessError as e:
         print(f"Error running batch processing: {e}")
         print(f"stdout: {e.stdout}")
         print(f"stderr: {e.stderr}")
         raise
     finally:
-        # Cleanup temporary files
+        # Cleanup temporary files (autosave survives on failure)
         try:
             os.unlink(input_file_path)
+        except OSError:
+            pass
+        try:
             os.unlink(output_file_path)
-        except:
+        except OSError:
             pass
         

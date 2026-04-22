@@ -34,7 +34,7 @@ def merge_model(adapter_path:str, device_map="auto", save_method:Literal["fp16"]
     if "gemma" in base_model_path_or_path.lower() and not os.path.exists(adapter_path + "/preprocessor_config.json"):
         raise Exception("⚠️ `preprocessor_config.json` and `processor_config.json` files are missing for gemma adapter. Please download it from https://huggingface.co/google/gemma-3-4b-it/tree/main and add it manually to the adapter.")
     if "ministral" in base_model_path_or_path.lower():
-        print("\033[0;34mRemember to add .json files to the merge of ministral 3b model!!!\033[0m")
+        print("\033[0;34mRemember to add .json files to the merge of Ministral 3 model!!!\033[0m")
         
     was_4bit_training = "4bit" in base_model_path_or_path   
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -147,6 +147,6 @@ def _merge_unsloth_model(adapter_path: str, device_map="auto", save_method:Liter
     
     
     if "ministral" in base_model_path_or_path.lower():
-        print("✅ Merge complete! Remember to replace all .json files to the merge (fp16) of ministral 3b model!!!")
+        print("✅ Merge complete! Remember to replace all .json files to the merge (fp16) of Ministral 3 model!!!")
     else:
         print("✅ Merge complete!")

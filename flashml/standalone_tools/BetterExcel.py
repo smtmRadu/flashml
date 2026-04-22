@@ -1,5 +1,8 @@
 # pyinstaller command:
-# pyinstaller --noconsole --onefile --clean --strip --icon=BetterExcel.ico --optimize=2 BetterExcel.py
+# activate betterexcel environment then run:
+# pyinstaller -y --noconsole --onedir --clean --strip --icon=BetterExcel.ico --optimize=2 BetterExcel.py
+
+from __future__ import annotations
 
 from pathlib import Path
 import sys
@@ -18,52 +21,40 @@ import getpass
 import hashlib
 import os
 import shutil
-import pandas as pd
 from PyQt6 import QtCore, QtGui, QtWidgets
 import time
 from urllib.parse import parse_qs, urlparse
-try:
-    from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font, PatternFill, Color
-    from openpyxl.styles.colors import COLOR_INDEX
-    try:
-        from openpyxl.cell.rich_text import CellRichText, TextBlock
-        from openpyxl.cell.text import InlineFont
-        OPENPYXL_RICH_TEXT_AVAILABLE = True
-    except Exception:
-        CellRichText = None
-        TextBlock = None
-        InlineFont = None
-        OPENPYXL_RICH_TEXT_AVAILABLE = False
-    OPENPYXL_AVAILABLE = True
-except Exception:
-    Workbook = None
-    load_workbook = None
-    Font = None
-    PatternFill = None
-    Color = None
-    CellRichText = None
-    TextBlock = None
-    InlineFont = None
-    OPENPYXL_RICH_TEXT_AVAILABLE = False
-    COLOR_INDEX = []
-    OPENPYXL_AVAILABLE = False
-try:
-    from google.auth.transport.requests import Request as GoogleAuthRequest
-    from google.oauth2.credentials import Credentials as GoogleOAuthCredentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build as google_build
-    from googleapiclient.errors import HttpError as GoogleHttpError
-    GOOGLE_SHEETS_AVAILABLE = True
-except Exception:
-    GoogleAuthRequest = None
-    GoogleOAuthCredentials = None
-    InstalledAppFlow = None
-    google_build = None
-    GoogleHttpError = Exception
-    GOOGLE_SHEETS_AVAILABLE = False
 
-APP_NAME = "Better Excel v2.0 beta3"
+Workbook = None
+load_workbook = None
+Font = None
+PatternFill = None
+Color = None
+CellRichText = None
+TextBlock = None
+InlineFont = None
+COLOR_INDEX = []
+OPENPYXL_AVAILABLE = False
+OPENPYXL_RICH_TEXT_AVAILABLE = False
+_OPENPYXL_IMPORT_ATTEMPTED = False
+_OPENPYXL_IMPORT_ERROR = ""
+_DEFAULT_XLSX_FONT_CACHE = None
+_DEFAULT_XLSX_FILL_CACHE = None
+_DEFAULT_EXPORT_XLSX_FONT_CACHE = None
+
+GoogleAuthRequest = None
+GoogleOAuthCredentials = None
+InstalledAppFlow = None
+google_build = None
+GoogleHttpError = Exception
+GOOGLE_SHEETS_AVAILABLE = False
+_GOOGLE_SHEETS_IMPORT_ATTEMPTED = False
+_GOOGLE_SHEETS_IMPORT_ERROR = ""
+
+_PANDAS_MODULE = None
+_PANDAS_IMPORT_ERROR = ""
+
+APP_NAME = "Better Excel v2.1"
 WINDOWS_APP_ID = "flashml.BetterExcel"
 COMPACT_WINDOW_WIDTH = 470
 COMPACT_WINDOW_HEIGHT = 430
@@ -115,6 +106,151 @@ Here are the problems:
 """
 
 
+def _ensure_openpyxl_loaded() -> bool:
+    global Workbook, load_workbook, Font, PatternFill, Color
+    global CellRichText, TextBlock, InlineFont, COLOR_INDEX
+    global OPENPYXL_AVAILABLE, OPENPYXL_RICH_TEXT_AVAILABLE
+    global _OPENPYXL_IMPORT_ATTEMPTED, _OPENPYXL_IMPORT_ERROR
+
+    if _OPENPYXL_IMPORT_ATTEMPTED:
+        return bool(OPENPYXL_AVAILABLE)
+
+    _OPENPYXL_IMPORT_ATTEMPTED = True
+    try:
+        from openpyxl import Workbook as _Workbook, load_workbook as _load_workbook
+        from openpyxl.styles import Font as _Font, PatternFill as _PatternFill, Color as _Color
+        from openpyxl.styles.colors import COLOR_INDEX as _COLOR_INDEX
+
+        Workbook = _Workbook
+        load_workbook = _load_workbook
+        Font = _Font
+        PatternFill = _PatternFill
+        Color = _Color
+        COLOR_INDEX = list(_COLOR_INDEX)
+
+        try:
+            from openpyxl.cell.rich_text import CellRichText as _CellRichText, TextBlock as _TextBlock
+            from openpyxl.cell.text import InlineFont as _InlineFont
+
+            CellRichText = _CellRichText
+            TextBlock = _TextBlock
+            InlineFont = _InlineFont
+            OPENPYXL_RICH_TEXT_AVAILABLE = True
+        except Exception:
+            CellRichText = None
+            TextBlock = None
+            InlineFont = None
+            OPENPYXL_RICH_TEXT_AVAILABLE = False
+
+        OPENPYXL_AVAILABLE = True
+        _OPENPYXL_IMPORT_ERROR = ""
+    except Exception as exc:
+        Workbook = None
+        load_workbook = None
+        Font = None
+        PatternFill = None
+        Color = None
+        CellRichText = None
+        TextBlock = None
+        InlineFont = None
+        COLOR_INDEX = []
+        OPENPYXL_AVAILABLE = False
+        OPENPYXL_RICH_TEXT_AVAILABLE = False
+        _OPENPYXL_IMPORT_ERROR = str(exc)
+
+    return bool(OPENPYXL_AVAILABLE)
+
+
+def _default_xlsx_font():
+    global _DEFAULT_XLSX_FONT_CACHE
+    if _DEFAULT_XLSX_FONT_CACHE is not None:
+        return _DEFAULT_XLSX_FONT_CACHE
+    if not _ensure_openpyxl_loaded() or Font is None:
+        return None
+    _DEFAULT_XLSX_FONT_CACHE = Font()
+    return _DEFAULT_XLSX_FONT_CACHE
+
+
+def _default_xlsx_fill():
+    global _DEFAULT_XLSX_FILL_CACHE
+    if _DEFAULT_XLSX_FILL_CACHE is not None:
+        return _DEFAULT_XLSX_FILL_CACHE
+    if not _ensure_openpyxl_loaded() or PatternFill is None:
+        return None
+    _DEFAULT_XLSX_FILL_CACHE = PatternFill()
+    return _DEFAULT_XLSX_FILL_CACHE
+
+
+def _default_export_xlsx_font():
+    global _DEFAULT_EXPORT_XLSX_FONT_CACHE
+    if _DEFAULT_EXPORT_XLSX_FONT_CACHE is not None:
+        return _DEFAULT_EXPORT_XLSX_FONT_CACHE
+    if not _ensure_openpyxl_loaded() or Font is None:
+        return None
+    _DEFAULT_EXPORT_XLSX_FONT_CACHE = Font(
+        name=DEFAULT_DISPLAY_FONT_FAMILY,
+        sz=DEFAULT_DISPLAY_FONT_SIZE,
+    )
+    return _DEFAULT_EXPORT_XLSX_FONT_CACHE
+
+
+def _ensure_google_sheets_dependencies_loaded() -> bool:
+    global GoogleAuthRequest, GoogleOAuthCredentials, InstalledAppFlow
+    global google_build, GoogleHttpError, GOOGLE_SHEETS_AVAILABLE
+    global _GOOGLE_SHEETS_IMPORT_ATTEMPTED, _GOOGLE_SHEETS_IMPORT_ERROR
+
+    if _GOOGLE_SHEETS_IMPORT_ATTEMPTED:
+        return bool(GOOGLE_SHEETS_AVAILABLE)
+
+    _GOOGLE_SHEETS_IMPORT_ATTEMPTED = True
+    try:
+        from google.auth.transport.requests import Request as _GoogleAuthRequest
+        from google.oauth2.credentials import Credentials as _GoogleOAuthCredentials
+        from google_auth_oauthlib.flow import InstalledAppFlow as _InstalledAppFlow
+        from googleapiclient.discovery import build as _google_build
+        from googleapiclient.errors import HttpError as _GoogleHttpError
+
+        GoogleAuthRequest = _GoogleAuthRequest
+        GoogleOAuthCredentials = _GoogleOAuthCredentials
+        InstalledAppFlow = _InstalledAppFlow
+        google_build = _google_build
+        GoogleHttpError = _GoogleHttpError
+        GOOGLE_SHEETS_AVAILABLE = True
+        _GOOGLE_SHEETS_IMPORT_ERROR = ""
+    except Exception as exc:
+        GoogleAuthRequest = None
+        GoogleOAuthCredentials = None
+        InstalledAppFlow = None
+        google_build = None
+        GoogleHttpError = Exception
+        GOOGLE_SHEETS_AVAILABLE = False
+        _GOOGLE_SHEETS_IMPORT_ERROR = str(exc)
+
+    return bool(GOOGLE_SHEETS_AVAILABLE)
+
+
+def _ensure_pandas_loaded():
+    global _PANDAS_MODULE, _PANDAS_IMPORT_ERROR
+    if _PANDAS_MODULE is not None:
+        return _PANDAS_MODULE
+    try:
+        import pandas as _pandas
+    except Exception as exc:
+        _PANDAS_IMPORT_ERROR = str(exc)
+        raise
+    _PANDAS_MODULE = _pandas
+    _PANDAS_IMPORT_ERROR = ""
+    return _PANDAS_MODULE
+
+
+class _LazyPandasModule:
+    def __getattr__(self, name: str):
+        return getattr(_ensure_pandas_loaded(), name)
+
+
+pd = _LazyPandasModule()
+
+
 def _guess_local_ipv4() -> str:
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -161,10 +297,13 @@ def _ensure_google_sheets_cache_dir() -> Path:
 
 
 def _google_sheets_dependencies_error() -> str:
-    return (
+    base = (
         "Google Sheets support needs these packages: "
         "google-api-python-client, google-auth-httplib2, google-auth-oauthlib"
     )
+    if _GOOGLE_SHEETS_IMPORT_ATTEMPTED and _GOOGLE_SHEETS_IMPORT_ERROR:
+        return f"{base}\n\nImport error: {_GOOGLE_SHEETS_IMPORT_ERROR}"
+    return base
 
 
 def _google_sheets_client_configured() -> bool:
@@ -176,7 +315,7 @@ def _google_sheets_token_cached() -> bool:
 
 
 def _google_sheets_status_text() -> str:
-    if not GOOGLE_SHEETS_AVAILABLE:
+    if _GOOGLE_SHEETS_IMPORT_ATTEMPTED and not GOOGLE_SHEETS_AVAILABLE:
         return "Google API packages are not installed."
     if not _google_sheets_client_configured():
         return "OAuth client file not imported yet."
@@ -186,8 +325,6 @@ def _google_sheets_status_text() -> str:
 
 
 def _import_google_sheets_client_secret(source_path: Path):
-    if not GOOGLE_SHEETS_AVAILABLE:
-        raise RuntimeError(_google_sheets_dependencies_error())
     source = Path(source_path)
     if not source.is_file():
         raise FileNotFoundError(f"OAuth client file not found: {source}")
@@ -202,7 +339,7 @@ def _import_google_sheets_client_secret(source_path: Path):
 
 
 def _load_google_sheets_credentials(interactive: bool = False):
-    if not GOOGLE_SHEETS_AVAILABLE:
+    if not _ensure_google_sheets_dependencies_loaded():
         raise RuntimeError(_google_sheets_dependencies_error())
 
     credentials_path = _google_sheets_credentials_path()
@@ -250,6 +387,8 @@ def _load_google_sheets_credentials(interactive: bool = False):
 
 
 def _build_google_sheets_service(interactive: bool = False):
+    if not _ensure_google_sheets_dependencies_loaded():
+        raise RuntimeError(_google_sheets_dependencies_error())
     creds = _load_google_sheets_credentials(interactive=interactive)
     return google_build("sheets", "v4", credentials=creds, cache_discovery=False)
 
@@ -2468,12 +2607,12 @@ def _is_default_excel_font_color(color) -> bool:
 
 
 def _is_effectively_default_excel_font(font) -> bool:
-    if font is None or not OPENPYXL_AVAILABLE:
+    if font is None:
         return True
 
-    default_font = DEFAULT_XLSX_FONT
+    default_font = _default_xlsx_font()
     if default_font is None:
-        return False
+        return True
 
     def _norm_opt(value):
         return None if value is None else str(value)
@@ -2657,6 +2796,8 @@ def _normalize_text_and_qa_spans_for_rich_text(
 
 
 def _load_workbook_with_rich_text(path: Path):
+    if not _ensure_openpyxl_loaded() or load_workbook is None:
+        raise RuntimeError("openpyxl is required to open Excel workbooks.")
     if OPENPYXL_RICH_TEXT_AVAILABLE:
         try:
             return load_workbook(path, data_only=False, rich_text=True)
@@ -2983,20 +3124,11 @@ def _apply_document_line_spacing(doc: QtGui.QTextDocument):
     cursor.mergeBlockFormat(block_format)
 
 
-DEFAULT_XLSX_FONT = Font() if OPENPYXL_AVAILABLE else None
-DEFAULT_XLSX_FILL = PatternFill() if OPENPYXL_AVAILABLE else None
-DEFAULT_EXPORT_XLSX_FONT = (
-    Font(name=DEFAULT_DISPLAY_FONT_FAMILY, sz=DEFAULT_DISPLAY_FONT_SIZE)
-    if OPENPYXL_AVAILABLE
-    else None
-)
-
-
 def load_xlsx_dataframe_with_styles(
     path: Path,
     sheet_name: t.Optional[str] = None,
 ) -> tuple[pd.DataFrame, dict[tuple[int, int], dict[str, t.Any]], str, list[str], t.Any]:
-    if not OPENPYXL_AVAILABLE:
+    if not _ensure_openpyxl_loaded():
         target = sheet_name if sheet_name else 0
         df = pd.read_excel(path, sheet_name=target)
         resolved_name = sheet_name or "Sheet1"
@@ -3020,8 +3152,9 @@ def load_xlsx_dataframe_with_styles(
             workbook_base_font = copy(workbook_fonts[0])
         except Exception:
             workbook_base_font = None
-    if workbook_base_font is None and DEFAULT_XLSX_FONT is not None:
-        workbook_base_font = copy(DEFAULT_XLSX_FONT)
+    default_xlsx_font = _default_xlsx_font()
+    if workbook_base_font is None and default_xlsx_font is not None:
+        workbook_base_font = copy(default_xlsx_font)
 
     target_sheet = sheet_name if sheet_name in sheet_names else sheet_names[0]
     ws = wb[target_sheet]
@@ -3029,6 +3162,7 @@ def load_xlsx_dataframe_with_styles(
     theme_palette = _extract_excel_theme_palette(wb)
     qa_spans_metadata = _read_qa_spans_metadata_sheet(wb, target_sheet)
     edit_metadata = _read_edit_metadata_sheet(wb, target_sheet)
+    default_xlsx_fill = _default_xlsx_fill()
 
     cell_styles: dict[tuple[int, int], dict[str, t.Any]] = {}
     for r in range(df.shape[0]):
@@ -3037,7 +3171,7 @@ def load_xlsx_dataframe_with_styles(
             style: dict[str, t.Any] = {}
             cell_font = copy(cell.font) if getattr(cell, "font", None) is not None else None
 
-            fill_is_custom = bool(cell.fill and cell.fill != DEFAULT_XLSX_FILL and cell.fill.fill_type)
+            fill_is_custom = bool(cell.fill and cell.fill != default_xlsx_fill and cell.fill.fill_type)
             font_is_custom = bool(cell_font) and not _is_effectively_default_excel_font(cell_font)
 
             if fill_is_custom:
@@ -3101,7 +3235,7 @@ def write_xlsx_with_styles(
     sheet_name: str = "Sheet1",
     base_font = None,
 ):
-    if not OPENPYXL_AVAILABLE:
+    if not _ensure_openpyxl_loaded():
         df.to_excel(path, index=False)
         return
 
@@ -6356,7 +6490,7 @@ class DataViewerPage(QtWidgets.QWidget):
     def _set_connect_controls_enabled(self, enabled: bool):
         self.connect_input.setEnabled(enabled)
         self.connect_btn.setEnabled(enabled)
-        google_enabled = bool(enabled) and GOOGLE_SHEETS_AVAILABLE
+        google_enabled = bool(enabled)
         self.google_sheets_input.setEnabled(google_enabled)
         self.google_sheets_connect_btn.setEnabled(google_enabled)
         self.google_sheets_import_btn.setEnabled(google_enabled)
@@ -6412,10 +6546,6 @@ class DataViewerPage(QtWidgets.QWidget):
         return True
 
     def _on_google_sheets_import_credentials(self):
-        if not GOOGLE_SHEETS_AVAILABLE:
-            QtWidgets.QMessageBox.warning(self, "Google Sheets", _google_sheets_dependencies_error())
-            return
-
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Import Google OAuth Client JSON",
@@ -6499,9 +6629,6 @@ class DataViewerPage(QtWidgets.QWidget):
             if reply == QtWidgets.QMessageBox.StandardButton.Yes and not self.save_file():
                 return
 
-        if not GOOGLE_SHEETS_AVAILABLE:
-            QtWidgets.QMessageBox.warning(self, "Google Sheets", _google_sheets_dependencies_error())
-            return
         if not _google_sheets_client_configured():
             self.google_sheets_guide_btn.setChecked(True)
             QtWidgets.QMessageBox.information(
@@ -6509,6 +6636,10 @@ class DataViewerPage(QtWidgets.QWidget):
                 "Google Sheets",
                 "Import a Desktop OAuth JSON file first, then authorize Google once.",
             )
+            return
+
+        if not _ensure_google_sheets_dependencies_loaded():
+            QtWidgets.QMessageBox.warning(self, "Google Sheets", _google_sheets_dependencies_error())
             return
 
         if not self._ensure_google_sheets_authorized(interactive=False, show_errors=False):
@@ -8937,34 +9068,10 @@ class DataViewerPage(QtWidgets.QWidget):
         self._set_match_navigation_visible(bool(search_text.strip()))
         if not self.model:
             return
-            
-        current_model_term = self.model.search_term or ""
-        
-        # CHECK: Is this a new search term?
-        if search_text != current_model_term:
-            # --- CASE 1: New Term (First Enter) ---
-            
-            # A. Capture current scroll position (Pixel-perfect)
-            current_v_scroll = self.table.verticalScrollBar().value()
-            
-            # B. Update the Search (Highlights appear)
-            self.model.set_search_term(search_text)
-            
-            # C. Show Replace bar
-            self.replace_container.setVisible(bool(search_text.strip()))
-            self._update_replace_buttons()
-            
-            # D. FORCE INSTANT RESTORE (No animation, no jumping)
-            sb = self.table.verticalScrollBar()
-            if hasattr(sb, 'setValueInstant'):
-                sb.setValueInstant(current_v_scroll)
-            else:
-                sb.setValue(current_v_scroll)
-            
-            # E. Smart Start: Set to -1 so next press goes to first match
-            self.current_match_pos = -1
-        
-        # Always navigate to next match when Enter is pressed
+
+        if self._apply_search_term_without_navigation(search_text, preserve_scroll=True):
+            return
+
         self.go_next_match()
      
     def apply_search_only(self):
@@ -8974,15 +9081,10 @@ class DataViewerPage(QtWidgets.QWidget):
             
         search_text = self.search_edit.text()
         self._set_match_navigation_visible(bool(search_text.strip()))
-        
-        # Update the model's search term to trigger repainting
-        self.model.set_search_term(search_text)
-        
-        # Show/Hide replace container based on input
+
+        self._apply_search_term_without_navigation(search_text, preserve_scroll=False)
         self.replace_container.setVisible(bool(search_text.strip()))
         self._update_replace_buttons()
-        
-        # Reset match position but DON'T scroll
         self.current_match_pos = -1
         self.table.viewport().update()
         self.status.showMessage(f"Search updated. Found {self.model.total_matches()} matches.", 2000)
@@ -9481,7 +9583,8 @@ class DataViewerPage(QtWidgets.QWidget):
         if suf == ".csv":
             df.to_csv(path, index=False)
         elif suf == ".xlsx":
-            base_font = copy(DEFAULT_EXPORT_XLSX_FONT) if DEFAULT_EXPORT_XLSX_FONT is not None else model.xlsx_base_font
+            default_export_font = _default_export_xlsx_font()
+            base_font = copy(default_export_font) if default_export_font is not None else model.xlsx_base_font
             write_xlsx_with_styles(
                 path,
                 df,
@@ -9495,6 +9598,35 @@ class DataViewerPage(QtWidgets.QWidget):
             df.to_json(path, orient="records", lines=True, force_ascii=False)
         else:
             df.to_csv(path, index=False)
+
+    def _apply_search_term_without_navigation(self, search_text: str, *, preserve_scroll: bool) -> bool:
+        if not self.model:
+            return False
+
+        target_text = str(search_text or "")
+        current_model_term = str(self.model.search_term or "")
+        if target_text == current_model_term:
+            return False
+
+        current_v_scroll: t.Optional[int] = None
+        if preserve_scroll:
+            try:
+                current_v_scroll = int(self.table.verticalScrollBar().value())
+            except Exception:
+                current_v_scroll = None
+
+        self.model.set_search_term(target_text)
+        self.replace_container.setVisible(bool(target_text.strip()))
+        self._update_replace_buttons()
+        self.current_match_pos = -1
+
+        if current_v_scroll is not None:
+            sb = self.table.verticalScrollBar()
+            if hasattr(sb, "setValueInstant"):
+                sb.setValueInstant(current_v_scroll)
+            else:
+                sb.setValue(current_v_scroll)
+        return True
 
     def on_search_changed(self, text: str):
         if not self.model:
@@ -9620,6 +9752,8 @@ class DataViewerPage(QtWidgets.QWidget):
         if obj == search_edit and event.type() == QtCore.QEvent.Type.KeyPress:
             if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                 if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                    if self._apply_search_term_without_navigation(search_edit.text(), preserve_scroll=True):
+                        return True
                     # Shift+Enter: go to previous match
                     self.go_prev_match()
                     return True  # Event handled

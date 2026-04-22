@@ -75,22 +75,6 @@ QWEN3_VL_30B_A3B_THINKING_VLLM_CONFIG = {
 
 
 
-QWEN3_5_0_8B_VLLM_CONFIG = {
-    "model": "Qwen/Qwen3.5-0.6B-GPTQ-Int4",
-    "max_model_len": 16384,
-    "max_completion_tokens": 8192,
-    
-    "gpu-memory-utilization": 0.8,
-    "tensor-parallel-size": 1,
-    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
-    
-    "top_p": 0.95,
-    "top_k": 20,
-    "reasoning-parser": "qwen3",
-    "language-model-only": "",
-    "enable-prefix-caching": ""
-}
-
 QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     "model": "Qwen/Qwen3.5-122B-A10B-GPTQ-Int4",
     "max_model_len": 81_920,
@@ -98,7 +82,7 @@ QWEN3_5_122B_A10B_TEXT_THINKING_VLLM_CONFIG = {
     
     "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
-    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "temperature": 0.8, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     
     "top_p": 0.95,
     "top_k": 20,
@@ -193,7 +177,7 @@ GPT_OSS_120B_HIGH_VLLM_CONFIG = {
     "max_completion_tokens": 61_440,
     "gpu-memory-utilization": 0.9,
     "tensor-parallel-size": 1,
-    "temperature": 1.0, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
+    "temperature": 0.9, # recommended is 1 but from my tests 0.9 is better (1 fails a little in the final answer)
     "top_p": 1,
     "top_k": -1,
     "reasoning_effort": "high",
@@ -260,6 +244,9 @@ MINISTRAL_3_3B_INSTRUCT_2512_VLLM_CONFIG = {
 }
 
 
+# initially please download this file at the same path to the script called
+# wget https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4/raw/main/super_v3_reasoning_parser.py
+
 NVIDIA_NEMOTRON_3_SUPER_VLLM_CONFIG = {
     "model": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
     "temperature": 1,
@@ -271,5 +258,7 @@ NVIDIA_NEMOTRON_3_SUPER_VLLM_CONFIG = {
     "data-parallel-size": 1,
     "tensor-parallel-size": 1,
     "async-scheduling": "",
-    "kv-cache-dtype": "fp8"
+    "kv-cache-dtype": "fp8",
+    "reasoning-parser-plugin" : "./super_v3_reasoning_parser.py",
+    "reasoning-parser": "super_v3"
 } 

@@ -240,7 +240,7 @@ if conda env list | grep -qE "(^|\s)$ENV_NAME($|\s)"; then
     echo "'$ENV_NAME' environment already exists."
 else
     echo "Creating '$ENV_NAME' environment..."
-    conda create -y -n $ENV_NAME python=3.12.9
+    conda create -y -n $ENV_NAME python=3.13.1
 fi
 
 echo "==== 4. Installing flashml package ===="
