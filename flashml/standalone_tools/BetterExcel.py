@@ -11141,7 +11141,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main():
     from PyQt6 import QtCore
-    
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="BetterExcel", description="BetterExcel — open .csv/.xls/.xlsx/.jsonl files.")
+    parser.add_argument("file", nargs="?", default=None, help="Path to a data file to open at startup.")
+    parser.add_argument("--file", dest="file_opt", default=None, help="Path to a data file to open at startup.")
+    args, _ = parser.parse_known_args()
+    initial_path = args.file_opt or args.file
+
     QtWidgets.QApplication.setHighDpiScaleFactorRoundingPolicy(
         QtCore.Qt.HighDpiScaleFactorRoundingPolicy.Round
     )
@@ -11171,7 +11178,14 @@ def main():
     app.setFont(app_font)
     win = MainWindow()
     win.show()
-    
+
+    if initial_path:
+        p = Path(initial_path).expanduser().resolve()
+        if p.exists():
+            win.viewer.load_path(p)
+        else:
+            print(f"BetterExcel: file not found: {p}", file=sys.stderr)
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":
